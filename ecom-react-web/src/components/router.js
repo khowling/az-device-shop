@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react'
-import {Panes} from './store'
-import {Order} from './order'
+import {Panes} from './store.js'
+import {Order} from './order.js'
 
 const DEFAULT_LANDING = 'Panes';
 const routableCompoments = [Panes, Order]
@@ -51,12 +51,13 @@ export function navTo(component, recordid, props) {
 }
 
 const listeners = [];
-const _Router_FACTORIES = Object.assign({}, ...routableCompoments.map(mod => { return ({[mod.name]: React.createFactory(mod)})}))
+//const _Router_FACTORIES = Object.assign({}, ...routableCompoments.map(mod => { return ({[mod.name]: React.createFactory(mod)})}))
+const _compoenentMap = Object.assign({},      ...routableCompoments.map(mod => { return ({[mod.name]: mod})}))
 
-export function useRouter () {
-  const [renderRoute, setRenderRoute] = useState()
+export function useRouter (startUrl) {
+  const [renderRoute, setRenderRoute] = useState(pathToRoute(startUrl))
 
-  console.log (`useRouter() [state: renderRoute : ${JSON.stringify(renderRoute)}]`)
+  console.log (`useRouter() renderRoute=${JSON.stringify(renderRoute)}, router known components=${Object.keys(_compoenentMap).join(",")}]`)
 
   // Subscribe to <Link> events
   useEffect(() => {
@@ -65,54 +66,68 @@ export function useRouter () {
     return () => listeners.pop()
   },[])
 
-
-  const chnRouteFn = (event) =>  setRenderRoute(() => {
-    if (typeof window  === 'undefined') {
-      //throw new Error ("error")
-      console.log ('no window')
-    } else {
-      const url = new URL(window.location),
-            url_comprec = url.pathname.substr(1),
-            url_props = url.searchParams.get ("props"),
-            [url_comp, recordid] = url_comprec.length === 0? [] : url_comprec.split("/")
-      
-      console.log (`decodeCurrentURI: ${JSON.stringify(url)}`)
-      return {
-        component: url_comp ? (url_comp === "_" ? undefined : url_comp) : undefined, 
-        props: url_props ? JSON.parse(atob(decodeURIComponent(url_props))) : {},
-        recordid, 
-        urlparms: []
-      }
+  function pathToRoute({pathname, search, hash}) {
+    console.log (`pathToRoute pathname=${pathname} search=${search}`)
+    const propsparam = search && search.match(/\A?var1=([^&]+)&*/i),
+          url_props = propsparam? propsparam[1]: null,
+          withoutleadingslash = pathname.slice(1),
+          [url_comp, recordid] = withoutleadingslash.length === 0? [] : withoutleadingslash.split("/")
+    return {
+      component: url_comp ? (url_comp === "_" ? undefined : url_comp) : undefined, 
+      props: url_props ? JSON.parse(atob(decodeURIComponent(url_props))) : {},
+      recordid,
     }
-  })
+  }
+
 
   // Subscribe to popstate events (browser back/forward buttons)
   useEffect(() => {
+
+    function chnRouteFn (event) {
+      setRenderRoute(() => {
+        if (typeof window  === 'undefined') {
+          //throw new Error ("error")
+          console.log ('no window')
+        } else {
+          const {pathname, search, hash} = new URL(window.location)
+          return pathToRoute({pathname, search, hash})
+        }
+      })
+    }
+
     if (typeof window !== 'undefined') {
       console.log ('useRouter: useEffect - initialise listeners to listen for popstate (browser back/forward)')
       window.addEventListener('popstate', chnRouteFn, false)
-      chnRouteFn()
+      //chnRouteFn()
       return () => { window.removeEventListener('popstate', chnRouteFn, false)}
     }
   }, [])
 
   function renderComponents(renderRoute) {
     let comps = {}
-    if (!renderRoute.component) { 
-      comps = {main: (_Router_FACTORIES[DEFAULT_LANDING])(Object.assign({key: DEFAULT_LANDING}))}
-    
+    if (!renderRoute.component) {
+      //comps = {main: (_Router_FACTORIES[DEFAULT_LANDING])(Object.assign({key: DEFAULT_LANDING}))}
+      comps = {main: React.createElement(_compoenentMap[DEFAULT_LANDING], {key: DEFAULT_LANDING})}
+      
       if (Object.keys(comps).length === 0) {
         comps =  {main: "404 - No landing page defined for app"}
       }
 
     } else { 
       // component direct
-      let cf = _Router_FACTORIES[renderRoute.component];
-      if (cf) {
-        comps = {main: cf(Object.assign({key: JSON.stringify(renderRoute.props)}, renderRoute.props, {recordid: renderRoute.recordid}))}
+
+      let component = _compoenentMap[renderRoute.component];
+      if (component) {
+        comps = {main: React.createElement(component, Object.assign({key: JSON.stringify(renderRoute.props)}, renderRoute.props, {recordid: renderRoute.recordid}))}
       } else {
         comps = {main: `404 - Unknown Compoent ${renderRoute.component}`}
       }
+      // let cf = _Router_FACTORIES[renderRoute.component];
+      // if (cf) {
+      //   comps = {main: cf(Object.assign({key: JSON.stringify(renderRoute.props)}, renderRoute.props, {recordid: renderRoute.recordid}))}
+      // } else {
+      //   comps = {main: `404 - Unknown Compoent ${renderRoute.component}`}
+      // }
     }
     return comps
   }

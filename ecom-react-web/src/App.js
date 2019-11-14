@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Link, useRouter} from './components/router'
+import {Link, useRouter} from './components/router.js'
 
 import './App.css';
 
@@ -32,24 +32,14 @@ function Nav ({user}) {
   )
 }
 
-function useTesting () {
-  const [mystate, setMyState] = useState ('345')
-  //
-  return {
-    main: <div>{mystate}</div>
-  }
-}
+function App({startUrl}) {
+  const {  main } = useRouter (startUrl)
 
-function App() {
-  const [main, setMain] = useState(<div>stateapp</div>)
-  //const { main} = useTesting ()
-  //const {  main } = useRouter ()
-  console.log ('rendering main asd')
   return (
     <main id="mainContent" data-grid="container">
-       
-        {main}
-      </main>
+      <Nav/>
+      {main}
+    </main>
   );
 }
 

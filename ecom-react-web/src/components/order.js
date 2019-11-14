@@ -72,23 +72,15 @@ export function Order({recordid, item}) {
             <label className="c-label" >Qty</label>
             <input id="default" className="c-text-field" type="number" name="default" value={qty} onChange={(e) => setQty(e.target.value)} disabled={orderState.state === 'enterdetails'?"" : "disabled"}/>
 
-            <label className="c-label" >Type</label>
-            <div className="c-combo">
-              <input autoComplete="off"  type="text" name="comboFieldDiv" />
-              <button className="c-glyph" name="selectDiv" tabIndex="-1">
-                  <span className="x-screen-reader">Select</span>
-              </button>
-              <div>
-                  <ul id="exampleComboPopup2" tabIndex="0" role="listbox">
-                      <li id="exampleComboPopup2-item-0" className="c-combo__option">dynamics crm</li>
-                      <li id="exampleComboPopup2-item-1" className="c-combo__option">dynamics crm clari</li>
-                      <li id="exampleComboPopup2-item-2" className="c-combo__option">dynamicus</li>
-                      <li id="exampleComboPopup2-item-3" className="c-combo__option">dynamicus qui sequitur est mirum notare quam littera</li>
-                      <li id="exampleComboPopup2-item-4" className="c-combo__option">dynamosaurus</li>
-                      <li id="exampleComboPopup2-item-5" className="c-combo__option">dynamosaurusraptor</li>
-                  </ul>
-              </div>
-          </div>
+            <div className="c-select f-border">
+                <label className="c-label" htmlFor="border">Color</label>
+                <select id="border" aria-label="Select Colour">
+                    <option className="">Red</option>
+                    <option className="">Blue</option>
+                    <option className="">Orange</option>
+                    <option className="">Red</option>
+                </select>
+            </div>
 
 
           <label className="c-label"></label>
@@ -150,7 +142,7 @@ export function Order({recordid, item}) {
 function AdditionalDetails() {
   return (
     <section className="m-additional-information">
-    <div data-grid="col-12 stack-2">
+      <div data-grid="col-12 stack-2">
         <div data-grid="col-6">
             <div data-grid="col-6">
                 <ul className="c-list f-bare f-lean">
@@ -243,8 +235,8 @@ function AdditionalDetails() {
                 <a href="https://www.getmwf.com" className="c-hyperlink">Report this app to Microsoft</a>
             </div>
         </div>
-    </div>
-</section>
+      </div>
+    </section>
   )
 }
 
@@ -296,22 +288,22 @@ export function OrderStatus ({recordid}) {
 
           </div>
           <div data-grid="col-6">
-            <div class="c-table" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
+            <div className="c-table" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
               <table>
                   
                   <thead>
                       <tr>
                           <th scope="col">Date</th>
                           <th id="defaultDesc" scope="col" colspan="1">Description</th>
-                          <th id="defaultPrice" scope="col" class="f-numerical" colspan="1">Status</th>
+                          <th id="defaultPrice" scope="col" className="f-numerical" colspan="1">Status</th>
                       </tr>
                   </thead>
                   <tbody>
                       <tr>
                           <th scope="row">Bravo</th>
                           <td>Bravo Description sentence.</td>
-                          <td class="f-numerical">
-                              <div class="c-price" itemprop="offers" itemscope="" itemtype="https://schema.org/Offer">
+                          <td className="f-numerical">
+                              <div className="c-price" itemprop="offers" itemscope="" itemtype="https://schema.org/Offer">
                                   <meta itemprop="priceCurrency" content="USD"/>
                                   <span>$</span>
                                   <span itemprop="price">1,000</span>
@@ -322,8 +314,8 @@ export function OrderStatus ({recordid}) {
                       <tr>
                           <th scope="row">Charley</th>
                           <td>Charley Description sentence.</td>
-                          <td class="f-numerical">
-                              <div class="c-price" itemprop="offers" itemscope="" itemtype="https://schema.org/Offer">
+                          <td className="f-numerical">
+                              <div className="c-price" itemprop="offers" itemscope="" itemtype="https://schema.org/Offer">
                                   <meta itemprop="priceCurrency" content="USD"/>
                                   <span>$</span>
                                   <span itemprop="price">900</span>
