@@ -3,19 +3,21 @@ const webpack = require('webpack')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 var HtmlReplaceWebpackPlugin = require('html-replace-webpack-plugin')
 
-const publicPath = "/_assets_"
+const PUBLIC_PATH = "/_assets_"
+const BUILD_PATH = '../build'
+const mode = process.env.NODE_ENV || 'production'
 
 module.exports =  [
 // Client
 {
-  mode: "development",
+  mode: mode,
   entry: "./ssr/client.js",
   target: 'web',
   output: {
     // requires absolute path
-    path: path.resolve(__dirname, '../static'),
+    path: path.resolve(__dirname, BUILD_PATH),
     filename: "[name].[chunkhash:8].js",
-    publicPath : publicPath
+    publicPath : PUBLIC_PATH
   },
   devtool: "source-map",
   module: {
@@ -56,24 +58,24 @@ module.exports =  [
     new HtmlReplaceWebpackPlugin([
       {
         pattern: '%PUBLIC_URL%',
-        replacement: publicPath
+        replacement: PUBLIC_PATH
       }
     ]),
     new webpack.EnvironmentPlugin({
-      NODE_ENV: 'development',
+      NODE_ENV: mode,
       BUILD_TARGET: "client"
     })
   ]
 },
 // Server
 {
-  mode: "development",
+  mode: mode,
   entry: "./ssr/server.js",
   target: 'node',
   output: {
     // requires absolute path
-    path: path.resolve(__dirname, '../static'),
-    filename: "server.js", //"[name].[chunkhash:8].js"
+    path: path.resolve(__dirname, BUILD_PATH),
+    filename: "server.js",
   },
   devtool: "source-map",
   module: {
@@ -109,7 +111,7 @@ module.exports =  [
   },
   plugins: [
     new webpack.EnvironmentPlugin({
-      NODE_ENV: 'development',
+      NODE_ENV: mode,
       PORT: 3000,
       HOST: "localhost",
       BUILD_TARGET: "server"

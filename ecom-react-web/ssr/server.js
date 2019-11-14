@@ -12,28 +12,19 @@ import React from 'react'
 import ReactDOMServer from 'react-dom/server'
 // import stringReplaceStream from 'string-replace-stream'
 
-// https://nckweb.com.ar/a-pain-in-the-react-challenges-behind-ssr/
-// The need of transpiling JSX code on the server, 2 options:
-// Webpack: apply similar building steps as it’s done with the client code, however, we dont need budbling on the server
-
-// Babel: transpile the code using babel-cli, no bundling.
-
 import App from '../src/App'
 
-//var App = React.createFactory(require('../src/App'))
-const output = {path: path.resolve(__dirname, '../static'), publicPath : "/_assets_"}
-
-//const assets = JSON.parse(fs.readFileSync('./dist/assets.json', 'utf8'))
-//const assets = require('../dist/assets.json')
+const PUBLIC_PATH = "/_assets_"
+const BUILD_PATH = '../build'
 
 http.createServer(function(request, response) {
     console.log (`Server - requesting ${request.url}`)
     // /PUBLIC/manifest.json
-    if (request.url.startsWith (output.publicPath) ) {
+    if (request.url.startsWith (PUBLIC_PATH) ) {
         
         //const staticfile = request.url.split("/")[2]
         //var filePath = path.join(path+ request.url)
-        const filePath = request.url.replace (output.publicPath, output.path)
+        const filePath = request.url.replace (PUBLIC_PATH, BUILD_PATH)
         console.log (`serving static resource  filePath=${filePath}`)
 
         if (fs.existsSync(filePath)) {
@@ -45,7 +36,7 @@ http.createServer(function(request, response) {
         }
     } else {
         
-        var filePath = path.join(output.path, 'index.html')
+        var filePath = path.join(BUILD_PATH, 'index.html')
         console.log (`serving file [${__dirname}]  ${filePath}`)
         var stat = fs.statSync(filePath)
 
