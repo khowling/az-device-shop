@@ -24,7 +24,7 @@ http.createServer(function(request, response) {
         
         //const staticfile = request.url.split("/")[2]
         //var filePath = path.join(path+ request.url)
-        const filePath = request.url.replace (PUBLIC_PATH, BUILD_PATH)
+        const filePath =  path.join(__dirname, request.url.replace (PUBLIC_PATH, BUILD_PATH))
         console.log (`serving static resource  filePath=${filePath}`)
 
         if (fs.existsSync(filePath)) {
@@ -36,7 +36,7 @@ http.createServer(function(request, response) {
         }
     } else {
         
-        var filePath = path.join(BUILD_PATH, 'index.html')
+        var filePath = path.join(__dirname, BUILD_PATH, 'index.html')
         console.log (`serving file [${__dirname}]  ${filePath}`)
         var stat = fs.statSync(filePath)
 

@@ -2,10 +2,13 @@ const path = require('path')
 const webpack = require('webpack')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
 var HtmlReplaceWebpackPlugin = require('html-replace-webpack-plugin')
+const TerserPlugin = require('terser-webpack-plugin');
 
 const PUBLIC_PATH = "/_assets_"
 const BUILD_PATH = '../build'
-const mode = process.env.NODE_ENV || 'production'
+const mode = process.env.NODE_ENV || 'development'
+
+console.log (`mode=${mode}`)
 
 module.exports =  [
 // Client
@@ -65,7 +68,15 @@ module.exports =  [
       NODE_ENV: mode,
       BUILD_TARGET: "client"
     })
-  ]
+  ],
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new TerserPlugin({
+        include: [/\/src/, /\/ssr/ ],
+      }),
+    ],
+  }
 },
 // Server
 {
@@ -116,5 +127,13 @@ module.exports =  [
       HOST: "localhost",
       BUILD_TARGET: "server"
     })
-  ]
+  ],
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new TerserPlugin({
+        include: [/\/src/, /\/ssr/ ],
+      }),
+    ],
+  }
 }]

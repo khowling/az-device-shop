@@ -11,7 +11,6 @@ export function Link({component, recordid, props, children, ...rest}) {
   //let routeJson = getRouteObj(component, recordid, props)
 
   function _encodeURL (component, recordid, props) {
-
     let ulrstr = "/"
     ulrstr+= component? component : (recordid? "_" : "")
     ulrstr+= recordid ? ("/" + recordid)  : ""
@@ -44,14 +43,12 @@ export function Link({component, recordid, props, children, ...rest}) {
 // =====================================     Processes navigation routes Called from React JS 
 export function navTo(component, recordid, props) {
   console.log (`navTo: ${component}`)
-
   //const routeJson = getRouteObj(component, recordid, props)
   listeners.forEach(listener => listener({component, recordid, props}))
   
 }
 
 const listeners = [];
-//const _Router_FACTORIES = Object.assign({}, ...routableCompoments.map(mod => { return ({[mod.name]: React.createFactory(mod)})}))
 const _compoenentMap = Object.assign({},      ...routableCompoments.map(mod => { return ({[mod.name]: mod})}))
 
 export function useRouter (startUrl) {
@@ -106,7 +103,7 @@ export function useRouter (startUrl) {
   function renderComponents(renderRoute) {
     let comps = {}
     if (!renderRoute.component) {
-      //comps = {main: (_Router_FACTORIES[DEFAULT_LANDING])(Object.assign({key: DEFAULT_LANDING}))}
+      console.log (`renderComponents: no default, rendering ${DEFAULT_LANDING}`)
       comps = {main: React.createElement(_compoenentMap[DEFAULT_LANDING], {key: DEFAULT_LANDING})}
       
       if (Object.keys(comps).length === 0) {
@@ -122,15 +119,9 @@ export function useRouter (startUrl) {
       } else {
         comps = {main: `404 - Unknown Compoent ${renderRoute.component}`}
       }
-      // let cf = _Router_FACTORIES[renderRoute.component];
-      // if (cf) {
-      //   comps = {main: cf(Object.assign({key: JSON.stringify(renderRoute.props)}, renderRoute.props, {recordid: renderRoute.recordid}))}
-      // } else {
-      //   comps = {main: `404 - Unknown Compoent ${renderRoute.component}`}
-      // }
     }
     return comps
   }
 
-  return !renderRoute ? {} : renderComponents(renderRoute)
+  return !renderRoute ? {main: <div>internal error, null renderRoute</div>} : renderComponents(renderRoute)
 }
