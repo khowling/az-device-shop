@@ -1,5 +1,5 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
         "accountName": {
@@ -166,6 +166,10 @@
         "accountName": {
             "type": "string",
             "value": "[variables('accountName')]"
+        },
+        "documentDbPrimaryMasterKey": {
+            "type": "String",
+            "value": "[listConnectionStrings(resourceId('Microsoft.DocumentDB/databaseAccounts/', variables('accountName')), providers('Microsoft.DocumentDB','databaseAccounts').apiVersions[0]).connectionStrings[0].connectionString]"
         }
     }
 }

@@ -10,6 +10,5 @@ databaseName=dbdev
 collection1Name=collection1
 
 az group create --name $resourceGroupName --location $location
-az group deployment create --resource-group $resourceGroupName \
-  --template-file cloud/services.json \
-  --parameters databaseName=$databaseName collection1Name=$collection1Name 
+az group deployment create --resource-group $resourceGroupName --template-file infra/services.json  --parameters databaseName=$databaseName collection1Name=$collection1Name 
+

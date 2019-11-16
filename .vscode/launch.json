@@ -7,7 +7,19 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
+            "name": "Launch ecom-crud-api",
+            "env": {
+                "MONGO_DB": "mongodb://mongodb-d4tp3t2osp5qs:4ZHA8TUiHp7JLhCrbX9b8utlTGJkJhIf60JNajiDHk3RDkYVZ1I5aeUO2hSaaqdFE5A00sQjQD4y8ukoiSZHSg==@mongodb-d4tp3t2osp5qs.documents.azure.com:10255/?ssl=true"
+            },
+            "program": "${workspaceFolder}/ecom-crud-api/index.js",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch ecom-react-web",
             "skipFiles": [
                 "<node_internals>/**"
             ],
