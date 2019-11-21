@@ -34,6 +34,18 @@ module.exports =  [
                 presets: [
                     "@babel/preset-env",
                     "@babel/preset-react"
+                ],
+                plugins: [
+                  [ // Required for client side async/await
+                    "@babel/plugin-transform-runtime",
+                    {
+                      "absoluteRuntime": false,
+                      "corejs": false,
+                      "helpers": false,
+                      "regenerator": true,
+                      "useESModules": false
+                    }
+                  ]
                 ]
             }
         }
@@ -98,8 +110,14 @@ module.exports =  [
             loader: "babel-loader",
             options: {
                 presets: [
-                    "@babel/preset-env",
-                    "@babel/preset-react"
+                  [ "@babel/preset-env", {
+                       "targets": {
+                         // required for server side async/await
+                          "node": "current"
+                      }
+                    }
+                  ],
+                  "@babel/preset-react"
                 ]
             }
         }

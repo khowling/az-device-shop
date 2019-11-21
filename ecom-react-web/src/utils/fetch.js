@@ -1,3 +1,47 @@
+export const _suspenseWrap = (result) => {
+  //let status = 'success'
+  return {
+    read() {
+      return result
+    }
+  }
+}
+
+
+export const _suspenseFetch = (collection, recordid) => {
+  console.log (`_suspenseFetch :  web fetch for ${collection}/${recordid}`)
+  let status = 'pending', result = 'waiting'
+  let suspender =  fetch(`/api/${collection}/${recordid}`)
+      .then(res => res.json())
+      .then(res => {
+        console.log (`_suspenseFetch response error=${res.error}`)
+        if (!res.error) {
+          status = 'success'
+          result = res
+        } else {
+          status = 'error'
+          result = res.error
+        }
+      })
+      .catch((e) => {
+        status = 'error'
+        result = e
+      })
+  console.log (`_suspenseFetch returning ${status}`)
+  return {
+    read() {
+      if (status === 'pending') {
+        throw suspender
+      } else if (status === 'error') {
+        throw result
+      }
+      return result
+    }
+  }
+}
+
+
+
 export async function _fetchit(type, url, body = null) {
     return new Promise((resolve, reject) => {
       let opts = {
@@ -27,6 +71,8 @@ export async function _fetchit(type, url, body = null) {
               } else {
                 return reject("no output")
               }
+            }).catch((e) => {
+              return reject("unknown response")
             })
           }          
         }

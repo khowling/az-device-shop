@@ -1,8 +1,7 @@
 const Koa = require('koa'),
 	  Router = require('koa-router'),
 	  KoaBody = require('koa-body'),
-	  Joi = require('@hapi/joi'),
-	  router = new Router()
+	  Joi = require('@hapi/joi')
 
 const {MongoClient, ObjectID} = require('mongodb')
 const MongoURL = process.env.MONGO_DB
@@ -16,7 +15,8 @@ const collecionArray = [
 		name: "products",
 		collection: "products",
 		schema: Joi.object({
-			name: Joi.string().trim().required(),
+			heading: Joi.string().trim().required(),
+			
 			//partition_key: Joi.string().trim().required()
 		})
 	}
@@ -54,6 +54,7 @@ async function dbInit() {
 
 	// ensure url encoded
 	const murl = new URL (MongoURL)
+	console.log (`connecting with ${murl.toString()}`)
     const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
   
     //_dbname = url.parse(MongoURL).pathname.substr(1)
@@ -78,20 +79,25 @@ async function dbInit() {
 
 async function init() {
 	app.context.db = await dbInit()
-	console .log (`set ctx`)
-	app.listen(3000)
+	console .log (`listending on 3001`)
+	app.listen(3001)
 }
 
 // https://github.com/ria-com/node-koajs-rest-skeleton/blob/master/app/controllers/indexController.js
-app.use(router
+
+app.use(new Router({prefix: '/api'})
 	.get('/products',  async function (ctx, next) {
 		ctx.body = await ctx.db.collection('products').find({}).toArray()
 		//ctx.body = ctx.db.collection('products').find({}).stream()
 		await next()
 	})
 	.get('/products/:id',    async function (ctx, next) {
-		ctx.body = await ctx.db.collection('products').findOne({_id: ObjectID(ctx.params.id), partition_key: "P1"})
-		await next()
+	  try {
+		  ctx.body = await ctx.db.collection('products').findOne({_id: ObjectID(ctx.params.id), partition_key: "P1"})
+    } catch (e) {
+      ctx.throw(400, `Unknown id ${ctx.params.id}`)
+    }
+    await next()
 	})
 	// curl -XPOST "http://localhost:3000/products" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'
 	.post('/products/',      KoaBody(), async function (ctx, next) {

@@ -1,143 +1,128 @@
-import React, {useState, useEffect} from 'react'
+import React, {useState, useEffect, Suspense} from 'react'
 import {_fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link } from './router.js'
 
-function Product ({item1}) {
 
-  const item = {image: "https://placehold.it/272x223", badge: "Sale", heading: "DeviceA", price:"500", description:"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis laoreet turpis ut nibh varius, eget blandit sem blandit."}
-  return (
-    <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
-              
-      <div className="f-default-image">
-          <picture>
-              <source srcSet="//statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/content-images/generic-glyph-default-large.png" media="(min-width:540px)"/>
-              <source srcSet="//statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/content-images/generic-glyph-default-large.png" media="(min-width:0)"/>
-              <img className="c-image" srcSet="//statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/content-images/generic-glyph-default-large.png" src="//statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/content-images/generic-glyph-default.png" alt="White frame with mountain landscape illustrated in white on a grey background"/>
-          </picture>
-      </div>
-      <div >
-          <strong className="c-badge f-small f-highlight">BADGE</strong>
-          <h3 className="c-heading" itemProp="product name">{item.heading}</h3>
-          <div className="c-rating" data-value="4" data-max="5" itemScope="" itemType="https://schema.org/AggregateRating">
-              <p className="x-screen-reader" id="sr_">Community rating:
-                  <span itemProp="ratingValue">4</span>out of
-                  <span itemProp="bestRating">5</span>
-              </p>
-              <div aria-hidden="true"></div>
-          </div>
-          <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
-              <meta itemProp="priceCurrency" content="USD"/>
-              <span>£</span>
-              <span itemProp="price">{item.price}</span>
-              <link itemProp="availability" href="https://schema.org/InStock"/>
-          </div>
-          
-      </div>
-    
-  </section>
-  )
-}
-
-
-export function Order({recordid, item}) {
-
-  const [qty, setQty] = useState(1)
+function ShowProduct({resource}) {
   const [orderState, setOrderState] = useState({state: "enterdetails"})
 
-  console.log (`Order ${recordid}`)
+  const item = resource.read()
 
+  
   function addorder() {
     setOrderState ({state: "ordering"})
 //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('POST','/api/orders', JSON.stringify({...item, qty: qty})).then(succ => {
+    _fetchit('POST','/api/orders', JSON.stringify({...item, qty: 1})).then(succ => {
       console.log (`created success : ${JSON.stringify(succ)}`)
       setOrderState ({state: "ordered", response: succ})
       //navTo("ManageOrders")
     }, err => {
+      console.error (`created failed : ${err}`)
       setOrderState({state: "error", description: `POST ${err}`})
     })
   }
 
-  return (
-    <div>
-        <header className="m-heading-4">
-            <h4 className="c-heading">Place Order {recordid}</h4>
-        </header>
-
-        <section data-grid="container">
-          <div data-grid="col-6">
-            <Product item={item}/>
+  
+  //console.log (`ShowProduct, call resource.read() :  ${JSON.stringify(item)}`)
+  
+  return [
+    <div key="ShowProduct1" data-grid="col-6">
+      <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
+        <div className="f-def ault-image">
+            <picture>
+              <img className="c-ima ge" src={item && item.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
+            </picture>
         </div>
-          <div data-grid="col-6">
-          
-            <label className="c-label" >Qty</label>
-            <input id="default" className="c-text-field" type="number" name="default" value={qty} onChange={(e) => setQty(e.target.value)} disabled={orderState.state === 'enterdetails'?"" : "disabled"}/>
-
-            <div className="c-select f-border">
-                <label className="c-label" htmlFor="border">Color</label>
-                <select id="border" aria-label="Select Colour">
-                    <option className="">Red</option>
-                    <option className="">Blue</option>
-                    <option className="">Orange</option>
-                    <option className="">Red</option>
-                </select>
-            </div>
-
-
-          <label className="c-label"></label>
-          { orderState.state === 'enterdetails'?
-            <div className="c-group f-wrap-items" role="group" aria-labelledby="single-select-foo">
-              <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Order Now</button>
-            </div>
-            : orderState.state === 'ordering'? 
-              <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabindex="0" aria-label="indeterminate local small progress bar">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-            : orderState.state === 'error'?
-              <div className="m-alert f-warning" role="alert">
-                <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
-                <div>
-                    <div className="c-glyph glyph-warning" aria-label="Warning message"></div>
-                    <p className="c-paragraph">{orderState.description}
-                        <span className="c-group">
-                            <Link className="c-action-trigger" >Link to action</Link>
-                            <Link className="c-action-trigger">Link to action</Link>
-                        </span>
-                    </p>
-                </div>
-            </div>
-            : orderState.state === 'ordered'?
-              <div className="m-alert f-information" role="alert">
-                <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
-                <div>
-                    <div className="c-glyph glyph-info" aria-label="Information message"></div>
-                    <h1 className="c-heading">Order Created</h1>
-                    <p className="c-paragraph">Click in the link to view your new order status: {orderState.response}.
-                        <span className="c-group">
-                            <Link className="c-action-trigger" role="button" component="ManageOrders">Link to action</Link>
-                    
-                        </span>
-                    </p>
-                </div>
-            </div>
-          : <div></div>
-          }
-
-        </div>
-      
-      
-        <AdditionalDetails/>
       </section>
+    </div>,
 
-       <header className="m-heading-4">
-            <h4 className="c-heading">Heading 4</h4>
-        </header>
+    <div key="ShowProduct2" data-grid="col-6">
+    
+      <div>
+        <strong className="c-badge f-small f-highlight">{item && item.badge}</strong>
+        <h3 className="c-heading">{item && item.heading}</h3>
+        <p className="c-paragraph">{item && item.description}</p>
+
+        <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+          <s><span className="x-screen-reader">Full price was</span>$1,500</s>
+          <span>&nbsp;Now</span>
+          <meta itemProp="priceCurrency" content="USD"/>
+          <span>&nbsp;$</span>
+          <span itemProp="price">{item && item.price}</span>
+          <link itemProp="availability" href="https://schema.org/InStock"/>
+        </div>
+      </div>
+      
+      <div className="c-select f-border">
+          <label className="c-label" htmlFor="border">Color</label>
+          <select id="border" aria-label="Select Colour">
+              <option className="">Red</option>
+              <option className="">Blue</option>
+              <option className="">Orange</option>
+              <option className="">Red</option>
+          </select>
+      </div>
+
+
+      <label className="c-label"></label>
+      { orderState.state === 'enterdetails'?
+        <div className="c-group f-wrap-items" role="group" aria-labelledby="single-select-foo">
+          <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Order Now</button>
+        </div>
+        : orderState.state === 'ordering'? 
+          <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        : orderState.state === 'error'?
+          <div className="m-alert f-warning" role="alert">
+            <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
+            <div>
+                <div className="c-glyph glyph-warning" aria-label="Warning message"></div>
+                <p className="c-paragraph">{orderState.description}
+                    <span className="c-group">
+                        <Link className="c-action-trigger" >Link to action</Link>
+                        <Link className="c-action-trigger">Link to action</Link>
+                    </span>
+                </p>
+            </div>
+        </div>
+        : orderState.state === 'ordered'?
+          <div className="m-alert f-information" role="alert">
+            <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
+            <div>
+                <div className="c-glyph glyph-info" aria-label="Information message"></div>
+                <h1 className="c-heading">Order Created</h1>
+                <p className="c-paragraph">Click in the link to view your new order status: {orderState.response}.
+                    <span className="c-group">
+                        <Link className="c-action-trigger" role="button" component="ManageOrders">Link to action</Link>
+                
+                    </span>
+                </p>
+            </div>
+        </div>
+    : <div></div>
+    }
     </div>
+  ]
+}
+
+export function Order({resource}) {
+  //console.log (`Order`)
+  return (
+    <section data-grid="container">
+      <header className="m-heading-4">
+          <h4 className="c-heading">Place Order</h4>
+      </header>
+      <Suspense fallback={<h1>Loading profile...</h1>}>
+        <ShowProduct resource={resource} />
+      </Suspense>
+      <AdditionalDetails/>
+    </section>
   )
 }
 
@@ -262,7 +247,7 @@ export function OrderStatus ({recordid}) {
 
   if (order.status === "loading") {
     return (
-      <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabindex="0" aria-label="indeterminate local small progress bar">
+      <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">
           <span></span>
           <span></span>
           <span></span>
@@ -305,11 +290,11 @@ export function OrderStatus ({recordid}) {
                           <th scope="row">Bravo</th>
                           <td>Bravo Description sentence.</td>
                           <td className="f-numerical">
-                              <div className="c-price" itemprop="offers" itemscope="" itemtype="https://schema.org/Offer">
-                                  <meta itemprop="priceCurrency" content="USD"/>
+                              <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+                                  <meta itemProp="priceCurrency" content="USD"/>
                                   <span>$</span>
-                                  <span itemprop="price">1,000</span>
-                                  <link itemprop="availability" href="https://schema.org/InStock"/>
+                                  <span itemProp="price">1,000</span>
+                                  <link itemProp="availability" href="https://schema.org/InStock"/>
                               </div>
                           </td>
                       </tr>
@@ -317,11 +302,11 @@ export function OrderStatus ({recordid}) {
                           <th scope="row">Charley</th>
                           <td>Charley Description sentence.</td>
                           <td className="f-numerical">
-                              <div className="c-price" itemprop="offers" itemscope="" itemtype="https://schema.org/Offer">
-                                  <meta itemprop="priceCurrency" content="USD"/>
+                              <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+                                  <meta itemProp="priceCurrency" content="USD"/>
                                   <span>$</span>
-                                  <span itemprop="price">900</span>
-                                  <link itemprop="availability" href="https://schema.org/InStock"/>
+                                  <span itemProp="price">900</span>
+                                  <link itemProp="availability" href="https://schema.org/InStock"/>
                               </div>
                           </td>
                       </tr>
@@ -376,7 +361,7 @@ export function ManageOrders() {
         <tbody>
           { orders.orders.map((o,idx) =>
             <tr>
-                <td><Link component="OrderStatus" recordid={o.id}>ORD-{o.id.substr(0,13)}</Link></td>
+                <td><Link route="/OrderStatus" recordid={o.id}>ORD-{o.id.substr(0,13)}</Link></td>
                 <td>{Date(o._ts).substr(0,24)}</td>
                 <td>{o.status && <strong className="c-badge f-small f-highlight">{o.status}</strong>}
                 </td>

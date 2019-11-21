@@ -17,7 +17,7 @@ export function Panes () {
                         <span>Starting at&nbsp;</span>
                         <meta  content="USD"/>
                         <span>$</span>
-                        <span >X,000</span>
+                        <span >1,000</span>
                         <link  href="https://schema.org/InStock"/>
                     </div>
                     <div className="c-rating" data-value="3" data-max="5" >
@@ -28,7 +28,7 @@ export function Panes () {
                         <div aria-hidden="true"></div>
                     </div>
                     <div>
-                        <Link component="Order" recordid={'12321'}  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                        <Link route="/Order" recordid={'5dcf42f88ced4a3f6cc95228'}  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
                             <span>Buy now</span>
                         </Link>
                     </div>
@@ -60,7 +60,7 @@ export function Panes () {
                             <div aria-hidden="true"></div>
                         </div>
                         <div>
-                            <Link className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                            <Link route="gete"  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
                                 <span>Call To Action</span>
                             </Link>
                         </div>
