@@ -14,7 +14,7 @@ module.exports =  [
 // Client
 {
   mode: mode,
-  entry: "./ssr/client.js",
+  entry: "./src/ssr_client.js",
   target: 'web',
   output: {
     // requires absolute path
@@ -93,12 +93,13 @@ module.exports =  [
 // Server
 {
   mode: mode,
-  entry: "./ssr/server.js",
+  entry: "./src/ssr_server.js",
   target: 'node',
   output: {
     // requires absolute path
     path: path.resolve(__dirname, BUILD_PATH),
-    filename: "server.js",
+    filename: "ssr_server.js",
+    libraryTarget: 'commonjs2'
   },
   devtool: "source-map",
   module: {

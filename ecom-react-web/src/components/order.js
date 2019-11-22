@@ -68,7 +68,7 @@ function ShowProduct({resource}) {
       <label className="c-label"></label>
       { orderState.state === 'enterdetails'?
         <div className="c-group f-wrap-items" role="group" aria-labelledby="single-select-foo">
-          <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Order Now</button>
+          <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Add to Cart</button>
         </div>
         : orderState.state === 'ordering'? 
           <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">
