@@ -1,18 +1,19 @@
+const https = require('https')
 const http = require('http')
 
-module.exports = async function (collection, recordid) {
+module.exports = async function (url, options = {}, body) {
+    let http_s = https
+    if (url.startsWith('http://')) http_s = http
     return new Promise(function(resolve, reject) {
-        http.get(`http://localhost:3001/api/${collection}/${recordid}`, (res) => {
+        const req = http_s.request(url, options, (res) => {
             const { statusCode } = res;
             const contentType = res.headers['content-type']
 
             let error;
             if (statusCode !== 200) {
-                error = new Error('Request Failed.\n' +
-                                `Status Code: ${statusCode}`)
+                error = new Error(`Request Failed: Status Code: ${statusCode}`)
             } else if (!/^application\/json/.test(contentType)) {
-                error = new Error('Invalid content-type.\n' +
-                                `Expected application/json but received ${contentType}`);
+                error = new Error(`Invalid content-type: Expected application/json but received ${contentType}`);
             }
             if (error) {
                 console.error(error.message)
@@ -37,5 +38,11 @@ module.exports = async function (collection, recordid) {
                 console.error(`Got error: ${e.message}`)
                 return reject(e.message)
             })
+
+        if (options.method === 'POST') {
+            // Write data to request body
+            req.write(body)
+        }
+        req.end()
     })
 }

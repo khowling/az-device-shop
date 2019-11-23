@@ -25,7 +25,7 @@ export function App({startUrl}) {
   console.log ('App return')
   return (
     <main id="mainContent" data-grid="container">
-      <Nav/>
+      <Nav startUrl={startUrl}/>
       {routeElements}
     </main>
   );
