@@ -2,117 +2,240 @@ import React, {useState, useEffect, Suspense} from 'react'
 import {_fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link } from './router.js'
+import { DropdownMenuItemType, Dropdown } from 'office-ui-fabric-react'
 
 
-function ShowProduct({resource}) {
-  const [orderState, setOrderState] = useState({state: "enterdetails"})
+export function MyCart({resource}) {
 
-  const item = resource.read()
-
+  function ShowCart({resource}) {
+    //const [orderState, setOrderState] = useState({state: "enterdetails"})
   
-  function addorder() {
-    setOrderState ({state: "ordering"})
-//    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('POST','/api/orders', JSON.stringify({...item, qty: 1})).then(succ => {
-      console.log (`created success : ${JSON.stringify(succ)}`)
-      setOrderState ({state: "ordered", response: succ})
-      //navTo("ManageOrders")
+    const {items} = resource.read()
+
+    return (
+      <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
+        <table data-f-sort="true">
+        
+          <thead>
+              <tr>
+                  <th></th>
+                  <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                      <button aria-label="Sort by Length">Product</button>
+                  </th>
+                  <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                      <button aria-label="Sort by Width">Qty</button>
+                  </th>
+                  <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                      <button aria-label="Sort by Price">Price</button>
+                  </th>
+              </tr>
+          </thead>
+          <tbody>
+            { items.map((i,idx) =>
+              <tr key={"cart"+idx}>
+                  <td><img src={i.item.image}></img></td>
+                  <td className="f-numerical f-sub-categorical">{i.item.heading}</td>
+                  <td className="f-numerical f-sub-categorical">{i.qty}</td>
+                  <td className="f-numerical">
+                      <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+                          <meta itemProp="priceCurrency" content="GBP"/>
+                          <span>£</span>
+                          <span itemProp="price">{i.item.price}</span>
+                          <link itemProp="availability" href="https://schema.org/InStock"/>
+                      </div>
+                  </td>
+              </tr>
+            )}
+          </tbody>
+      </table>
+  </div>
+    )
+  }
+
+  return (
+    <section data-grid="container">
+      <header className="m-heading-4">
+          <h4 className="c-heading">Place Order</h4>
+      </header>
+      <Suspense fallback={<h1>Loading profile...</h1>}>
+        <ShowCart resource={resource} />
+      </Suspense>
+    </section>
+  )
+}
+
+export function ManageOrders() { 
+  const [orders, setOrders] = useState({status: "loading", orders: []})
+
+  useEffect(() => {
+    get()
+  },[])
+
+
+  function get() {
+    _fetchit('GET','/api/orders').then(succ => {
+      console.log (`got list success : ${JSON.stringify(succ)}`)
+      setOrders({ status: "success", orders: succ});
     }, err => {
-      console.error (`created failed : ${err}`)
-      setOrderState({state: "error", description: `POST ${err}`})
+      setOrders({status: "error", message: `GET ${err}`})
     })
   }
 
-  
-  //console.log (`ShowProduct, call resource.read() :  ${JSON.stringify(item)}`)
-  
-  return [
-    <div key="ShowProduct1" data-grid="col-6">
-      <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
-        <div className="f-def ault-image">
-            <picture>
-              <img className="c-ima ge" src={item && item.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
-            </picture>
-        </div>
-      </section>
-    </div>,
+  return (
 
-    <div key="ShowProduct2" data-grid="col-6">
-    
-      <div>
-        <strong className="c-badge f-small f-highlight">{item && item.badge}</strong>
-        <h3 className="c-heading">{item && item.heading}</h3>
-        <p className="c-paragraph">{item && item.description}</p>
+    <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
+      <table data-f-sort="true">
+        
+        <thead>
+            <tr>
+                <th scope="col" colSpan="1">Order#</th>
+                <th scope="col" colSpan="1">Order Date</th>
+                <th scope="col" colSpan="1">Status</th>
+                <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                    <button aria-label="Sort by Length">Product</button>
+                </th>
+                <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                    <button aria-label="Sort by Width">Qty</button>
+                </th>
+                <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                    <button aria-label="Sort by Price">Price</button>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+          { orders.orders.map((o,idx) =>
+            <tr>
+                <td><Link route="/OrderStatus" recordid={o.id}>ORD-{o.id.substr(0,13)}</Link></td>
+                <td>{Date(o._ts).substr(0,24)}</td>
+                <td>{o.status && <strong className="c-badge f-small f-highlight">{o.status}</strong>}
+                </td>
+                <td className="f-numerical f-sub-categorical">{o.heading}</td>
+                <td className="f-numerical f-sub-categorical">{o.qty}</td>
+                <td className="f-numerical">
+                    <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+                        <meta itemProp="priceCurrency" content="GBP"/>
+                        <span>£</span>
+                        <span itemProp="price">{o.price}</span>
+                        <link itemProp="availability" href="https://schema.org/InStock"/>
+                    </div>
+                </td>
+            </tr>
+          )}
+        </tbody>
+    </table>
+</div>
 
-        <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
-          <s><span className="x-screen-reader">Full price was</span>$1,500</s>
-          <span>&nbsp;Now</span>
-          <meta itemProp="priceCurrency" content="USD"/>
-          <span>&nbsp;$</span>
-          <span itemProp="price">{item && item.price}</span>
-          <link itemProp="availability" href="https://schema.org/InStock"/>
-        </div>
-      </div>
-      
-      <div className="c-select f-border">
-          <label className="c-label" htmlFor="border">Color</label>
-          <select id="border" aria-label="Select Colour">
-              <option className="">Red</option>
-              <option className="">Blue</option>
-              <option className="">Orange</option>
-              <option className="">Red</option>
-          </select>
-      </div>
 
-
-      <label className="c-label"></label>
-      { orderState.state === 'enterdetails'?
-        <div className="c-group f-wrap-items" role="group" aria-labelledby="single-select-foo">
-          <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Add to Cart</button>
-        </div>
-        : orderState.state === 'ordering'? 
-          <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-        </div>
-        : orderState.state === 'error'?
-          <div className="m-alert f-warning" role="alert">
-            <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
-            <div>
-                <div className="c-glyph glyph-warning" aria-label="Warning message"></div>
-                <p className="c-paragraph">{orderState.description}
-                    <span className="c-group">
-                        <Link className="c-action-trigger" >Link to action</Link>
-                        <Link className="c-action-trigger">Link to action</Link>
-                    </span>
-                </p>
-            </div>
-        </div>
-        : orderState.state === 'ordered'?
-          <div className="m-alert f-information" role="alert">
-            <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
-            <div>
-                <div className="c-glyph glyph-info" aria-label="Information message"></div>
-                <h1 className="c-heading">Order Created</h1>
-                <p className="c-paragraph">Click in the link to view your new order status: {orderState.response}.
-                    <span className="c-group">
-                        <Link className="c-action-trigger" role="button" component="ManageOrders">Link to action</Link>
-                
-                    </span>
-                </p>
-            </div>
-        </div>
-    : <div></div>
-    }
-    </div>
-  ]
+    )
 }
 
+
 export function Order({resource}) {
-  //console.log (`Order`)
+
+  function ShowProduct({resource}) {
+    const [orderState, setOrderState] = useState({state: "enterdetails"})
+  
+    const item = resource.read()
+  
+    function addorder() {
+      setOrderState ({state: "ordering"})
+  //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
+      _fetchit('POST','/api/cart', JSON.stringify({itemid: item._id})).then(succ => {
+        console.log (`created success : ${JSON.stringify(succ)}`)
+        setOrderState ({state: "ordered", response: succ})
+        //navTo("ManageOrders")
+      }, err => {
+        console.error (`created failed : ${err}`)
+        setOrderState({state: "error", description: `POST ${err}`})
+      })
+    }
+    return [
+      <div key="ShowProduct1" data-grid="col-6">
+        <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
+          <div className="f-def ault-image">
+              <picture>
+                <img className="c-ima ge" src={item && item.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
+              </picture>
+          </div>
+        </section>
+      </div>,
+  
+      <div key="ShowProduct2" data-grid="col-6">
+      
+        <div>
+          <strong className="c-badge f-small f-highlight">{item && item.badge}</strong>
+          <h3 className="c-heading">{item && item.heading}</h3>
+          <p className="c-paragraph">{item && item.description}</p>
+  
+          <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+            <s><span className="x-screen-reader">Full price was</span>$1,500</s>
+            <span>&nbsp;Now</span>
+            <meta itemProp="priceCurrency" content="USD"/>
+            <span>&nbsp;$</span>
+            <span itemProp="price">{item && item.price}</span>
+            <link itemProp="availability" href="https://schema.org/InStock"/>
+          </div>
+        </div>
+        <br/>
+        <Dropdown
+          label="Colour"
+          placeholder="Select an option"
+          options={[
+            { key: 'matalic', text: 'Matalic', itemType: DropdownMenuItemType.Header },
+            { key: "silver", text: "Silver" },
+            { key: "gold", text: "Gold" },
+            { key: 'texture', text: 'Texture', itemType: DropdownMenuItemType.Header },
+            { key: "blue", text: "Blue" }
+          ]}
+          styles={{ dropdown: { width: 300 } }}
+        />
+  
+        <label className="c-label"></label>
+        { orderState.state === 'enterdetails'?
+          <div className="c-group f-wrap-items" role="group" aria-labelledby="single-select-foo">
+            <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Add to Cart</button>
+          </div>
+          : orderState.state === 'ordering'? 
+            <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+          </div>
+          : orderState.state === 'error'?
+            <div className="m-alert f-warning" role="alert">
+              <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
+              <div>
+                  <div className="c-glyph glyph-warning" aria-label="Warning message"></div>
+                  <p className="c-paragraph">{orderState.description}
+                      <span className="c-group">
+                          <Link className="c-action-trigger" >Link to action</Link>
+                          <Link className="c-action-trigger">Link to action</Link>
+                      </span>
+                  </p>
+              </div>
+          </div>
+          : orderState.state === 'ordered'?
+            <div className="m-alert f-information" role="alert">
+              <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
+              <div>
+                  <div className="c-glyph glyph-info" aria-label="Information message"></div>
+                  <h1 className="c-heading">Order Created</h1>
+                  <p className="c-paragraph">Click in the link to view your new order status: {orderState.response}.
+                      <span className="c-group">
+                          <Link className="c-action-trigger" role="button" component="ManageOrders">Link to action</Link>
+                  
+                      </span>
+                  </p>
+              </div>
+          </div>
+      : <div></div>
+      }
+      </div>
+    ]
+  }
+
   return (
     <section data-grid="container">
       <header className="m-heading-4">
@@ -318,69 +441,4 @@ export function OrderStatus ({recordid}) {
         </section>
       </div>
   )}
-}
-
-export function ManageOrders() { 
-  const [orders, setOrders] = useState({status: "loading", orders: []})
-
-  useEffect(() => {
-    get()
-  },[])
-
-
-  function get() {
-    _fetchit('GET','/api/orders').then(succ => {
-      console.log (`got list success : ${JSON.stringify(succ)}`)
-      setOrders({ status: "success", orders: succ});
-    }, err => {
-      setOrders({status: "error", message: `GET ${err}`})
-    })
-  }
-
-  return (
-
-    <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
-      <table data-f-sort="true">
-        
-        <thead>
-            <tr>
-                <th scope="col" colSpan="1">Order#</th>
-                <th scope="col" colSpan="1">Order Date</th>
-                <th scope="col" colSpan="1">Status</th>
-                <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
-                    <button aria-label="Sort by Length">Product</button>
-                </th>
-                <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
-                    <button aria-label="Sort by Width">Qty</button>
-                </th>
-                <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
-                    <button aria-label="Sort by Price">Price</button>
-                </th>
-            </tr>
-        </thead>
-        <tbody>
-          { orders.orders.map((o,idx) =>
-            <tr>
-                <td><Link route="/OrderStatus" recordid={o.id}>ORD-{o.id.substr(0,13)}</Link></td>
-                <td>{Date(o._ts).substr(0,24)}</td>
-                <td>{o.status && <strong className="c-badge f-small f-highlight">{o.status}</strong>}
-                </td>
-                <td className="f-numerical f-sub-categorical">{o.heading}</td>
-                <td className="f-numerical f-sub-categorical">{o.qty}</td>
-                <td className="f-numerical">
-                    <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
-                        <meta itemProp="priceCurrency" content="GBP"/>
-                        <span>£</span>
-                        <span itemProp="price">{o.price}</span>
-                        <link itemProp="availability" href="https://schema.org/InStock"/>
-                    </div>
-                </td>
-            </tr>
-          )}
-        </tbody>
-    </table>
-</div>
-
-
-    )
 }

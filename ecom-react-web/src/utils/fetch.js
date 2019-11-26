@@ -9,12 +9,12 @@ export const _suspenseWrap = (result) => {
 
 
 export const _suspenseFetch = (collection, recordid) => {
-  console.log (`_suspenseFetch :  web fetch for ${collection}/${recordid}`)
+  //console.log (`_suspenseFetch :  web fetch for ${collection}/${recordid}`)
   let status = 'pending', result = 'waiting'
-  let suspender =  fetch(`/api/${collection}/${recordid}`)
+  let suspender =  fetch(`/api/${collection}${recordid ? '/'+recordid : ''}`)
       .then(res => res.json())
       .then(res => {
-        console.log (`_suspenseFetch response error=${res.error}`)
+        //console.log (`_suspenseFetch response error=${res.error}`)
         if (!res.error) {
           status = 'success'
           result = res
@@ -27,7 +27,7 @@ export const _suspenseFetch = (collection, recordid) => {
         status = 'error'
         result = e
       })
-  console.log (`_suspenseFetch returning ${status}`)
+  //console.log (`_suspenseFetch returning ${status}`)
   return {
     read() {
       if (status === 'pending') {
@@ -44,22 +44,24 @@ export const _suspenseFetch = (collection, recordid) => {
 
 export async function _fetchit(type, url, body = null) {
     return new Promise((resolve, reject) => {
+      
       let opts = {
-        crossDomain:true,
+        //crossDomain:true,
         method: type,
-        credentials: 'same-origin'
+        //credentials: 'same-origin'
       }
+      
       if (body) {
         opts.body = body
         opts.headers = {
           'content-type': 'application/json'
         }
       }
-
-      fetch((process.env.REACT_APP_FN_HOST || '') + url + (process.env.REACT_APP_FN_KEY || ''), opts).then((r) => {
-        console.log (`fetch status ${r.status}`)
+      
+      fetch(url, opts).then((r) => {
+        //console.log (`fetch status ${r.status}`)
         if (!r.ok) {
-          console.log (`non 200 err : ${r.status}`)
+          //console.log (`non 200 err : ${r.status}`)
           return reject(r.status)
         } else {
           if ((r.status === 200 && type === 'DELETE') || (r.status === 201 && type === 'POST')) {

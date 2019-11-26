@@ -1,10 +1,9 @@
-import React, {useContext} from 'react'
+import React from 'react'
 import { Link } from './router.js'
+import { CommandBarButton } from 'office-ui-fabric-react'
 
-import RenderContext from '../RenderContext'
 
-export function Nav ({startUrl}) {
-  const {auth} = useContext(RenderContext)
+export function Nav ({session}) {
   return (
     <nav className="m-navigation-bar" role="menubar">
 
@@ -30,31 +29,33 @@ export function Nav ({startUrl}) {
         </ul>
         
 
-        <form className="c-search" autocomplete="off" name="form1" target="_self" style={{left:"10%", "min-width": "250px", "display": "inline-block", "horizontal-align": "middle", "vertical-align": "middle", "margin-top": "0"}}>
+        <form className="c-search" autoComplete="off" name="form1" target="_self" style={{display: "inline-block", left:"5%", minWidth: "350px", horizontalAlign: "middle", verticalAlign: "middle", marginTop: "0"}}>
           <input aria-label="Enter your search" type="search" name="search-field" placeholder="Search" />
           <button className="c-glyph" name="search-button">
               <span className="x-screen-reader">Search</span>
           </button>
         </form>
-        
-        <Link route="/cart" className="c-call-to-action c-glyph" style={{position: "absolute", right: "100px", padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
-          <span>Cart items</span>
-        </Link>
-        { !auth.loggedon ? 
-          <a href={`/connect/microsoft?state=${encodeURIComponent(startUrl.pathname)}`} className="c-call-to-action c-glyph" style={{position: "absolute", right: "0", padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
-            <span>Login</span>
-          </a>
-        : [
-        <button aria-controls="navigationMenuB" aria-haspopup="true" aria-expanded="false" style={{position: "absolute", right: "0"}}>{auth.given_name}</button>,
-        <ul id="navigationMenuB" aria-hidden="true" style={{position: "absolute", right: "0"}}>
-            <li>
-              <a href="/connect/microsoft/logout">
-                <span>Logout </span>
-              </a>
-            </li>
-        </ul>
-        ]
-        }
+
+        <div style={{display: "inline-block", float: "right"}}>
+          <Link route="/mycart" className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
+            <span>Cart ({session && session.cart.items.length})</span>
+          </Link>
+          { session && session.auth && session.auth.loggedon ?  
+            <CommandBarButton iconProps={{ iconName: 'Contact' }} menuProps={{items: [
+                {
+                  key: 'logout',
+                  text: 'Logout',
+                  href: (process.env.REACT_APP_SERVER_URL || '') + "/connect/microsoft/logout" + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.origin)}` : ''),
+                  iconProps: { iconName: 'Mail' }
+                }]}} text={session.auth.given_name} disabled={false} checked={true} styles={{root: {padding: "11px 12px 13px", border: "2px solid transparent",  background: "transparent"}, label: {color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3"}}}/>
+
+              
+          : 
+            <a href={(process.env.REACT_APP_SERVER_URL || '') + '/connect/microsoft' + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.href)}` : '')} className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
+              <span>Login</span>
+            </a>
+          }
+          </div>
         </div>
     </nav>
   )

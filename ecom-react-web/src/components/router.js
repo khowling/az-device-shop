@@ -69,7 +69,7 @@ export function useRouter (startUrl, cfg) {
   // Subscribe to <Link> events
   useEffect(() => {
     if (ssrContext === "spa") {
-      console.log ('useRouter: useEffect - initialise listeners to listen for <Link>)')
+      //console.log ('useRouter: useEffect - initialise listeners to listen for <Link>)')
       listeners.push(newrouteRequested => setRenderRoute(newrouteRequested))
       return () => listeners.pop()
     }
@@ -86,7 +86,7 @@ export function useRouter (startUrl, cfg) {
     }
 
     if (typeof window !== 'undefined' && ssrContext === "spa") {
-      console.log ('useRouter: useEffect - initialise listeners to listen for popstate (browser back/forward)')
+      //console.log ('useRouter: useEffect - initialise listeners to listen for popstate (browser back/forward)')
       window.addEventListener('popstate', chnRouteFn, false)
       return () => { window.removeEventListener('popstate', chnRouteFn, false)}
     }
@@ -103,8 +103,8 @@ export function useRouter (startUrl, cfg) {
         // this code is being run on the server
         resource = _suspenseWrap(serverInitialData)
       } else {
-        console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)
-        resource = _suspenseFetch(initialFetch.collection, renderRoute.recordid)
+        //console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)
+        resource = _suspenseFetch(initialFetch.store ? 'store/'+initialFetch.store : initialFetch.operation, initialFetch.recordid ? renderRoute.recordid : null)
       }
     }
     return React.createElement(component, Object.assign({key: component.name}, renderRoute.props, {resource}))
