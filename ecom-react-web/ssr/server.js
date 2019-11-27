@@ -48,10 +48,12 @@ const StoreDef = {
 const FetchOperation = {
     "mycart": async function (ctx) {
         const cart = await ctx.db.collection(StoreDef["carts"].collection).findOne({_id: ctx.session._id, partition_key: 'P1'})
-        const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }}).toArray()
-        const ref_products_map = ref_products.reduce((a,c) => Object.assign({},a,{ [String(c._id)]: c}),null)
-        cart.items = cart.items.map(i => Object.assign(i, {item: ref_products_map[String(i.item._id)] || {_id: i.item._id, _error: 'missing item'}}))
-        return cart
+        if (cart && cart.items) {
+            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }}).toArray()
+            const ref_products_map = ref_products.reduce((a,c) => Object.assign({},a,{ [String(c._id)]: c}),null)
+            cart.items = cart.items.map(i => Object.assign(i, {item: ref_products_map[String(i.item._id)] || {_id: i.item._id, _error: 'missing item'}}))
+        }
+        return cart || {}
     },
     "get": async function (ctx, store, query = {}) {
         return await ctx.db.collection(StoreDef[store].collection).find(query).toArray()
@@ -270,13 +272,22 @@ const api = new Router({prefix: '/api'})
             if (typeof ctx.session.userid !== 'undefined') {
                 console.log (ctx.session.userid)
             }
-			ctx.body = await ctx.db.collection(StoreDef["carts"].collection).findOneAndUpdate({_id: ctx.session._id, partition_key: 'P1'},{ $push: { 'items': {item: {_id: ObjectID(value.itemid)}, options: {}, qty: 1, added: new Date()}}}, {upsert: true, returnNewDocument: true})
+			ctx.body = await ctx.db.collection(StoreDef["carts"].collection).findOneAndUpdate({_id: ctx.session._id, partition_key: 'P1'},{ $push: { items: {_id: ObjectID(), item: {_id: ObjectID(value.itemid)}, options: value.options, qty: 1, added: new Date()}}}, {upsert: true, returnNewDocument: true})
 			ctx.status = 201;
 		} else {
 			ctx.throw(400, {error})
 		}
 		await next();
     })
+    .put('/delcartitem/:itemid', async function (ctx, next) {
+        try {
+            ctx.body = await ctx.db.collection(StoreDef["carts"].collection).findOneAndUpdate({_id: ctx.session._id, partition_key: 'P1'},{ $pull: { 'items': {_id: ObjectID(ctx.params.itemid)}}})
+			ctx.status = 201;
+            await next()
+        } catch (e) {
+            ctx.throw(400, `cannot retreive mycart: ${e}`)
+        }
+	})
     .get('/mycart', async function (ctx, next) {
         try {
             ctx.body = await FetchOperation.mycart(ctx, ctx.session)

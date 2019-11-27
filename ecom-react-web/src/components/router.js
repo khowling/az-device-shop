@@ -100,7 +100,7 @@ export function useRouter (startUrl, cfg) {
     let resource
     if (initialFetch) { 
       if (ssrContext === "server" || ssrContext === "hydrate") {
-        // this code is being run on the server
+        // the data has been fetched on the server, so just wrap in a completed Promise
         resource = _suspenseWrap(serverInitialData)
       } else {
         //console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)

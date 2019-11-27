@@ -8,34 +8,25 @@ export const _suspenseWrap = (result) => {
 }
 
 
-export const _suspenseFetch = (collection, recordid) => {
-  //console.log (`_suspenseFetch :  web fetch for ${collection}/${recordid}`)
-  let status = 'pending', result = 'waiting'
-  let suspender =  fetch(`/api/${collection}${recordid ? '/'+recordid : ''}`)
-      .then(res => res.json())
+export const _suspenseFetch = (operation, recordid) => {
+  //console.log (`_suspenseFetch :  web fetch for ${operation}/${recordid}`)
+  let r = {status: 'pending'}
+  let suspender =  fetch(`/api/${operation}${recordid ? '/'+recordid : ''}`)
+      .then(async res => res.ok? res.json() : {error: res.status + ': '+ await res.text()})  
       .then(res => {
-        //console.log (`_suspenseFetch response error=${res.error}`)
-        if (!res.error) {
-          status = 'success'
-          result = res
-        } else {
-          status = 'error'
-          result = res.error
-        }
+        console.log (`_suspenseFetch response error=${res.error}`)
+        r = (!res.error) ? {status: 'success', result: res } : {status: 'error', result: res.error }
       })
       .catch((e) => {
-        status = 'error'
-        result = e
+        r = {status: 'error', result: e}
       })
   //console.log (`_suspenseFetch returning ${status}`)
   return {
     read() {
-      if (status === 'pending') {
+      if (r.status === 'pending') {
         throw suspender
-      } else if (status === 'error') {
-        throw result
       }
-      return result
+      return r
     }
   }
 }

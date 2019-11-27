@@ -1,19 +1,35 @@
 import React, {useState, useEffect, Suspense} from 'react'
+import {Alert} from '../utils/common'
 import {_fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link } from './router.js'
-import { DropdownMenuItemType, Dropdown } from 'office-ui-fabric-react'
+import { DropdownMenuItemType, Dropdown } from 'office-ui-fabric-react/lib/Dropdown'
 
 
 export function MyCart({resource}) {
 
+  function _removeitem(cartline) {
+    console.log (cartline)
+    _fetchit('PUT','/api/delcartitem/'+cartline).then(succ => {
+      window.location.reload()
+      //navTo('/mycart')
+    }, err => {
+      console.error (`created failed : ${err}`)
+      //setOrderState({state: "error", description: `POST ${err}`})
+    })
+  }
+
   function ShowCart({resource}) {
     //const [orderState, setOrderState] = useState({state: "enterdetails"})
   
-    const {items} = resource.read()
+    const {status, result } = resource.read()
 
-    return (
-      <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
+    return [
+      <header key="h1" className="m-heading-4">
+        <h4 className="c-heading">Cart</h4>
+      </header>,
+
+      <div key="h2"  className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
         <table data-f-sort="true">
         
           <thead>
@@ -22,7 +38,7 @@ export function MyCart({resource}) {
                   <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
                       <button aria-label="Sort by Length">Product</button>
                   </th>
-                  <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
+                  <th scope="col" className="f-sub-categorical" colSpan="1" aria-sort="none">
                       <button aria-label="Sort by Width">Qty</button>
                   </th>
                   <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
@@ -31,11 +47,11 @@ export function MyCart({resource}) {
               </tr>
           </thead>
           <tbody>
-            { items.map((i,idx) =>
+            { status === 'success' && result.items && result.items.map((i,idx) =>
               <tr key={"cart"+idx}>
-                  <td><img src={i.item.image}></img></td>
-                  <td className="f-numerical f-sub-categorical">{i.item.heading}</td>
-                  <td className="f-numerical f-sub-categorical">{i.qty}</td>
+                  <td><img src={i.item.image} height="250" alt="pic" ></img></td>
+                  <td className="f-numerical f-sub-categorical">{i.item.heading} <br/>  {Object.keys(i.options).map(o => <div>{o} : {i.options[o].text}</div>)}</td>
+                  <td className="f-sub-categorical">{i.qty} <br/> <button onClick={() => _removeitem(i._id)} className="c-button f-lightweight">delete</button></td>
                   <td className="f-numerical">
                       <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
                           <meta itemProp="priceCurrency" content="GBP"/>
@@ -49,15 +65,12 @@ export function MyCart({resource}) {
           </tbody>
       </table>
   </div>
-    )
+    ]
   }
 
   return (
     <section data-grid="container">
-      <header className="m-heading-4">
-          <h4 className="c-heading">Place Order</h4>
-      </header>
-      <Suspense fallback={<h1>Loading profile...</h1>}>
+      <Suspense fallback={<h4>Loading Cart...</h4>}>
         <ShowCart resource={resource} />
       </Suspense>
     </section>
@@ -133,14 +146,15 @@ export function ManageOrders() {
 export function Order({resource}) {
 
   function ShowProduct({resource}) {
+    const [optColor, setOptColor] = useState()
     const [orderState, setOrderState] = useState({state: "enterdetails"})
   
-    const item = resource.read()
+    const {status, result } = resource.read()
   
     function addorder() {
       setOrderState ({state: "ordering"})
   //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-      _fetchit('POST','/api/cart', JSON.stringify({itemid: item._id})).then(succ => {
+      _fetchit('POST','/api/cart', JSON.stringify({itemid: result._id, options: {"Colour": optColor}})).then(succ => {
         console.log (`created success : ${JSON.stringify(succ)}`)
         setOrderState ({state: "ordered", response: succ})
         //navTo("ManageOrders")
@@ -149,12 +163,15 @@ export function Order({resource}) {
         setOrderState({state: "error", description: `POST ${err}`})
       })
     }
-    return [
+
+    if (status === 'error')
+      return <Alert txt={result}/>
+    else return [
       <div key="ShowProduct1" data-grid="col-6">
         <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
           <div className="f-def ault-image">
               <picture>
-                <img className="c-ima ge" src={item && item.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
+                <img className="c-ima ge" src={result.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
               </picture>
           </div>
         </section>
@@ -163,21 +180,23 @@ export function Order({resource}) {
       <div key="ShowProduct2" data-grid="col-6">
       
         <div>
-          <strong className="c-badge f-small f-highlight">{item && item.badge}</strong>
-          <h3 className="c-heading">{item && item.heading}</h3>
-          <p className="c-paragraph">{item && item.description}</p>
+          <strong className="c-badge f-small f-highlight">{result.badge}</strong>
+          <h3 className="c-heading">{result.heading}</h3>
+          <p className="c-paragraph">{result.description}</p>
   
           <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
             <s><span className="x-screen-reader">Full price was</span>$1,500</s>
             <span>&nbsp;Now</span>
             <meta itemProp="priceCurrency" content="USD"/>
             <span>&nbsp;$</span>
-            <span itemProp="price">{item && item.price}</span>
+            <span itemProp="price">{result.price}</span>
             <link itemProp="availability" href="https://schema.org/InStock"/>
           </div>
         </div>
         <br/>
         <Dropdown
+          selectedKey={optColor ? optColor.key : undefined}
+          onChange={(e, item) => setOptColor(item)}
           label="Colour"
           placeholder="Select an option"
           options={[

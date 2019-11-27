@@ -1,12 +1,15 @@
 import React from 'react'
 import { Link } from './router.js'
-import { CommandBarButton } from 'office-ui-fabric-react'
+import {Alert} from '../utils/common'
+import { CommandBarButton } from 'office-ui-fabric-react/lib/Button'
 
 
-export function Nav ({session}) {
+export function Nav ({resource}) {
+  const {status, result } = resource.read()
+
   return (
     <nav className="m-navigation-bar" role="menubar">
-
+      
       <div className="c-navigation-menu" style={{width: "100%"}}>
 
         <Link className="navbar-brand no-outline">
@@ -36,26 +39,32 @@ export function Nav ({session}) {
           </button>
         </form>
 
-        <div style={{display: "inline-block", float: "right"}}>
-          <Link route="/mycart" className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
-            <span>Cart ({session && session.cart.items.length})</span>
-          </Link>
-          { session && session.auth && session.auth.loggedon ?  
-            <CommandBarButton iconProps={{ iconName: 'Contact' }} menuProps={{items: [
-                {
-                  key: 'logout',
-                  text: 'Logout',
-                  href: (process.env.REACT_APP_SERVER_URL || '') + "/connect/microsoft/logout" + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.origin)}` : ''),
-                  iconProps: { iconName: 'Mail' }
-                }]}} text={session.auth.given_name} disabled={false} checked={true} styles={{root: {padding: "11px 12px 13px", border: "2px solid transparent",  background: "transparent"}, label: {color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3"}}}/>
+        { status === 'error' ?
+          <Alert txt={result}/>
+        :
 
-              
-          : 
-            <a href={(process.env.REACT_APP_SERVER_URL || '') + '/connect/microsoft' + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.href)}` : '')} className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
-              <span>Login</span>
-            </a>
-          }
+          <div style={{display: "inline-block", float: "right"}}>
+
+            <Link route="/mycart" className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
+              <span>Cart ({result && result.cart && result.cart.items.length})</span>
+            </Link>
+            { result && result.auth && result.auth.loggedon ?  
+              <CommandBarButton iconProps={{ iconName: 'Contact' }} menuProps={{items: [
+                  {
+                    key: 'logout',
+                    text: 'Logout',
+                    href: (process.env.REACT_APP_SERVER_URL || '') + "/connect/microsoft/logout" + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.origin)}` : ''),
+                    iconProps: { iconName: 'Mail' }
+                  }]}} text={result.auth.given_name} disabled={false} checked={true} styles={{root: {padding: "11px 12px 13px", border: "2px solid transparent",  background: "transparent"}, label: {color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3"}}}/>
+
+                
+            : 
+              <a href={(process.env.REACT_APP_SERVER_URL || '') + '/connect/microsoft' + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.href)}` : '')} className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
+                <span>Login</span>
+              </a>
+            }
           </div>
+        }
         </div>
     </nav>
   )
