@@ -1,8 +1,8 @@
-export const _suspenseWrap = (result) => {
+export const _suspenseWrap = (res) => {
   //let status = 'success'
   return {
     read() {
-      return result
+      return {status: 'success', result: res }
     }
   }
 }
@@ -49,16 +49,20 @@ export async function _fetchit(type, url, body = null) {
         }
       }
       
-      fetch(url, opts).then((r) => {
+      fetch(url, opts).then(async (res) => {
         //console.log (`fetch status ${r.status}`)
-        if (!r.ok) {
-          //console.log (`non 200 err : ${r.status}`)
-          return reject(r.status)
-        } else {
-          if ((r.status === 200 && type === 'DELETE') || (r.status === 201 && type === 'POST')) {
-            return resolve();
+        if (!res.ok) {
+          console.log (`non 200 err : ${res.status}`)
+          if (res.status === 401 && typeof window !== 'undefined') {
+            window.location.replace ((process.env.REACT_APP_SERVER_URL || '') + '/connect/microsoft?surl=' + encodeURIComponent(window.location.href))
           } else {
-            r.json().then(rjson => {
+            return reject(res.status + ': '+ await res.text())
+          }
+        } else {
+          if ((res.status === 200 && type === 'DELETE') || (res.status === 201 && type === 'POST')) {
+            return resolve()
+          } else {
+            res.json().then(rjson => {
               if (rjson) {
                 return resolve(rjson)
               } else {

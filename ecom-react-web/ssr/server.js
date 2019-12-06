@@ -30,11 +30,22 @@ const StoreDef = {
                 //partition_key: Joi.string().trim().required()
             })
         },
-        "carts": {
-            collection: "carts",
+        "orders": {
+            default_filter: { status: { $gte: 30}},
+            status: {
+                InactiveCart: 5,
+                ActiveCart : 10,
+                InactiveOrder: 20,
+                NewOrder: 30
+            },
+            collection: "orders",
             schema: Joi.object({
                 //partition_key: Joi.string().trim().required()
-            })
+            }),
+            indexes: [
+                {status: 1 },
+                {owner: {_id: 1}}
+            ]
         },
         "session": {
             collection: session_collection_name,
@@ -47,7 +58,7 @@ const StoreDef = {
 // Operations
 const FetchOperation = {
     "mycart": async function (ctx) {
-        const cart = await ctx.db.collection(StoreDef["carts"].collection).findOne({_id: ctx.session._id, partition_key: 'P1'})
+        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"})
         if (cart && cart.items) {
             const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }}).toArray()
             const ref_products_map = ref_products.reduce((a,c) => Object.assign({},a,{ [String(c._id)]: c}),null)
@@ -55,8 +66,9 @@ const FetchOperation = {
         }
         return cart || {}
     },
-    "get": async function (ctx, store, query = {}) {
-        return await ctx.db.collection(StoreDef[store].collection).find(query).toArray()
+    "get": async function (ctx, store, query) {
+        
+        return await ctx.db.collection(StoreDef[store].collection).find(query || StoreDef[store].default_filter || {}).toArray()
     },
     "getOne": async function (ctx, store, query) {
         return await ctx.db.collection(StoreDef[store].collection).findOne(query)
@@ -103,19 +115,21 @@ async function init() {
 
     // Init Sessions
     app.keys = ['secret']
-    app.use(session({store: {
-        get: async function(key) {
-            //console.log (`get ${key}`)
-            return await db.collection(session_collection_name).findOne({_id: key, partition_key: "P1"})
-        },
-        set: async function (key, sess, maxAge, { rolling, changed }) {
-            console.log (`set ${key} ${JSON.stringify(sess)}`)
-            await db.collection(session_collection_name).replaceOne({_id:  key, partition_key: "P1"}, { ...sess, ...{_id:  key, partition_key: "P1"}}, {upsert: true})
-        },
-        destroy: async function (key) {
-            //console.log (`destroy ${key}`)
-            await db.collection(session_collection_name).deleteOne({_id:  key, partition_key: "P1"})
-        }
+    app.use(session({
+        maxAge: 86400000,
+        store: {
+            get: async function(key) {
+                //console.log (`get ${key}`)
+                return await db.collection(session_collection_name).findOne({_id: key, partition_key: "P1"})
+            },
+            set: async function (key, sess, maxAge, { rolling, changed }) {
+                //console.log (`set ${key} ${JSON.stringify(sess)}`)
+                await db.collection(session_collection_name).replaceOne({_id:  key, partition_key: "P1"}, { ...sess, ...{_id:  key, partition_key: "P1"}}, {upsert: true})
+            },
+            destroy: async function (key) {
+                //console.log (`destroy ${key}`)
+                await db.collection(session_collection_name).deleteOne({_id:  key, partition_key: "P1"})
+            }
     }}, app))
 
     // Init Auth
@@ -159,47 +173,53 @@ const ssrserver = new Router()
     .routes()
 
 async function getSession (ctx) {
+    const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}, {projection: {"items_count": true}})
+    const cart_items = cart && cart.items_count || 0
     return {
-        auth: {loggedon: typeof ctx.session.userid !== 'undefined', given_name: ctx.session.given_name},
-        cart: await ctx.db.collection(StoreDef["carts"].collection).findOne({_id: ctx.session._id, partition_key: "P1"}, {items: 1})
+        auth: ctx.session.auth ? { userid: ctx.session.auth.sub, given_name: ctx.session.auth.given_name} : undefined,
+        cart_items
     }
 }
 
 // catchall middleware (ensure this this the LAST middleware to be used)
 const catchall = async ctx => {
     if (!ctx._matchedRoute && !ctx.request.url.endsWith('.png')) {
-        console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.given_name}`)
+        console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.auth && ctx.session.auth.given_name}`)
         var filePath = path.join(__dirname, BUILD_PATH, 'index.html')
 
         // Get Iniitial Data
         const urlsplit = ctx.request.url.split('?', 2),
             startURL = {pathname: urlsplit[0], search: urlsplit.length>1 ? urlsplit[1] : null},
             {routekey, recordid } = server_ssr.pathToRoute (startURL),
-            {initialFetch} = server_ssr.AppRouteCfg[routekey] || {}
+            {requireAuth, initialFetch} = server_ssr.AppRouteCfg[routekey] || {}
 
-        let initfetchfn = Promise.resolve({})
-        if (initialFetch) {
-            let oppArgs = [ctx]
-            if (initialFetch.store) oppArgs.push(initialFetch.store)
-            if (initialFetch.recordid) oppArgs.push( {_id: ObjectID(recordid), partition_key: "P1"})
+        if (requireAuth && !ctx.session.auth) {
+            ctx.redirect (`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
+        } else {
+            let initfetchfn = Promise.resolve({})
+            if (initialFetch) {
+                let oppArgs = [ctx]
+                if (initialFetch.store) oppArgs.push(initialFetch.store)
+                if (initialFetch.recordid) oppArgs.push( {_id: ObjectID(recordid), partition_key: "P1"})
 
-            initfetchfn = FetchOperation[initialFetch.operation](...oppArgs)
+                initfetchfn = FetchOperation[initialFetch.operation](...oppArgs)
+            }
+            // Parallel fetch
+            const [serverInitialData, session] = await Promise.all([initfetchfn,  getSession(ctx)])
+            const renderData = {ssrContext: "server", serverInitialData, session}
+            
+            // Get Initial DOM
+            console.log (`Server -- Rendering HTML`)
+            const reactContent = server_ssr.ssrRender(startURL, renderData)
+
+            // SEND
+            reactContent.ssrContext="hydrate"
+            ctx.response.type = 'text/html'
+            ctx.body = fs.createReadStream(filePath)
+                .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${reactContent}</div>`))
+                .pipe(stringReplaceStream('"SERVER_INITAL_DATA"', JSON.stringify(renderData)))
+                .pipe(stringReplaceStream('%PUBLIC_URL%', PUBLIC_PATH))
         }
-        // Parallel fetch
-        const [serverInitialData, session] = await Promise.all([initfetchfn,  getSession(ctx)])
-        const renderData = {ssrContext: "server", serverInitialData, session}
-
-        // Get Initial DOM
-        console.log (`Server -- Rendering HTML`)
-        const reactContent = server_ssr.ssrRender(startURL, renderData)
-
-        // SEND
-        reactContent.ssrContext="hydrate"
-        ctx.response.type = 'text/html'
-        ctx.body = fs.createReadStream(filePath)
-            .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${reactContent}</div>`))
-            .pipe(stringReplaceStream('"SERVER_INITAL_DATA"', JSON.stringify(renderData)))
-            .pipe(stringReplaceStream('%PUBLIC_URL%', PUBLIC_PATH))
     }
 }
 
@@ -212,14 +232,12 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
         next()
     })
     .get('/logout',async function (ctx, next) {
-        delete ctx.session.given_name
-        delete ctx.session.userid
+        delete ctx.session.auth
         ctx.redirect(ctx.query.surl || "/")
         next()
     })
     .get('/callback',async function (ctx, next) {
         const nonce = ctx.session.auth_nonce
-        console.log (nonce)
         delete ctx.session.auth_nonce
 
         if (ctx.query.code) {
@@ -245,12 +263,39 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
                 ctx.assert(jws.verify(id_token, head.alg, pem), 400, `Token signature not valid`)
                 ctx.assert(payload.aud === client_id, 400, `Token not for this audience`)
 
-                ctx.session.userid = payload.sub
-                ctx.session.given_name = payload.given_name
-                ctx.redirect(ctx.query.state || "/")
+                ctx.session.auth = payload
+                
 
+                // Logged in -> add item (user) -> Logout -> Empty cart
+                // Logged out -> add item (anon) -> Login (with existing 1 item user cart)  -> 2 items in cart -> Log out -> 0 Items
+                // logged out -> purchase -> login -> just purchase that item, cart still contains 2 items
+                
+                // we are loggin in, check if the current session has a cart (unauthenticated), if so, add items to users cart
+                const carts = await ctx.db.collection(StoreDef["orders"].collection).find({"owner._id": { $in: [ctx.session.auth.sub, ctx.session._id]}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}).toArray(),
+                    session_cart = carts.find(c => c.owner._id === ctx.session._id),
+                    user_cart = carts.find(c => c.owner._id === ctx.session.auth.sub)
+                
+                console.log (`Looking for session car [${ctx.session._id}=${session_cart !== null}], and user cart [${ctx.session.auth.sub}=${user_cart !== null}]`)
+                // if no session_cart - no nothing, else
+                    // if no user_cart - update session cart to user cart, else,
+                        // if both - add records from session cart to user_cart, remove session cart
+                if (session_cart) {
+                    if (!user_cart) {
+                        const res = await ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $set: {owner_type:  "user", owner: {_id: ctx.session.auth.sub}}}, {upsert: false, returnOriginal: false, returnNewDocument: false})
+                    } else {
+                        // unfortunatly, this involves 2 operations, so not atomic, need to allow for cosmos ratelimiting
+                        // NEED TO MAKE THIS IDEMPOTENT
+                        await ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session.auth.sub}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}, { $inc: {items_count: session_cart.items_count}, $push: { items: { $each: session_cart.items}}})
+                        ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}, { $set : {status: StoreDef["orders"].status.InactiveCart, status_reason: `Login-merged: into ${user_cart._id}`}})
+                    }
+                    
+                }
+
+                ctx.redirect(ctx.query.state || "/")
+                
             } catch (e) {
-                ctx.throw (500, e)
+                console.log (e)
+                ctx.throw (400, e)
             }
         } else {
             ctx.throw (401, "no code")
@@ -259,33 +304,54 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
     })
     .routes()
 
+function LoggedIn(ctx, next) {
+    console.log (`checking logged in with ${ctx.session.auth}`)
+    return ctx.redirect (`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
+}
 // API
 const api = new Router({prefix: '/api'})
     .get('/session_status',async function (ctx, next) {
         ctx.body = await getSession(ctx)
         next()
     })
-	.post('/cart', async function (ctx, next) {
+	.post('/cartadd', async function (ctx, next) {
 		console.log (`add product to cart ${ctx.session && JSON.stringify(ctx.session)}`)
-		const {value, error} = StoreDef["carts"].schema.validate(ctx.request.body, {allowUnknown: true})
+		const {value, error} = StoreDef["orders"].schema.validate(ctx.request.body, {allowUnknown: true})
 		if (!error) {
-            if (typeof ctx.session.userid !== 'undefined') {
-                console.log (ctx.session.userid)
-            }
-			ctx.body = await ctx.db.collection(StoreDef["carts"].collection).findOneAndUpdate({_id: ctx.session._id, partition_key: 'P1'},{ $push: { items: {_id: ObjectID(), item: {_id: ObjectID(value.itemid)}, options: value.options, qty: 1, added: new Date()}}}, {upsert: true, returnNewDocument: true})
-			ctx.status = 201;
+            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: ObjectID(value.itemid)}, {projection: { "price": 1, "active": 1}})
+            const line_total = ref_product.price * 1
+            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, owner_type: ctx.session.auth ? "user": "session", status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $inc: {items_count: 1}, $push: { items: {_id: ObjectID(), item: {_id: ObjectID(value.itemid)}, options: value.options, qty: 1, line_total,  added: new Date()}}}, {upsert: true, returnOriginal: false, returnNewDocument: true})
+             
+            ctx.assert (res.ok === 1, 500, `error`)
+            ctx.body = {items_count: res.value.items_count}
+            ctx.status = 201
 		} else {
 			ctx.throw(400, {error})
 		}
 		await next();
     })
-    .put('/delcartitem/:itemid', async function (ctx, next) {
+    .put('/cartdelete/:itemid', async function (ctx, next) {
         try {
-            ctx.body = await ctx.db.collection(StoreDef["carts"].collection).findOneAndUpdate({_id: ctx.session._id, partition_key: 'P1'},{ $pull: { 'items': {_id: ObjectID(ctx.params.itemid)}}})
+            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $inc: {items_count: -1}, $pull: { 'items': {_id: ObjectID(ctx.params.itemid)}}})
 			ctx.status = 201;
             await next()
         } catch (e) {
             ctx.throw(400, `cannot retreive mycart: ${e}`)
+        }
+    })
+    .put('/checkout', async function (ctx, next) {
+        if (!ctx.session.auth) {
+            ctx.throw(401, 'please login')
+        } else {
+            try {
+                // TODO - check products are still OK!
+                const order_seq =  await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({_id: "order-sequence-stage1", partition_key: "P1"}, {$inc: {sequence_value:1}}, {upsert: true, returnOriginal: false, returnNewDocument: true})
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $set: {  order_number: 'ORD'+String(order_seq.value.sequence_value).padStart(5,'0'), status: StoreDef["orders"].status.NewOrder, owner: {_id: ctx.session.auth.sub}}})
+                ctx.body = order
+                await next()
+            } catch (e) {
+                ctx.throw(400, `cannot retreive mycart: ${e}`)
+            }
         }
 	})
     .get('/mycart', async function (ctx, next) {
@@ -328,7 +394,13 @@ const api = new Router({prefix: '/api'})
 	})
 	.delete('/products/:id', async function (ctx, next) {
 		// TBC
-	}).routes()
+    })
+    .all('/*', async function (ctx, next) {
+        if (!ctx._matchedRoute) {
+            ctx.throw(404, `no api found ${ctx.request.url}`)
+        }
+    })
+    .routes()
 
 
 // Run Server

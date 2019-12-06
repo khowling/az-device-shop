@@ -43,6 +43,8 @@
     "@babel/plugin-transform-runtime": "^7.6.2",
     "@babel/preset-env": "^7.7.1",
     "@babel/preset-react": "^7.7.0",
+    "@uifabric/fluent-theme": "^7.1.4",
+    "@uifabric/react-cards": "^0.109.1",
     "babel-loader": "^8.0.6",
     "css-loader": "^3.2.0",
     "html-replace-webpack-plugin": "^2.5.6",

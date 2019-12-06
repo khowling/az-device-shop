@@ -1,8 +1,9 @@
 import React, {useContext, Suspense} from 'react';
-import {useRouter} from './components/router.js'
+import {useRouter} from './components/router'
 import {Nav} from './components/page'
-import {Panes} from './components/store.js'
-import {Order, MyCart} from './components/order.js'
+import {Panes} from './components/store'
+import {AddToCart, MyCart} from './components/cart'
+import {ManageOrders, Order} from './components/order'
 
 import RenderContext from './RenderContext'
 import {_suspenseFetch, _suspenseWrap} from './utils/fetch'
@@ -16,8 +17,8 @@ export const AppRouteCfg = {
   '/': {
     component: Panes,
   },
-  [`/${Order.name}`] : {
-    component: Order,
+  [`/${AddToCart.name}`] : {
+    component: AddToCart,
     initialFetch: {
       operation: "getOne",
       store: "products",
@@ -28,6 +29,28 @@ export const AppRouteCfg = {
     component: MyCart,
     initialFetch: {
       operation: "mycart"
+    }
+  },
+  [`/checkout`] : {
+    component: MyCart,
+    requireAuth: true,
+    initialFetch: {
+      operation: "mycart"
+    }
+  },
+  [`/${ManageOrders.name}`] : {
+    component: ManageOrders,
+    initialFetch: {
+      operation: "get",
+      store: "orders"
+    }
+  },
+  [`/${Order.name}`] : {
+    component: Order,
+    initialFetch: {
+      operation: "getOne",
+      store: "orders",
+      recordid: true
     }
   }
 }

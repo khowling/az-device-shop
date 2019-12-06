@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useContext} from 'react'
+import React, {useState, useEffect, useContext, Suspense} from 'react'
 import {_suspenseFetch, _suspenseWrap} from '../utils/fetch'
 import RenderContext from '../RenderContext'
 
@@ -106,7 +106,13 @@ export function useRouter (startUrl, cfg) {
         //console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)
         resource = _suspenseFetch(initialFetch.store ? 'store/'+initialFetch.store : initialFetch.operation, initialFetch.recordid ? renderRoute.recordid : null)
       }
+      return (
+        <Suspense fallback={<h1>Loading profile...</h1>}>
+          {React.createElement(component, Object.assign({key: component.name}, renderRoute.props, {resource}))}
+        </Suspense>
+      )
     }
-    return React.createElement(component, Object.assign({key: component.name}, renderRoute.props, {resource}))
+    return React.createElement(component, Object.assign({key: component.name}, renderRoute.props))
+    
   }
 }
