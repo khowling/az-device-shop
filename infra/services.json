@@ -48,14 +48,6 @@
             "metadata": {
                 "description": "Max lag time (seconds). Required for BoundedStaleness. Valid ranges, Single Region: 5 to 84600. Multi Region: 300 to 86400."
             }
-        },	
-        "multipleWriteLocations": {
-            "type": "bool",
-            "defaultValue": false,
-            "allowedValues": [ true, false ],
-            "metadata": {
-                "description": "Enable multi-master to make all regions writable."
-            }
         },
         "databaseName": {
             "type": "string",
@@ -71,12 +63,6 @@
             "metadata": {
                 "description": "The throughput for the Mongo DB database"
             }			
-        },
-        "collection1Name": {
-            "type": "string",
-            "metadata": {
-                "description": "The name for the first Mongo DB collection"
-            }
         }
     },
     "variables": {
@@ -99,66 +85,44 @@
             "Strong": {
                 "defaultConsistencyLevel": "Strong"
             }
-        },
-        "locations": 
-        [ 
-            {
-                "locationName": "[parameters('primaryRegion')]",
-                "failoverPriority": 0
-            }
-        ]
+        }
     },
     "resources": 
     [
         {
             "type": "Microsoft.DocumentDB/databaseAccounts",
             "name": "[variables('accountName')]",
-            "apiVersion": "2019-08-01",
+            "apiVersion": "2019-12-12",
             "location": "[parameters('location')]",
             "kind": "MongoDB",
             "properties": {
                 "consistencyPolicy": "[variables('consistencyPolicy')[parameters('defaultConsistencyLevel')]]",
-                "locations": "[variables('locations')]",
+                "locations": [
+                    {
+                        "id": "[concat(parameters('accountName'), '-', parameters('primaryRegion'))]",
+                        "failoverPriority": 0,
+                        "locationName": "[parameters('primaryRegion')]"
+                    }
+                ],
                 "databaseAccountOfferType": "Standard",
-                "enableMultipleWriteLocations": "[parameters('multipleWriteLocations')]"
+                "enableMultipleWriteLocations": false,
+                "capabilities": [
+                    {
+                        "name": "EnableMongo"
+                    }
+                ]
             }
         },
         {
             "type": "Microsoft.DocumentDB/databaseAccounts/mongodbDatabases",
             "name": "[concat(variables('accountName'), '/', parameters('databaseName'))]",
-            "apiVersion": "2019-08-01",
+            "apiVersion": "2019-12-12",
             "dependsOn": [ "[resourceId('Microsoft.DocumentDB/databaseAccounts/', variables('accountName'))]" ],
             "properties":{
                 "resource":{
                     "id": "[parameters('databaseName')]"
                 },
                 "options": { "throughput": "[parameters('throughput')]" }
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDb/databaseAccounts/mongodbDatabases/collections",
-            "name": "[concat(variables('accountName'), '/', parameters('databaseName'), '/', parameters('collection1Name'))]",
-            "apiVersion": "2019-08-01",
-            "dependsOn": [ "[resourceId('Microsoft.DocumentDB/databaseAccounts/mongodbDatabases', variables('accountName'), parameters('databaseName'))]" ],
-            "properties":
-            {
-                "resource":{
-                    "id":  "[parameters('collection1Name')]",
-                    "shardKey": { "user_id": "Hash" },
-                    "indexes": [
-                        {
-                            "key": { "keys":["user_id", "user_address"] },
-                            "options": { "unique": "true" }
-                        },
-                        {
-                            "key": { "keys":["_ts"] },
-                            "options": { "expireAfterSeconds": "2629746" }
-                        }
-                    ],
-                    "options": {
-                        "If-Match": "<ETag>"
-                    }
-                }
             }
         }
     ],

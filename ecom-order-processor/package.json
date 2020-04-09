@@ -1,0 +1,13 @@
+{
+  "name": "ecom-order-processor",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@azure/cosmos": "^3.5.4",
+    "bson": "^4.0.3",
+    "mongodb": "^3.5.2"
+  },
+  "scripts": {
+    "start": "node ./server.js"
+  }
+}

@@ -28,7 +28,7 @@ export function Panes () {
                         <div aria-hidden="true"></div>
                     </div>
                     <div>
-                        <Link route="/AddToCart" recordid={'5dcf42f88ced4a3f6cc95228'}  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                        <Link route="/AddToCart" recordid={'050000000000000000000100'}  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
                             <span>Buy now</span>
                         </Link>
                     </div>

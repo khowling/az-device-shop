@@ -1,4 +1,22 @@
 import React from 'react'
+import { Image, ImageFit } from '@fluentui/react/lib/Image'
+
+
+export function MyImage({image, ...rest}) {
+    if (image) {
+        if (image.url) { return (
+            <Image src={image.url} {...rest} />
+        )} else if (image.container_url && image.filename) {return (
+            <Image src={image.container_url + "/" + image.filename}  {...rest}/>
+        )} else { return (
+            <Image src={"http://placehold.it/100x100"} {...rest} />
+        )}
+    } else {
+        return (
+            <Image src={"http://placehold.it/100x100"} {...rest} />
+        )
+    }
+}
 
 
 export function Alert(txt) {

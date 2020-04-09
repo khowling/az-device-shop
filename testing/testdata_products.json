@@ -1,0 +1,36 @@
+[
+    {
+        "_id": {"$oid":"050000000000000000000100"},
+        "partition_key": "TEST",
+        "image": {
+            "url": "https://statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/panes/Panes_Large_Image_VP1-4.jpg"
+        },
+        "badge": "Reduced",
+        "family": "Surface Book",
+        "category": "Technology",
+        "heading": "Surface Book, Silver, 512GB",
+        "description": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla nec justo tincidunt, mattis dui non, ultrices massa. Nulla eleifend, eros sed laoreet auctor, turpis purus aliquet ligula, sit amet facilisis enim dolor nec nisl. Aliquam erat volutpat",
+        "price": "1099",
+        "features": [
+            {
+                "skukey": "clr",
+                "name": "Colour",
+                "values": [
+                    "Red", "Green", "Silver"
+                ]
+            },
+            {
+                "skukey": "mry",
+                "name": "Memory",
+                "values": [
+                    "512GB", "1TB", "10TB"
+                ]
+            }
+        ],
+        "skus": [
+            {
+                "clr": "Red", "mry": "512GB", "sku": "SB_RED_512GB", "price": "1099"
+            }
+        ]
+    }
+]

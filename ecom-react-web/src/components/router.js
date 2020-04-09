@@ -2,20 +2,21 @@ import React, {useState, useEffect, useContext, Suspense} from 'react'
 import {_suspenseFetch, _suspenseWrap} from '../utils/fetch'
 import RenderContext from '../RenderContext'
 
+// Used by Link & NavTo
+function _encodeURL (route, recordid, props) {
+  let ulrstr = route? route : (recordid? "/_" : "/")
+  ulrstr+= recordid ? ("/" + recordid)  : ""
+
+  if (props && Object.keys(props).length >0) ulrstr+= "?props=" + encodeURIComponent(btoa(JSON.stringify(props)));
+  return ulrstr;
+}
+
 // =====================================     Processes navigation routes Called from DOM 
 export function Link({route, recordid, props, children, ...rest}) {
   const {ssrContext} = useContext(RenderContext)
-
-  function _encodeURL (route, recordid, props) {
-    let ulrstr = route? route : (recordid? "/_" : "/")
-    ulrstr+= recordid ? ("/" + recordid)  : ""
-  
-    if (props && Object.keys(props).length >0) ulrstr+= "?props=" + encodeURIComponent(btoa(JSON.stringify(props)));
-    return ulrstr;
-  }
   
   function handleClick(event) {
-    console.log ('Link: handleclick')
+    //console.log ('Link: handleclick')
     if (
       !event.defaultPrevented && // onClick prevented default
       event.button === 0 && // ignore everything but left clicks
@@ -24,28 +25,34 @@ export function Link({route, recordid, props, children, ...rest}) {
     ) {
       console.log ('Link: pushstate')
       event.preventDefault()
+      // (1) Update the browser URL
       if (typeof window !== 'undefined') {
-        window.history.pushState("","",_encodeURL (route, recordid, props))
+        window.history.pushState("","", event.currentTarget.href)
       }
-      // now notify the router!!
+      // (2) Now notify the router!!
       listeners.forEach(listener => listener({routekey: route || '/', recordid, props}))
     }
 
   }
+
   return (<a {...rest} onClick={handleClick} href={_encodeURL (route, recordid, props)}>{children}</a>)
 }
 
 
 // =====================================     Processes navigation routes Called from React JS 
-export function navTo(routekey, recordid, props) {
-  console.log (`navTo: ${routekey}`)
+export function navTo(route, recordid, props) {
+  //console.log (`navTo: ${routekey}`)
+  // (1) Update the browser URL
+  if (typeof window !== 'undefined') {
+    window.history.pushState("","", _encodeURL (route, recordid, props))
+  }
   //const routeJson = getRouteObj(route, recordid, props)
-  listeners.forEach(listener => listener({routekey, recordid, props}))
+  listeners.forEach(listener => listener({routekey: route || '/', recordid, props}))
 }
 
 // convert parts of the url into route key, recordid and props
 export function pathToRoute({pathname, search, hash}) {
-  console.log (`pathToRoute pathname=${pathname} search=${search}`)
+  //console.log (`pathToRoute pathname=${pathname} search=${search}`)
   const propsparam = search && search.match(/A?props=([^&]+)&*/i),
         url_props = propsparam? propsparam[1]: null,
         withoutleadingslash = pathname.slice(1),
@@ -93,7 +100,7 @@ export function useRouter (startUrl, cfg) {
   }, [ssrContext])
 
   // return child components
-  const {component, initialFetch} = cfg[renderRoute.routekey] || {}
+  const {component, initialFetch, routeProps = {}, requireAuth} = cfg[renderRoute.routekey] || {}
   if (!component) {
     return `404 - error, unknown route ${renderRoute.routekey}`
   } else {
@@ -103,16 +110,20 @@ export function useRouter (startUrl, cfg) {
         // the data has been fetched on the server, so just wrap in a completed Promise
         resource = _suspenseWrap(serverInitialData)
       } else {
-        //console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)
-        resource = _suspenseFetch(initialFetch.store ? 'store/'+initialFetch.store : initialFetch.operation, initialFetch.recordid ? renderRoute.recordid : null)
+        if (requireAuth) {
+          // TODO - router does have access to session data
+        }
+          //console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)
+          resource = _suspenseFetch(initialFetch.store ? 'store/'+initialFetch.store : initialFetch.operation, initialFetch.recordid ? renderRoute.recordid : null)
+        
       }
       return (
         <Suspense fallback={<h1>Loading profile...</h1>}>
-          {React.createElement(component, Object.assign({key: component.name}, renderRoute.props, {resource}))}
+          {React.createElement(component, Object.assign({key: component.name}, routeProps, renderRoute.props, {resource}))}
         </Suspense>
       )
     }
-    return React.createElement(component, Object.assign({key: component.name}, renderRoute.props))
+    return React.createElement(component, Object.assign({key: component.name}, routeProps, renderRoute.props))
     
   }
 }

@@ -1,33 +1,45 @@
 // Web require
-const Koa = require('koa'),
+const 
+    Koa = require('koa'),
     Router = require('koa-router'),
     bodyParser = require('koa-bodyparser'),
     session = require('koa-session'),
     Joi = require('@hapi/joi')
 
-// Auth require
-const jwkToPem = require('jwk-to-pem'),
-    jws = require ('jws')
+// Auth & SAS require
+const 
+    jwkToPem = require('jwk-to-pem'),
+    jws = require ('jws'),
+    crypto = require('crypto')
+
+
 const client_id = process.env.B2C_CLIENT_ID 
 const b2c_tenant = process.env.B2C_TENANT 
-const signin_policy = process.env.B2C_POLICY 
+const signin_policy = process.env.B2C_SIGNIN_POLICY 
+const passwd_reset_policy = process.env.B2C_RESETPWD_POLICY 
 const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET)
 
 
 // Mongo require
 const {MongoClient, ObjectID} = require('mongodb'),
     MongoURL = process.env.MONGO_DB,
-    dbname = 'dbdev',
     session_collection_name = 'koa-sessions',
-    USE_COSMOS = true
+    USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
 
 // Store Metadata
 const StoreDef = {
         "products": {
             collection: "products",
             schema: Joi.object({
-                heading: Joi.string().trim().required(),
-                //partition_key: Joi.string().trim().required()
+                'heading': Joi.string().trim().required(),
+                'category': Joi.string().trim().required(),
+                'description': Joi.string().trim().required(),
+                'price': Joi.number().required(),
+                'image':Joi.object({
+                    'url': Joi.string().uri(),
+                    'container_url': Joi.string().uri(),
+                    'filename': Joi.string().uri({relativeOnly: true})
+                }).xor('url', 'filename').xor('url', 'container_url')
             })
         },
         "orders": {
@@ -58,7 +70,7 @@ const StoreDef = {
 // Operations
 const FetchOperation = {
     "mycart": async function (ctx) {
-        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"})
+        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"})
         if (cart && cart.items) {
             const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }}).toArray()
             const ref_products_map = ref_products.reduce((a,c) => Object.assign({},a,{ [String(c._id)]: c}),null)
@@ -75,31 +87,35 @@ const FetchOperation = {
     }
 }
 
-async function dbInit(dbname) {
+async function dbInit() {
     // ensure url encoded
     const murl = new URL (MongoURL)
     console.log (`connecting with ${murl.toString()}`)
     const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
-    const _db = client.db(dbname)
+    const _db = client.db()
     // If Cosmos, need to pre-create the collections, becuse it enforces a partitioning strategy.
-    if (USE_COSMOS) {
-        for (let store of Object.keys(StoreDef)) {
-            console.log (`ensuring partitioned collection created for [${store}]`)
+    
+    for (let store of Object.keys(StoreDef)) {
+        console.log (`ensuring partitioned collection created for [${store}]`)
+        if (USE_COSMOS) {
             try { 
                 const {ok, code, errMsg} = await _db.command({customAction: "CreateCollection", collection: StoreDef[store].collection, shardKey: "partition_key" })
+                
                 if (ok === 1) {
                     console.log ('success')
                 } else {
                     throw new Error (errMsg)
                 }
             } catch (err) {
-                if (err.code !== 117) {
+                if (err.code !== 48) {
                     // allow gracefull "Resource with specified id, name, or unique index already exists", otherwise:
                     console.error (`Failed to create collection : ${err}`)
                     throw new Error (err.errMsg)
                 }
             }
+        } else {
+            await _db.createCollection(StoreDef[store].collection)
         }
     }
     return _db
@@ -111,7 +127,7 @@ app.use(bodyParser())
 
 async function init() {
     // Init DB
-    const db = app.context.db = await dbInit(dbname)
+    const db = app.context.db = await dbInit()
 
     // Init Sessions
     app.keys = ['secret']
@@ -119,16 +135,16 @@ async function init() {
         maxAge: 86400000,
         store: {
             get: async function(key) {
-                //console.log (`get ${key}`)
-                return await db.collection(session_collection_name).findOne({_id: key, partition_key: "P1"})
+                console.log (`get ${key}`)
+                return await db.collection(session_collection_name).findOne({_id: key, partition_key: "TEST"})
             },
             set: async function (key, sess, maxAge, { rolling, changed }) {
-                //console.log (`set ${key} ${JSON.stringify(sess)}`)
-                await db.collection(session_collection_name).replaceOne({_id:  key, partition_key: "P1"}, { ...sess, ...{_id:  key, partition_key: "P1"}}, {upsert: true})
+                console.log (`set ${key} ${JSON.stringify(sess)}`)
+                await db.collection(session_collection_name).replaceOne({_id:  key, partition_key: "TEST"}, { ...sess, ...{_id:  key, partition_key: "TEST"}}, {upsert: true})
             },
             destroy: async function (key) {
-                //console.log (`destroy ${key}`)
-                await db.collection(session_collection_name).deleteOne({_id:  key, partition_key: "P1"})
+                console.log (`destroy ${key}`)
+                await db.collection(session_collection_name).deleteOne({_id:  key, partition_key: "TEST"})
             }
     }}, app))
 
@@ -142,6 +158,16 @@ async function init() {
     app.use(authroutes)
     app.use(api)
     app.use(catchall)
+
+    app.use(async (ctx, next) => {
+        try {
+          await next();
+        } catch (err) {
+          console.log ('got error')
+          err.status = err.statusCode || err.status || 500;
+          throw err;
+        }
+      });
 
 	console .log (`Starting on 3000..`)
 	app.listen(3000)
@@ -161,7 +187,7 @@ const ssrserver = new Router()
 	.get(`${PUBLIC_PATH}/*`,  async function (ctx, next) {
 
         const filePath =  path.join(__dirname, ctx.request.url.replace (PUBLIC_PATH, BUILD_PATH))
-        console.log (`serving static resource  filePath=${filePath}`)
+        //console.log (`serving static resource  filePath=${filePath}`)
 
         if (fs.existsSync(filePath)) {
             ctx.response.body = fs.createReadStream(filePath)
@@ -173,7 +199,7 @@ const ssrserver = new Router()
     .routes()
 
 async function getSession (ctx) {
-    const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}, {projection: {"items_count": true}})
+    const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"}, {projection: {"items_count": true}})
     const cart_items = cart && cart.items_count || 0
     return {
         auth: ctx.session.auth ? { userid: ctx.session.auth.sub, given_name: ctx.session.auth.given_name} : undefined,
@@ -182,9 +208,9 @@ async function getSession (ctx) {
 }
 
 // catchall middleware (ensure this this the LAST middleware to be used)
-const catchall = async ctx => {
+const catchall = async (ctx, next) => {
     if (!ctx._matchedRoute && !ctx.request.url.endsWith('.png')) {
-        console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.auth && ctx.session.auth.given_name}`)
+        //console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.auth && ctx.session.auth.given_name}`)
         var filePath = path.join(__dirname, BUILD_PATH, 'index.html')
 
         // Get Iniitial Data
@@ -200,8 +226,8 @@ const catchall = async ctx => {
             if (initialFetch) {
                 let oppArgs = [ctx]
                 if (initialFetch.store) oppArgs.push(initialFetch.store)
-                if (initialFetch.recordid) oppArgs.push( {_id: ObjectID(recordid), partition_key: "P1"})
-
+                if (initialFetch.recordid) oppArgs.push( {_id: ObjectID(recordid), partition_key: "TEST"})
+                //console.log (`ssr initialFetch (${initialFetch.operation}): ${JSON.stringify(oppArgs)}`)]
                 initfetchfn = FetchOperation[initialFetch.operation](...oppArgs)
             }
             // Parallel fetch
@@ -209,7 +235,7 @@ const catchall = async ctx => {
             const renderData = {ssrContext: "server", serverInitialData, session}
             
             // Get Initial DOM
-            console.log (`Server -- Rendering HTML`)
+            console.log (`Server -- Rendering HTML: ${JSON.stringify(serverInitialData)}`)
             const reactContent = server_ssr.ssrRender(startURL, renderData)
 
             // SEND
@@ -221,6 +247,7 @@ const catchall = async ctx => {
                 .pipe(stringReplaceStream('%PUBLIC_URL%', PUBLIC_PATH))
         }
     }
+    next()
 }
 
 // ----------------------------------------------------------- AUTH
@@ -233,14 +260,15 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
     })
     .get('/logout',async function (ctx, next) {
         delete ctx.session.auth
-        ctx.redirect(ctx.query.surl || "/")
+        ctx.redirect(`${app.context.openid_configuration.end_session_endpoint}?post_logout_redirect_uri=${encodeURIComponent('http://localhost:3000')}`)
+        //ctx.redirect(ctx.query.surl || "/")
         next()
     })
     .get('/callback',async function (ctx, next) {
         const nonce = ctx.session.auth_nonce
-        delete ctx.session.auth_nonce
 
         if (ctx.query.code) {
+            delete ctx.session.auth_nonce
             try { 
                 const flow_body = `client_id=${client_id}&client_secret=${client_secret}&scope=openid&code=${encodeURIComponent(ctx.query.code)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(`http://localhost:3000/connect/microsoft/callback`)}`
                 
@@ -271,7 +299,7 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
                 // logged out -> purchase -> login -> just purchase that item, cart still contains 2 items
                 
                 // we are loggin in, check if the current session has a cart (unauthenticated), if so, add items to users cart
-                const carts = await ctx.db.collection(StoreDef["orders"].collection).find({"owner._id": { $in: [ctx.session.auth.sub, ctx.session._id]}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}).toArray(),
+                const carts = await ctx.db.collection(StoreDef["orders"].collection).find({"owner._id": { $in: [ctx.session.auth.sub, ctx.session._id]}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"}).toArray(),
                     session_cart = carts.find(c => c.owner._id === ctx.session._id),
                     user_cart = carts.find(c => c.owner._id === ctx.session.auth.sub)
                 
@@ -281,12 +309,12 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
                         // if both - add records from session cart to user_cart, remove session cart
                 if (session_cart) {
                     if (!user_cart) {
-                        const res = await ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $set: {owner_type:  "user", owner: {_id: ctx.session.auth.sub}}}, {upsert: false, returnOriginal: false, returnNewDocument: false})
+                        const res = await ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"},{ $set: {owner_type:  "user", owner: {_id: ctx.session.auth.sub}}}, {upsert: false, returnOriginal: false, returnNewDocument: false})
                     } else {
                         // unfortunatly, this involves 2 operations, so not atomic, need to allow for cosmos ratelimiting
                         // NEED TO MAKE THIS IDEMPOTENT
-                        await ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session.auth.sub}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}, { $inc: {items_count: session_cart.items_count}, $push: { items: { $each: session_cart.items}}})
-                        ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"}, { $set : {status: StoreDef["orders"].status.InactiveCart, status_reason: `Login-merged: into ${user_cart._id}`}})
+                        await ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session.auth.sub}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"}, { $inc: {items_count: session_cart.items_count}, $push: { items: { $each: session_cart.items}}})
+                        ctx.db.collection(StoreDef["orders"].collection).updateOne({owner: {_id: ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"}, { $set : {status: StoreDef["orders"].status.InactiveCart, status_reason: `Login-merged: into ${user_cart._id}`}})
                     }
                     
                 }
@@ -296,9 +324,15 @@ const authroutes = new Router({prefix: "/connect/microsoft"})
             } catch (e) {
                 console.log (e)
                 ctx.throw (400, e)
-            }
+            } 
         } else {
-            ctx.throw (401, "no code")
+            console.log (ctx.querystring)
+            if (ctx.querystring.indexOf ('=access_denied')  > 0 && ctx.querystring.indexOf ('=AADB2C90118') > 0) {
+                // &redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fconnect%2Fmicrosoft%2Fcallback&scope=openid&response_type=code&prompt=login
+                ctx.redirect (`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/oauth2/v2.0/authorize?p=${passwd_reset_policy}&client_id=${client_id}&nonce=${nonce}&scope=openid&response_type=code&redirect_uri=${encodeURIComponent(`http://localhost:3000/connect/microsoft/callback`)}`)
+            } else {
+                ctx.throw (401, "no code")
+            }
         }
         next()
     })
@@ -320,7 +354,7 @@ const api = new Router({prefix: '/api'})
 		if (!error) {
             const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: ObjectID(value.itemid)}, {projection: { "price": 1, "active": 1}})
             const line_total = ref_product.price * 1
-            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, owner_type: ctx.session.auth ? "user": "session", status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $inc: {items_count: 1}, $push: { items: {_id: ObjectID(), item: {_id: ObjectID(value.itemid)}, options: value.options, qty: 1, line_total,  added: new Date()}}}, {upsert: true, returnOriginal: false, returnNewDocument: true})
+            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, owner_type: ctx.session.auth ? "user": "session", status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"},{ $inc: {items_count: 1}, $push: { items: {_id: ObjectID(), item: {_id: ObjectID(value.itemid)}, options: value.options, qty: 1, line_total,  added: new Date()}}}, {upsert: true, returnOriginal: false, returnNewDocument: true})
              
             ctx.assert (res.ok === 1, 500, `error`)
             ctx.body = {items_count: res.value.items_count}
@@ -332,7 +366,7 @@ const api = new Router({prefix: '/api'})
     })
     .put('/cartdelete/:itemid', async function (ctx, next) {
         try {
-            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $inc: {items_count: -1}, $pull: { 'items': {_id: ObjectID(ctx.params.itemid)}}})
+            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"},{ $inc: {items_count: -1}, $pull: { 'items': {_id: ObjectID(ctx.params.itemid)}}})
 			ctx.status = 201;
             await next()
         } catch (e) {
@@ -345,8 +379,8 @@ const api = new Router({prefix: '/api'})
         } else {
             try {
                 // TODO - check products are still OK!
-                const order_seq =  await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({_id: "order-sequence-stage1", partition_key: "P1"}, {$inc: {sequence_value:1}}, {upsert: true, returnOriginal: false, returnNewDocument: true})
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "P1"},{ $set: {  order_number: 'ORD'+String(order_seq.value.sequence_value).padStart(5,'0'), status: StoreDef["orders"].status.NewOrder, owner: {_id: ctx.session.auth.sub}}})
+                const order_seq =  await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({_id: "order-sequence-stage1", partition_key: "TEST"}, {$inc: {sequence_value:1}}, {upsert: true, returnOriginal: false, returnNewDocument: true})
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"},{ $set: {  order_number: 'ORD'+String(order_seq.value.sequence_value).padStart(5,'0'), status: StoreDef["orders"].status.NewOrder, owner: {_id: ctx.session.auth.sub}}})
                 ctx.body = order
                 await next()
             } catch (e) {
@@ -372,7 +406,7 @@ const api = new Router({prefix: '/api'})
 	})
 	.get('/store/:store/:id', async function (ctx, next) {
 	  	try {
-            ctx.body = await FetchOperation.getOne(ctx, ctx.params.store, {_id: ObjectID(ctx.params.id), partition_key: "P1"})
+            ctx.body = await FetchOperation.getOne(ctx, ctx.params.store, {_id: ObjectID(ctx.params.id), partition_key: "TEST"})
             await next()
 		} catch (e) {
 			ctx.throw(400, `cannot find ${ctx.params.store+':'+ctx.params.id}: ${e}`)
@@ -381,19 +415,117 @@ const api = new Router({prefix: '/api'})
 	// curl -XPOST "http://localhost:3000/products" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'
 	.post('/store/:store', async function (ctx, next) {
         try { 
-            const {value, error} = StoreDef[store].schema.validate(ctx.request.body, {allowUnknown: true})
-            if (error) throw `document no valid: ${error}`
-            ctx.body =  await ctx.db.collection(StoreDef[ctx.params.store].collection).insertOne({...value, partition_key: "P1"})
+            if (!ctx.request.body) throw `no body`
+
+            const   {_id, ...body }  = ctx.request.body,
+                    store = StoreDef[ctx.params.store]
+            
+            if (!store) throw `unknown store: ${ctx.params.store}`
+
+            const {value, error} = store.schema.validate(body, {allowUnknown: false})
+
+            if (error) throw `document not valid: ${error}`
+
+            if (_id) {
+                ctx.body =  await ctx.db.collection(store.collection).updateOne({_id: ObjectID(_id), partition_key: "TEST"}, 
+                { $set: value }, {_id: ObjectID(_id), partition_key: "TEST"})
+            } else {
+                ctx.body =  await ctx.db.collection(store.collection).insertOne({...value, _id: ObjectID(_id), partition_key: "TEST"})
+            }
             await next()
         } catch (e) {
 			ctx.throw(400, `cannot save ${ctx.params.store}: ${e}`)
 		}
-	})
-	.put('/products/:id', async function (ctx, next) {
-		// findOneAndUpdate ??
-	})
-	.delete('/products/:id', async function (ctx, next) {
-		// TBC
+    })
+    .delete ('/store/:store/:id', async function (ctx, next) {
+        try {
+            const store = StoreDef[ctx.params.store]
+
+            if (!store) throw `unknown store: ${ctx.params.store}`
+
+            ctx.body = await ctx.db.collection(store.collection).deleteOne({_id: ObjectID(ctx.params.id), partition_key: "TEST"})
+            await next()
+		} catch (e) {
+			ctx.throw(400, `cannot find ${ctx.params.store+':'+ctx.params.id}: ${e}`)
+		}
+    })
+    .put('/file', async function (ctx, next) {
+        const userdoc = ctx.request.body
+    
+        if (!userdoc || !userdoc.filename) {
+            ctx.throw(400, `No filename provided`)
+        }
+
+
+        function createServiceSAS (key, storageacc, container, minutes, file) {
+
+            // first construct the string-to-sign from the fields comprising the request,
+            // then encode the string as UTF-8 and compute the signature using the HMAC-SHA256 algorithm
+            // Note that fields included in the string-to-sign must be URL-decoded
+        
+            let exp_date = new Date(Date.now() + (minutes*60*1000)),
+                //  The permissions associated with the shared access signature 
+                // (Blob: r=read, a=add, c=create, w=write,  d=delete)
+                // (Container: r=read, a=add, c=create, w=write,  d=delete, l=list)
+                signedpermissions = file? "racw" : "rl",
+                signedstart = '',
+                signedexpiry= exp_date.toISOString().substring(0, 19) + 'Z',
+                // for Blob or Container level Signed Resoure
+                canonicalizedresource= file?  `/blob/${storageacc}/${container}/${file}` : `/blob/${storageacc}/${container}`,
+                signedidentifier = '', //if you are associating the request with a stored access policy.
+                signedIP = '',
+                signedProtocol = 'https',
+                signedversion = '2018-03-28',
+                rscc = '', // Blob Service and File Service Only, To define values for certain response headers, Cache-Control
+                rscd = '', // Content-Disposition
+                rsce = '', // Content-Encoding
+                rscl = '', // Content-Language
+                rsct = '', // Content-Type
+                stringToSign = 
+                    signedpermissions + "\n" +
+                    signedstart + "\n" +
+                    signedexpiry + "\n" +
+                    canonicalizedresource + "\n" +
+                    signedidentifier + "\n" +
+                    signedIP + "\n" +
+                    signedProtocol + "\n" +
+                    signedversion + "\n" +
+                    rscc + "\n" +
+                    rscd + "\n" +
+                    rsce + "\n" +
+                    rscl + "\n" +
+                    rsct
+        
+            // create the string, then encode the string as UTF-8 and compute the signature using the HMAC-SHA256 algorithm
+            const sig = crypto.createHmac('sha256', Buffer.from(key, 'base64')).update(stringToSign, 'utf-8').digest('base64');
+            //console.log (`createServiceSAS stringToSign : ${stringToSign}`)
+            return { 
+                exp_date: exp_date.getTime(),
+                container_url: `https://${storageacc}.blob.core.windows.net/${container}`, 
+                sas: 
+                    //`st=2016-08-15T11:03:04Z&" +
+                    // signed expire 2017-08-15T19:03:04Z
+                    `se=${encodeURIComponent(signedexpiry)}&` + 
+                    //  The permissions associated with the shared access signature
+                    `sp=${signedpermissions}&` + 
+                    // API Version
+                    `sv=${signedversion}&` +  
+                    // The signedresource (sr) field specifies which resources are accessible via the shared access signature
+                    // signed resource 'c' = the shared resource is a Container (and to the list of blobs in the container) 'b' = the shared resource is a Blob
+                    `sr=${file ? "b" : "c"}&` +   
+        
+                    //    "sip=0.0.0.0-255.255.255.255&" +
+                    // The Protocal (https)
+                    `spr=${signedProtocol}&` +
+                    `sig=${encodeURIComponent(sig)}`
+            }
+        }
+
+        const fileprefix = encodeURIComponent(userdoc.filename.substring(userdoc.filename.lastIndexOf(".")))
+        const filename = 'products' + '/' + (new ObjectID ()).toString() + fileprefix
+        const retsas = createServiceSAS (process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10, filename)
+        ctx.body =  Object.assign({filename}, retsas)
+        await next()
     })
     .all('/*', async function (ctx, next) {
         if (!ctx._matchedRoute) {
@@ -401,7 +533,6 @@ const api = new Router({prefix: '/api'})
         }
     })
     .routes()
-
 
 // Run Server
 init()

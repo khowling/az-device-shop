@@ -9,7 +9,7 @@ export const _suspenseWrap = (res) => {
 
 
 export const _suspenseFetch = (operation, recordid) => {
-  //console.log (`_suspenseFetch :  web fetch for ${operation}/${recordid}`)
+  console.log (`_suspenseFetch :  web fetch for ${operation}/${recordid}`)
   let r = {status: 'pending'}
   let suspender =  fetch(`/api/${operation}${recordid ? '/'+recordid : ''}`)
       .then(async res => res.ok? res.json() : {error: res.status + ': '+ await res.text()})  
@@ -43,7 +43,7 @@ export async function _fetchit(type, url, body = null) {
       }
       
       if (body) {
-        opts.body = body
+        opts.body = JSON.stringify(body)
         opts.headers = {
           'content-type': 'application/json'
         }

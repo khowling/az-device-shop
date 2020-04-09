@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from './router.js'
 import {Alert} from '../utils/common'
-import { CommandBarButton } from 'office-ui-fabric-react/lib/Button'
+import { CommandBarButton } from '@fluentui/react/lib/Button'
 
 
 export function Nav ({resource}) {
@@ -39,11 +39,24 @@ export function Nav ({resource}) {
                     iconProps: { iconName: 'ActivateOrders' }
                   },
                   {
+                    key: 'products',
+                    text: 'Manage Products',
+                    href: '/ManageProducts',
+                    iconProps: { iconName: 'ProductRelease' }
+                  },
+                  {
+                    key: 'bots',
+                    text: 'My BOTs',
+                    href: '/myBots',
+                    iconProps: { iconName: 'Robot' }
+                  },
+                  {
                     key: 'logout',
                     text: 'Logout',
                     href: (process.env.REACT_APP_SERVER_URL || '') + "/connect/microsoft/logout" + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.origin)}` : ''),
                     iconProps: { iconName: 'SignOut' }
-                  }]}} text={result.auth.given_name} disabled={false} checked={true} styles={{root: {padding: "11px 12px 13px", border: "2px solid transparent",  background: "transparent"}, label: {color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3"}}}/>
+                  }]}} text={result.auth.given_name} disabled={false} checked={true} 
+                  styles={{root: {"vertical-align":"top", padding: "11px 12px 13px", border: "2px solid transparent",  background: "transparent"}, label: {color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3"}}}/>
 
                 
             : 
@@ -53,7 +66,7 @@ export function Nav ({resource}) {
             }
 
             <Link route="/mycart" className="c-call-to-action c-glyph" style={{padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent"}}>
-              <span>Cart ({result && result.cart_items || 0})</span>
+              <span>Cart ({result? result.cart_items : 0})</span>
             </Link>
           </div>
         }

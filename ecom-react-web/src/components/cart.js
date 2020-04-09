@@ -1,21 +1,22 @@
 import React, {useState} from 'react'
-import {Alert} from '../utils/common'
+import {Alert, MyImage} from '../utils/common'
 import {_fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link } from './router.js'
-import { DropdownMenuItemType, Dropdown } from 'office-ui-fabric-react/lib/Dropdown'
-import { DefaultButton, MessageBarButton } from 'office-ui-fabric-react/lib/Button'
-import { MessageBar, MessageBarType  } from 'office-ui-fabric-react/lib/MessageBar'
-import { Label  } from 'office-ui-fabric-react/lib/Label'
-import { Text  } from 'office-ui-fabric-react/lib/Text'
-import { Spinner  } from 'office-ui-fabric-react/lib/Spinner'
+import { DropdownMenuItemType, Dropdown } from '@fluentui/react/lib/Dropdown'
+import { PrimaryButton, MessageBarButton } from '@fluentui/react/lib/Button'
+import { MessageBar, MessageBarType  } from '@fluentui/react/lib/MessageBar'
+import { ChoiceGroup } from '@fluentui/react/lib/ChoiceGroup'
+import { Label  } from '@fluentui/react/lib/Label'
+import { Text  } from '@fluentui/react/lib/Text'
+import { Spinner  } from '@fluentui/react/lib/Spinner'
 import { Depths } from '@uifabric/fluent-theme/lib/fluent/FluentDepths'
-import { mergeStyleSets, getTheme, getFocusStyle } from 'office-ui-fabric-react/lib/Styling';
-import { List } from 'office-ui-fabric-react/lib/List'
-import { Image, ImageFit } from 'office-ui-fabric-react/lib/Image'
+import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react/lib/Styling';
+import { List } from '@fluentui/react/lib/List'
+import { Image, ImageFit } from '@fluentui/react/lib/Image'
 import {FontWeights} from '@uifabric/styling'
 import { Card } from '@uifabric/react-cards'
-import { Icon } from 'office-ui-fabric-react/lib/Icon'
+import { Icon } from '@fluentui/react/lib/Icon'
 import { /* SharedColors, */ NeutralColors  } from '@uifabric/fluent-theme/lib/fluent/FluentColors';
 
 const theme = getTheme()
@@ -66,7 +67,7 @@ const classNames  = mergeStyleSets({
 })
 
 
-export function MyCart({resource}) {
+export function MyCart({resource, checkout}) {
   const [state, setState] = useState({state: "ready"})
 
   function _removeitem(cartline) {
@@ -99,7 +100,7 @@ export function MyCart({resource}) {
     console.log (`rendering ${line}`)
     return (
       <div className={classNames.itemCell} data-is-focusable={true}>
-        <Image src={line.item.image} width={250} imageFit={ImageFit.cover}/>
+        <MyImage image={line.item.image} width={250} imageFit={ImageFit.cover}/>
         <div className={classNames.itemContent}>
           <div className={classNames.itemName}>{line.item.heading}</div>
           <div className={classNames.itemIndex}>{Object.keys(line.options).map(o => <span key={o}>{o} : {line.options[o].text}</span>)}</div>
@@ -107,29 +108,30 @@ export function MyCart({resource}) {
           <div >
             <div style={{ display: "inline"}}>
               <button  onClick={() => _removeitem(line._id)} className="c-button f-lightweight" style={{minWidth: 0, margin: 0, padding: 0, border: 0}}>delete</button>
+             
             </div>
           </div>
         </div>
-        <div style={{marginLeft: 30, lineHeight: 2, marginTop: 40}}>
+        <div style={{marginLeft: 30, lineHeight: 2}}>
           <Dropdown
-          selectedKey={line.qty}
-          disabled={true}
-          //onChange={(e, item) => setOptColor(item)}
-          label="Qty"
-          options={[
-            { key: 1, text: '1'},
-            { key: 2, text: "2" },
-            { key: 3, text: "3" },
-            { key: 4, text: '4',},
-            { key: 5, text: "5" },
-            { key: 6, text: "6" },
-            { key: 7, text: "7" },
-            { key: 8, text: "8" },
-            { key: 9, text: "9" },
-            { key: 10, text: "10" }
-          ]}
+            selectedKey={line.qty}
+            disabled={true}
+            //onChange={(e, item) => setOptColor(item)}
+            label="Qty"
+            options={[
+              { key: 1, text: '1'},
+              { key: 2, text: "2" },
+              { key: 3, text: "3" },
+              { key: 4, text: '4',},
+              { key: 5, text: "5" },
+              { key: 6, text: "6" },
+              { key: 7, text: "7" },
+              { key: 8, text: "8" },
+              { key: 9, text: "9" },
+              { key: 10, text: "10" }
+            ]}
           //styles={{ dropdown: { width: 300 } }}
-        />
+          />
           <Text nowrap={true} block={true}>£{line.line_total}</Text>
         </div>
         <Icon className={classNames.chevron} iconName={'ChevronRight'} />
@@ -143,10 +145,10 @@ export function MyCart({resource}) {
         <h4 className="c-heading" style={{float: "left"}}>Cart</h4>
         { status === 'success' &&
 
-          <Card horizontal tokens={{childrenMargin: 10}} style={{float: "right"}}>
+          <Card horizontal tokens={{childrenMargin: 20}} style={{float: "right"}}>
 
-            <Card.Section styles={{root: {width: "600px"}}}>
-              <Text variant="small" styles={{root: { color: '#025F52', fontWeight: FontWeights.semibold}}}>
+            <Card.Section styles={{root: {width: "700px"}}}>
+              <Text  styles={{root: { color: '#025F52', fontWeight: FontWeights.semibold}}}>
                 Checkout shopping Cart
               </Text>
               { state.state === 'error' ?
@@ -157,29 +159,48 @@ export function MyCart({resource}) {
                       <MessageBarButton>Goto Order</MessageBarButton>
                     </div>} messageBarType={MessageBarType.success} isMultiline={false}>Order Created</MessageBar>
                 : 
-                <Text variant="small" >
+                <Text  >
                   Checkout to Order the items in your cart
                 </Text>
               }
               <Card.Section horizontal tokens={{childrenGap: 10}}>
                 <Text  >
-                  Items: {result.items_count || 0} 
-                </Text>
-                <Text  >
-                  Total: £ {Array.isArray(result.items) ? result.items.reduce((acc,l) => acc+l.line_total,0) : 0.00}
+                  Cart Total ({result.items_count || 0} items)  : £{Array.isArray(result.items) ? result.items.reduce((acc,l) => acc+l.line_total,0) : 0.00}
                 </Text>
               </Card.Section>
 
             </Card.Section>
       
 
-            <Card.Section>
-              <Card.Item >
-              <DefaultButton text="Checkout" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || result.items_count == 0 ||  typeof result.items_count === 'undefined'} />
-                
-                <Text variant="small" nowrap={true} block={true} >or</Text>
-                <Link route="/" disabled={state.state === 'wait'} className="c-call-to-action c-glyph" style={{padding: 2, border: 0, color: "#0067b8", background: "transparent"}}><Text variant="small">Continue Shopping</Text></Link>
-              </Card.Item>
+            <Card.Section styles={{root: {width: "600px"}}}>
+              
+                { checkout ? 
+                  <Card.Item >
+                    <ChoiceGroup
+                            label="Select Shipping option"
+                            defaultSelectedKey="B"
+                            options={[
+                              { key: 'A', text: 'Nominated Day (£9.99)' },
+                              { key: 'B', text: 'Next Day (£9.99)' },
+                              { key: 'C', text: 'Same Day', disabled: true }
+                            ]}
+                         
+                          />
+
+                  <Text  style={{ marginTop: "40px"}} >
+                    Order Total ({result.items_count || 0} items)  : £{9.99+(Array.isArray(result.items) ? result.items.reduce((acc,l) => acc+l.line_total,0) : 0.00)}
+                  </Text>
+
+                    <PrimaryButton text="Place Order"  onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || result.items_count === 0 ||  typeof result.items_count === 'undefined'} />
+                  </Card.Item>
+                :
+                  <Card.Item >
+                    <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0}} disabled={state.state === 'wait' || result.items_count === 0 ||  typeof result.items_count === 'undefined'}>Checkout cart</Link>
+                    <Text variant="small" nowrap={true} block={true} >or</Text>
+                    <Link route="/" disabled={state.state === 'wait'} className="c-call-to-action c-glyph" style={{padding: 3, border: 0, color: "#0067b8", background: "transparent"}}><Text >Continue Shopping</Text></Link>  
+                  </Card.Item>
+                }
+              
               { state.state === 'wait' &&
                 <Card.Item >
                   <Spinner label="Wait..." ariaLive="assertive" labelPosition="right" />
@@ -209,7 +230,7 @@ export function AddToCart({resource}) {
   function addorder() {
     setState ({state: "adding"})
 //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('POST','/api/cartadd', JSON.stringify({itemid: result._id, options: {"Colour": optColor}})).then(succ => {
+    _fetchit('POST','/api/cartadd', {itemid: result._id, options: {"Colour": optColor}}).then(succ => {
       console.log (`created success : ${JSON.stringify(succ)}`)
       setState ({state: "added", response: succ})
       //navTo("ViewOrder")
@@ -231,7 +252,7 @@ export function AddToCart({resource}) {
         <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
           <div className="f-def ault-image">
               <picture>
-                <img className="c-ima ge" src={result.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
+                <MyImage className="c-image" image={result.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
               </picture>
           </div>
         </section>

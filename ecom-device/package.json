@@ -1,0 +1,16 @@
+{
+  "name": "ecom-device",
+  "version": "1.0.0",
+  "description": "",
+  "main": "consumer.js",
+  "dependencies": {
+    "@azure/event-hubs": "^5.0.1",
+    "rhea-promise": "^1.0.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

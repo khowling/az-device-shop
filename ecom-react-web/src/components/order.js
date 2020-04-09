@@ -1,13 +1,17 @@
 import React, {useState, useEffect} from 'react'
-import { Link } from './router.js'
+import { Link , navTo} from './router.js'
+import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react/lib/DetailsList'
+import { CommandBar } from '@fluentui/react/lib/CommandBar'
 
 export function ManageOrders({resource}) { 
     
     const {status, result } = resource.read()
 
+
     return (
-  
+
       <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
+
         <table data-f-sort="true">
           
           <thead>
@@ -48,7 +52,6 @@ export function ManageOrders({resource}) {
           </tbody>
       </table>
   </div>
-  
   
       )
   }
