@@ -5,6 +5,7 @@ import {Panes} from './components/store'
 import {AddToCart, MyCart} from './components/cart'
 import {ManageOrders, Order} from './components/order'
 import {ManageProducts, Product} from './components/product'
+import {MyBusiness, BusinessHome} from './components/business'
 
 import RenderContext from './RenderContext'
 import {_suspenseFetch, _suspenseWrap} from './utils/fetch'
@@ -66,6 +67,20 @@ export const AppRouteCfg = {
     initialFetch: {
       operation: "get",
       store: "products"
+    }
+  },
+  [`/${BusinessHome.name}`] : {
+    component: BusinessHome,
+    initialFetch: {
+      operation: "get",
+      store: "business"
+    }
+  },
+  [`/${MyBusiness.name}`] : {
+    component: MyBusiness,
+    initialFetch: {
+      operation: "get",
+      store: "business"
     }
   },
   [`/${Product.name}`] : {

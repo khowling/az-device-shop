@@ -46,9 +46,9 @@ export function Nav ({resource}) {
                   },
                   {
                     key: 'bots',
-                    text: 'My BOTs',
-                    href: '/myBots',
-                    iconProps: { iconName: 'Robot' }
+                    text: 'My Cloud Business',
+                    href: '/BusinessHome',
+                    iconProps: { iconName: 'Cloud' }
                   },
                   {
                     key: 'logout',

@@ -28,44 +28,50 @@ const {MongoClient, ObjectID} = require('mongodb'),
 
 // Store Metadata
 const StoreDef = {
-        "products": {
-            collection: "products",
-            schema: Joi.object({
-                'heading': Joi.string().trim().required(),
-                'category': Joi.string().trim().required(),
-                'description': Joi.string().trim().required(),
-                'price': Joi.number().required(),
-                'image':Joi.object({
-                    'url': Joi.string().uri(),
-                    'container_url': Joi.string().uri(),
-                    'filename': Joi.string().uri({relativeOnly: true})
-                }).xor('url', 'filename').xor('url', 'container_url')
-            })
-        },
-        "orders": {
-            default_filter: { status: { $gte: 30}},
-            status: {
-                InactiveCart: 5,
-                ActiveCart : 10,
-                InactiveOrder: 20,
-                NewOrder: 30
-            },
-            collection: "orders",
-            schema: Joi.object({
-                //partition_key: Joi.string().trim().required()
-            }),
-            indexes: [
-                {status: 1 },
-                {owner: {_id: 1}}
-            ]
-        },
-        "session": {
-            collection: session_collection_name,
-            schema: Joi.object({
-                //partition_key: Joi.string().trim().required()
-            })
-        }
-    }
+  "business": {    
+    collection: "business",
+    schema: Joi.object({
+      //partition_key: Joi.string().trim().required()
+    })
+  },
+  "products": {
+    collection: "products",
+    schema: Joi.object({
+        'heading': Joi.string().trim().required(),
+        'category': Joi.string().trim().required(),
+        'description': Joi.string().trim().required(),
+        'price': Joi.number().required(),
+        'image':Joi.object({
+            'url': Joi.string().uri(),
+            'container_url': Joi.string().uri(),
+            'filename': Joi.string().uri({relativeOnly: true})
+        }).xor('url', 'filename').xor('url', 'container_url')
+    })
+  },
+  "orders": {
+    default_filter: { status: { $gte: 30}},
+    status: {
+        InactiveCart: 5,
+        ActiveCart : 10,
+        InactiveOrder: 20,
+        NewOrder: 30
+    },
+    collection: "orders",
+    schema: Joi.object({
+        //partition_key: Joi.string().trim().required()
+    }),
+    indexes: [
+        {status: 1 },
+        {owner: {_id: 1}}
+    ]
+  },
+  "session": {
+    collection: session_collection_name,
+    schema: Joi.object({
+        //partition_key: Joi.string().trim().required()
+    })
+  }
+}
 
 // Operations
 const FetchOperation = {
