@@ -1,18 +1,27 @@
 import React from 'react';
 import {Link} from './router.js'
+import {Alert, MyImage} from '../utils/common'
+import { Image, IImageProps, ImageFit } from '@fluentui/react/lib/Image'
 
-export function Panes () {
+export function Panes ({resource}) {
+
+    const {status, result } = resource.read()
+    const hero = result.data.Category.filter(c => c.position == "hero")
+    const highlight = result.data.Category.filter(c => c.position == "highlight")
+
+
     return (
     <div className="m-panes" data-grid="col-12" style={{"paddingTop": "0"}}>
+        { hero.map (i => 
+            
         <section className="f-align-middle">
             <div className="m-panes-product-placement-item">
-                <picture className="c-image">
-                    <img alt="" src="https://statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/panes/Panes_Large_Image_VP1-4.jpg"/>
+                <picture className="c-image" >
+                    <MyImage styles={{root: {margin: "0 auto;"}}} imageFit={ImageFit.CenterContain} width={450} image={i.image}  alt="no pic"/>
                 </picture>
                 <div>
-                    <h3 className="c-heading">Surface Book</h3>
-                    <p className="c-paragraph">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla nec justo tincidunt, mattis dui non, ultrices massa. Nulla eleifend, eros sed laoreet auctor, turpis purus aliquet ligula, sit amet facilisis enim dolor nec nisl. Aliquam erat
-                        volutpat.</p>
+                    <h3 className="c-heading">{i.heading}</h3>
+                    <p className="c-paragraph">{i.description}</p>
                     <div className="c-price" >
                         <span>Starting at&nbsp;</span>
                         <meta  content="USD"/>
@@ -28,23 +37,25 @@ export function Panes () {
                         <div aria-hidden="true"></div>
                     </div>
                     <div>
-                        <Link route="/AddToCart" recordid={'050000000000000000000100'}  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
-                            <span>Buy now</span>
+                        <Link route="/p" urlid={i._id}  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                            <span>Shop now</span>
                         </Link>
                     </div>
                 </div>
             </div>
         </section>
+        )}
+        
         <section className="f-stacked">
+            { highlight.map (i => 
             <div>
                 <div className="m-panes-product-placement-item">
                     <picture className="c-image">
-                        <img alt="" src="https://statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/panes/Panes_Small_Image1_VP4.jpg"/>
+                        <MyImage imageFit={ImageFit.CenterContain} width={300}  image={i.image}  alt="no pic"/>
                     </picture>
                     <div>
-                        <h3 className="c-heading">Xbox One S</h3>
-                        <p className="c-paragraph">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla nec justo tincidunt, mattis dui non, ultrices massa. Nulla eleifend, eros sed laoreet auctor, turpis purus aliquet ligula, sit amet facilisis enim dolor nec nisl. Aliquam
-                            erat volutpat.</p>
+                        <h3 className="c-heading">{i.heading}</h3>
+                        <p className="c-paragraph">{i.description}</p>
                         <div className="c-price" >
                             <span>Starting at&nbsp;</span>
                            
@@ -60,28 +71,46 @@ export function Panes () {
                             <div aria-hidden="true"></div>
                         </div>
                         <div>
-                            <Link route="gete"  className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
-                                <span>Call To Action</span>
+                            <Link route="/p" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                                <span>Shop now</span>
                             </Link>
                         </div>
                     </div>
                 </div>
             </div>
-            <div>
+            )}
+        </section>
+    </div>
+    )
+}
+
+export function Panes3x ({resource}) {
+
+    const {status, result } = resource.read()
+    const products = result.data.Product
+
+    return (
+        <div data-grid="col-12" class="m-area-heading">
+            <h2 className="c-heading">Category</h2> <Link route="/" className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                               Back to full Calalog
+                            </Link>
+        
+        <div className="m-panes" data-grid="col-12">
+            { products.map (i => 
+            <section>
                 <div className="m-panes-product-placement-item">
-                    <picture className="c-image">
-                        <img alt="" src="https://statics-mwf-eus-ms-com.akamaized.net/_h/mwfhash2/mwf.app/images/components/panes/Panes_Small_Image2_VP4.jpg" />
+                <picture className="c-image">
+                        <MyImage imageFit={ImageFit.CenterContain} width={300}  image={i.image}  alt="no pic"/>
                     </picture>
                     <div>
-                        <h3 className="c-heading">Surface Pro 4</h3>
-                        <p className="c-paragraph">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla nec justo tincidunt, mattis dui non, ultrices massa. Nulla eleifend, eros sed laoreet auctor, turpis purus aliquet ligula, sit amet facilisis enim dolor nec nisl. Aliquam
-                            erat volutpat.</p>
-                        <div className="c-price">
+                        <h3 className="c-heading">{i.heading}</h3>
+                        <p className="c-paragraph">{i.description}</p>
+                        <div className="c-price" >
                             <span>Starting at&nbsp;</span>
                            
                             <span>$</span>
                             <span >1,000</span>
-                            <link  href="https://schema.org/InStock"/>
+                            <link href="https://schema.org/InStock"/>
                         </div>
                         <div className="c-rating" >
                             <p className="x-screen-reader" id="sr_">Community rating:
@@ -91,42 +120,16 @@ export function Panes () {
                             <div aria-hidden="true"></div>
                         </div>
                         <div>
-                            <Link href="#" className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
-                                <span>Call To Action</span>
+                            <Link route="/AddToCart"  urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                                <span>Add to Cart</span>
                             </Link>
                         </div>
                     </div>
                 </div>
-            </div>
-        </section>
-    </div>
-    )
-}
-
-export function Feature () {
-    return (
-        <section className="m-feature f-align-left">
-        <picture>
-            <source srcset="https://placehold.it/800x450" media="(min-width: 1400px)"/>
-            <source srcset="https://placehold.it/630x472" media="(min-width: 1084px)"/>
-            <source srcset="https://placehold.it/542x406" media="(min-width: 768px)"/>
-            <source srcset="https://placehold.it/767x288" media="(min-width: 540px)"/>
-            <source srcset="https://placehold.it/539x201" media="(min-width:0)"/>
-            <img srcset="https://placehold.it/630x472" src="https://placehold.it/630x472" alt="Placeholder with grey background and dimension watermark without any imagery"/>
-        </picture>
-        <div>
-            <strong className="c-badge f-small f-highlight">BADGE</strong>
-            <div className="c-logo">
-                <img className="c-image" src="https://placehold.it/150x50" alt="Placeholder with grey background and dimension watermark without any imagery"/>
-                <span>logo-image</span>
-            </div>
-            <h2 className="c-heading">Heading</h2>
-            <p className="c-paragraph">Paragraph text. Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.</p>
-            <Link className="c-call-to-action c-glyph">
-                <span>Call To Action</span>
-            </Link>
+            </section>
+            )}
         </div>
-    </section>
+        </div>
     )
 }
 

@@ -9,11 +9,11 @@ export function MyImage({image, ...rest}) {
         )} else if (image.container_url && image.filename) {return (
             <Image src={image.container_url + "/" + image.filename}  {...rest}/>
         )} else { return (
-            <Image src={"http://placehold.it/100x100"} {...rest} />
+            <Image src={"http://placehold.it/50x50"} {...rest} />
         )}
     } else {
         return (
-            <Image src={"http://placehold.it/100x100"} {...rest} />
+            <Image src={"http://placehold.it/50x50"} {...rest} />
         )
     }
 }

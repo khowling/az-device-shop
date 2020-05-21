@@ -36,11 +36,22 @@ const StoreDef = {
   },
   "products": {
     collection: "products",
+    split_types: ['Product','Category'],
     schema: Joi.object({
+        'type': Joi.string().valid('Product','Category').required(),
         'heading': Joi.string().trim().required(),
-        'category': Joi.string().trim().required(),
+        'category': Joi.string().when ('type', {is: "Product", 
+            then: Joi.required()
+            //otherwise: Joi.object({'category': //not exist//})
+            }).trim(),
+        'position': Joi.string().valid('normal','hero', 'highlight').when ('type', {is: "Category", 
+            then: Joi.required()
+            //otherwise: Joi.object({'category': //not exist//})
+        }).trim(),
         'description': Joi.string().trim().required(),
-        'price': Joi.number().required(),
+        'price': Joi.number().when ('type', {is: "Product", 
+            then: Joi.required()
+        }),
         'image':Joi.object({
             'url': Joi.string().uri(),
             'container_url': Joi.string().uri(),
@@ -49,7 +60,6 @@ const StoreDef = {
     })
   },
   "orders": {
-    default_filter: { status: { $gte: 30}},
     status: {
         InactiveCart: 5,
         ActiveCart : 10,
@@ -84,12 +94,63 @@ const FetchOperation = {
         }
         return cart || {}
     },
-    "get": async function (ctx, store, query) {
-        
-        return await ctx.db.collection(StoreDef[store].collection).find(query || StoreDef[store].default_filter || {}).toArray()
+    "get": async function (ctx, store, query, projection) {
+        const s = StoreDef[store]
+        if (!s) throw `unknown ${store}`
+        const cursor  = ctx.db.collection(s.collection).find(query, projection? {projection}: null)
+
+        if (s.split_types) {
+            // setup response oject with empty arrarys with all possible values of 'type'
+            let response = s.split_types.reduce((obj, a) => {return {...obj, [a]: []}}, {})
+            // copied from https://github.com/mongodb/node-mongodb-native/blob/e5b762c6d53afa967f24c26a1d1b6c921757c9c9/lib/cursor/cursor.js#L836
+            while (await cursor.hasNext()) {
+                const doc = await cursor.next()
+                if (s.split_types.includes(doc.type)) {
+                    response[doc.type].push(doc)
+                }
+            }
+            return response
+        } else {
+            return await cursor.toArray()
+        }
     },
-    "getOne": async function (ctx, store, query) {
-        return await ctx.db.collection(StoreDef[store].collection).findOne(query)
+    "getOne": async function (ctx, store, query, projection) {
+        const s = StoreDef[store]
+        if (!s) throw `unknown ${store}`
+        return await ctx.db.collection(s.collection).findOne(query, projection? {projection}: null)
+    },
+    // -------------------------------
+    // componentFetch is my GraphQL :)
+    // -------------------------------
+    "componentFetch": async function (ctx, componentFetch, urlid) {
+        let result = {}
+
+        if (componentFetch) {
+
+            async function getRefData(ctx, collection) {
+              return await FetchOperation.get (ctx, collection, {partition_key: "TEST"})
+            }
+            let query = {partition_key: "TEST"}
+
+            if (componentFetch.urlidField) {
+                if (!urlid) throw "componentFetch requires urlid"
+                if (componentFetch.urlidField === "recordid") {
+                     query['_id'] = ObjectID(urlid)
+                } else {
+                    query[componentFetch.urlidField]= urlid
+                }
+            } 
+            if (componentFetch.query) {
+                query = {...componentFetch.query, ...query}
+            }
+            //console.log (`ssr componentFetch (${componentFetch.operation}): ${JSON.stringify(oppArgs)}`)]
+            result.data = await FetchOperation[componentFetch.operation](ctx, componentFetch.store, query)
+            if (componentFetch.refdata && componentFetch.refdata.length >0) {
+              result.refdata = await getRefData(ctx, componentFetch.refdata[0])
+            }
+            return result
+        } else return  Promise.resolve({})
+
     }
 }
 
@@ -222,20 +283,14 @@ const catchall = async (ctx, next) => {
         // Get Iniitial Data
         const urlsplit = ctx.request.url.split('?', 2),
             startURL = {pathname: urlsplit[0], search: urlsplit.length>1 ? urlsplit[1] : null},
-            {routekey, recordid } = server_ssr.pathToRoute (startURL),
-            {requireAuth, initialFetch} = server_ssr.AppRouteCfg[routekey] || {}
+            {routekey, urlid } = server_ssr.pathToRoute (startURL),
+            {requireAuth, componentFetch} = server_ssr.AppRouteCfg[routekey] || {}
 
         if (requireAuth && !ctx.session.auth) {
             ctx.redirect (`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
         } else {
-            let initfetchfn = Promise.resolve({})
-            if (initialFetch) {
-                let oppArgs = [ctx]
-                if (initialFetch.store) oppArgs.push(initialFetch.store)
-                if (initialFetch.recordid) oppArgs.push( {_id: ObjectID(recordid), partition_key: "TEST"})
-                //console.log (`ssr initialFetch (${initialFetch.operation}): ${JSON.stringify(oppArgs)}`)]
-                initfetchfn = FetchOperation[initialFetch.operation](...oppArgs)
-            }
+            let initfetchfn = FetchOperation.componentFetch(ctx, componentFetch, urlid)
+
             // Parallel fetch
             const [serverInitialData, session] = await Promise.all([initfetchfn,  getSession(ctx)])
             const renderData = {ssrContext: "server", serverInitialData, session}
@@ -401,19 +456,46 @@ const api = new Router({prefix: '/api'})
         } catch (e) {
             ctx.throw(400, `cannot retreive mycart: ${e}`)
         }
-	})
+    })
+    /* Only used when NOT using SSR */
+    .get('/componentFetch/:component?/:urlid?', async function (ctx, next) {
+
+        const 
+            routekey = '/'+(ctx.params.component || ''),
+            {requireAuth, componentFetch} = server_ssr.AppRouteCfg[routekey] || {}
+
+        if (!componentFetch) {
+            ctx.throw(404, `unknown componentFetch [${routekey}]`)
+        } else {
+
+            try {
+                ctx.body = await FetchOperation.componentFetch(ctx, componentFetch, (ctx.params.urlid || null))
+                await next()
+            } catch (e) {
+                ctx.throw(400, `cannot retreive componentFetch: ${e}`)
+            }
+        }
+    })
 	.get('/store/:store', async function (ctx, next) {
+        const q = ctx.query.q ? JSON.parse(decodeURI(ctx.query.q)) : null// url param q is a mongo find query
         try {
-            ctx.body = await FetchOperation.get(ctx, ctx.params.store)
+            ctx.body = await FetchOperation.get(ctx, ctx.params.store, q)
             await next()
         } catch (e) {
             ctx.throw(400, `cannot get ${ctx.params.store}: ${e}`)
         }
 	})
-	.get('/store/:store/:id', async function (ctx, next) {
-	  	try {
-            ctx.body = await FetchOperation.getOne(ctx, ctx.params.store, {_id: ObjectID(ctx.params.id), partition_key: "TEST"})
-            await next()
+	.get('/store/:store/:id?', async function (ctx, next) {
+	  try {
+      let query = {partition_key: "TEST"}
+      if (ctx.params.id) {
+        query['_id'] = ObjectID(ctx.params.id)
+        ctx.body = await FetchOperation.getOne(ctx, ctx.params.store, query)
+      } else {
+        query = {...(ctx.query.q ? JSON.parse(decodeURI(ctx.query.q)) : {}), ...query}// url param q is a mongo find query
+        ctx.body = await FetchOperation.get(ctx, ctx.params.store, query)
+      }
+      await next()
 		} catch (e) {
 			ctx.throw(400, `cannot find ${ctx.params.store+':'+ctx.params.id}: ${e}`)
 		}

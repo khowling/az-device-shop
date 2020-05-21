@@ -3,16 +3,16 @@ import {_suspenseFetch, _suspenseWrap} from '../utils/fetch'
 import RenderContext from '../RenderContext'
 
 // Used by Link & NavTo
-function _encodeURL (route, recordid, props) {
-  let ulrstr = route? route : (recordid? "/_" : "/")
-  ulrstr+= recordid ? ("/" + recordid)  : ""
+export function _encodeURL (route, urlid, props) {
+  let ulrstr = route? route : (urlid? "/_" : "/")
+  ulrstr+= urlid ? ("/" + urlid)  : ""
 
   if (props && Object.keys(props).length >0) ulrstr+= "?props=" + encodeURIComponent(btoa(JSON.stringify(props)));
   return ulrstr;
 }
 
 // =====================================     Processes navigation routes Called from DOM 
-export function Link({route, recordid, props, children, ...rest}) {
+export function Link({route, urlid, props, children, ...rest}) {
   const {ssrContext} = useContext(RenderContext)
   
   function handleClick(event) {
@@ -30,24 +30,24 @@ export function Link({route, recordid, props, children, ...rest}) {
         window.history.pushState("","", event.currentTarget.href)
       }
       // (2) Now notify the router!!
-      listeners.forEach(listener => listener({routekey: route || '/', recordid, props}))
+      listeners.forEach(listener => listener({routekey: route || '/', urlid, props}))
     }
 
   }
 
-  return (<a {...rest} onClick={handleClick} href={_encodeURL (route, recordid, props)}>{children}</a>)
+  return (<a {...rest} onClick={handleClick} href={_encodeURL (route, urlid, props)}>{children}</a>)
 }
 
 
 // =====================================     Processes navigation routes Called from React JS 
-export function navTo(route, recordid, props) {
+export function navTo(route, urlid, props) {
   //console.log (`navTo: ${routekey}`)
   // (1) Update the browser URL
   if (typeof window !== 'undefined') {
-    window.history.pushState("","", _encodeURL (route, recordid, props))
+    window.history.pushState("","", _encodeURL (route, urlid, props))
   }
   //const routeJson = getRouteObj(route, recordid, props)
-  listeners.forEach(listener => listener({routekey: route || '/', recordid, props}))
+  listeners.forEach(listener => listener({routekey: route || '/', urlid, props}))
 }
 
 // convert parts of the url into route key, recordid and props
@@ -56,18 +56,21 @@ export function pathToRoute({pathname, search, hash}) {
   const propsparam = search && search.match(/A?props=([^&]+)&*/i),
         url_props = propsparam? propsparam[1]: null,
         withoutleadingslash = pathname.slice(1),
-        [url_comp = '/', recordid] = withoutleadingslash.split("/", 2)
+        [url_comp = '/', urlid] = withoutleadingslash.split("/", 2)
         
   return {
     routekey: '/' + (url_comp ? (url_comp === "_" ? '' : url_comp) : ''), 
     props: url_props ? JSON.parse(atob(decodeURIComponent(url_props))) : {},
-    recordid,
+    urlid,
   }
 }
 
 const listeners = [];
 // =====================================     My Super Simple Router 
+// Params: cfg = routing configration (AppRouteCfg)
 export function useRouter (startUrl, cfg) {
+  
+  // renderRoute : route that needs to be rendered (default is the startURL)
   const [renderRoute, setRenderRoute] = useState(() => pathToRoute(startUrl))
   const {ssrContext, serverInitialData} = useContext(RenderContext)
 
@@ -100,21 +103,37 @@ export function useRouter (startUrl, cfg) {
   }, [ssrContext])
 
   // return child components
-  const {component, initialFetch, routeProps = {}, requireAuth} = cfg[renderRoute.routekey] || {}
+  const {component, componentFetch, routeProps = {}, requireAuth} = cfg[renderRoute.routekey] || {}
   if (!component) {
     return `404 - error, unknown route ${renderRoute.routekey}`
   } else {
     let resource
-    if (initialFetch) { 
+    if (componentFetch) { 
       if (ssrContext === "server" || ssrContext === "hydrate") {
         // the data has been fetched on the server, so just wrap in a completed Promise
         resource = _suspenseWrap(serverInitialData)
       } else {
+
+        console.log (`Start the data fetch for the route`)
+
         if (requireAuth) {
           // TODO - router does have access to session data
         }
-          //console.log (`Start the data fetch for the route, entity=${initialFetch.collection}`)
-          resource = _suspenseFetch(initialFetch.store ? 'store/'+initialFetch.store : initialFetch.operation, initialFetch.recordid ? renderRoute.recordid : null)
+        /*
+        let operation = componentFetch.store ? 'store/'+componentFetch.store : componentFetch.operation, 
+            recordid = null, 
+            query = componentFetch.query || null
+
+        if (componentFetch.urlidField) {
+          if (componentFetch.urlidField === "recordid") {
+            recordid = renderRoute.urlid
+          } else {
+            query = {...query, [componentFetch.urlidField]: renderRoute.urlid}
+          }
+        }
+        */
+        
+        resource = _suspenseFetch('componentFetch'+renderRoute.routekey,  renderRoute.urlid)
         
       }
       return (

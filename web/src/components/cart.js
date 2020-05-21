@@ -70,6 +70,9 @@ const classNames  = mergeStyleSets({
 export function MyCart({resource, checkout}) {
   const [state, setState] = useState({state: "ready"})
 
+  const {status, result } = resource.read()
+  const cart = result.data
+
   function _removeitem(cartline) {
     console.log (cartline)
     _fetchit('PUT','/api/cartdelete/'+cartline).then(succ => {
@@ -94,7 +97,7 @@ export function MyCart({resource, checkout}) {
     })
   }
 
-  const {status, result } = resource.read()
+  
 
   function  _onRenderCell(line, index, isScrolling) {
     console.log (`rendering ${line}`)
@@ -165,7 +168,7 @@ export function MyCart({resource, checkout}) {
               }
               <Card.Section horizontal tokens={{childrenGap: 10}}>
                 <Text  >
-                  Cart Total ({result.items_count || 0} items)  : £{Array.isArray(result.items) ? result.items.reduce((acc,l) => acc+l.line_total,0) : 0.00}
+                  Cart Total ({cart.items_count || 0} items)  : £{Array.isArray(cart.items) ? cart.items.reduce((acc,l) => acc+l.line_total,0) : 0.00}
                 </Text>
               </Card.Section>
 
@@ -188,14 +191,14 @@ export function MyCart({resource, checkout}) {
                           />
 
                   <Text  style={{ marginTop: "40px"}} >
-                    Order Total ({result.items_count || 0} items)  : £{9.99+(Array.isArray(result.items) ? result.items.reduce((acc,l) => acc+l.line_total,0) : 0.00)}
+                    Order Total ({cart.items_count || 0} items)  : £{9.99+(Array.isArray(cart.items) ? cart.items.reduce((acc,l) => acc+l.line_total,0) : 0.00)}
                   </Text>
 
-                    <PrimaryButton text="Place Order"  onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || result.items_count === 0 ||  typeof result.items_count === 'undefined'} />
+                    <PrimaryButton text="Place Order"  onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 ||  typeof cart.items_count === 'undefined'} />
                   </Card.Item>
                 :
                   <Card.Item >
-                    <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0}} disabled={state.state === 'wait' || result.items_count === 0 ||  typeof result.items_count === 'undefined'}>Checkout cart</Link>
+                    <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0}} disabled={state.state === 'wait' || cart.items_count === 0 ||  typeof cart.items_count === 'undefined'}>Checkout cart</Link>
                     <Text variant="small" nowrap={true} block={true} >or</Text>
                     <Link route="/" disabled={state.state === 'wait'} className="c-call-to-action c-glyph" style={{padding: 3, border: 0, color: "#0067b8", background: "transparent"}}><Text >Continue Shopping</Text></Link>  
                   </Card.Item>
@@ -214,7 +217,7 @@ export function MyCart({resource, checkout}) {
         <div style={{clear: "both", marginBottom: 20}}></div>
       </header>
 
-      <List items={result.items} onRenderCell={_onRenderCell} />
+      <List items={cart.items} onRenderCell={_onRenderCell} />
 
     </section>  
   )
@@ -226,11 +229,12 @@ export function AddToCart({resource}) {
   const [state, setState] = useState({state: "enterdetails"})
 
   const {status, result } = resource.read()
+  const product = result.data
 
   function addorder() {
     setState ({state: "adding"})
 //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('POST','/api/cartadd', {itemid: result._id, options: {"Colour": optColor}}).then(succ => {
+    _fetchit('POST','/api/cartadd', {itemid: product._id, options: {"Colour": optColor}}).then(succ => {
       console.log (`created success : ${JSON.stringify(succ)}`)
       setState ({state: "added", response: succ})
       //navTo("ViewOrder")
@@ -252,7 +256,7 @@ export function AddToCart({resource}) {
         <section className="m-product-placement-item context-device f-size-large" itemScope="" itemType="https://schema.org/Product">
           <div className="f-def ault-image">
               <picture>
-                <MyImage className="c-image" image={result.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
+                <MyImage className="c-image" image={product.image} alt="White frame with mountain landscape illustrated in white on a grey background"/>
               </picture>
           </div>
         </section>
@@ -261,16 +265,16 @@ export function AddToCart({resource}) {
       <div key="ShowProduct2" data-grid="col-6">
       
         <div>
-          <strong className="c-badge f-small f-highlight">{result.badge}</strong>
-          <h3 className="c-heading">{result.heading}</h3>
-          <p className="c-paragraph">{result.description}</p>
+          <strong className="c-badge f-small f-highlight">{product.badge}</strong>
+          <h3 className="c-heading">{product.heading}</h3>
+          <p className="c-paragraph">{product.description}</p>
   
           <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
             <s><span className="x-screen-reader">Full price was</span>$1,500</s>
             <span>&nbsp;Now</span>
             <meta itemProp="priceCurrency" content="USD"/>
             <span>&nbsp;$</span>
-            <span itemProp="price">{result.price}</span>
+            <span itemProp="price">{product.price}</span>
             <link itemProp="availability" href="https://schema.org/InStock"/>
           </div>
         </div>

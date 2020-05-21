@@ -1,7 +1,7 @@
 import React, {useContext, Suspense} from 'react';
 import {useRouter} from './components/router'
 import {Nav} from './components/page'
-import {Panes} from './components/store'
+import {Panes, Panes3x} from './components/store'
 import {AddToCart, MyCart} from './components/cart'
 import {ManageOrders, Order} from './components/order'
 import {ManageProducts, Product} from './components/product'
@@ -19,13 +19,27 @@ initializeIcons();
 export const AppRouteCfg = {
   '/': {
     component: Panes,
+    componentFetch: {
+      operation: "get",
+      store: "products",
+      query: {type: "Category"}
+    }
+  },
+  '/p': {
+    component: Panes3x,
+    componentFetch: {
+      operation: "get",
+      store: "products",
+      urlidField: "category",
+      query: {type: "Product"}
+    }
   },
   [`/${AddToCart.name}`] : {
     component: AddToCart,
-    initialFetch: {
+    componentFetch: {
       operation: "getOne",
       store: "products",
-      recordid: true
+      urlidField: "recordid"
     }
   },
   [`/mycart`] : {
@@ -33,7 +47,7 @@ export const AppRouteCfg = {
     routeProps: {
       checkout: false
     },
-    initialFetch: {
+    componentFetch: {
       operation: "mycart"
     }
   },
@@ -43,52 +57,54 @@ export const AppRouteCfg = {
       checkout: true
     },
     requireAuth: true,
-    initialFetch: {
+    componentFetch: {
       operation: "mycart"
     }
   },
   [`/${ManageOrders.name}`] : {
     component: ManageOrders,
-    initialFetch: {
+    componentFetch: {
       operation: "get",
-      store: "orders"
+      store: "orders",
+      query: { status: { $gte: 30}},
     }
   },
   [`/${Order.name}`] : {
     component: Order,
-    initialFetch: {
+    componentFetch: {
       operation: "getOne",
       store: "orders",
-      recordid: true
+      urlidField: "recordid"
     }
   },
   [`/${ManageProducts.name}`] : {
     component: ManageProducts,
-    initialFetch: {
+    componentFetch: {
       operation: "get",
       store: "products"
     }
   },
   [`/${BusinessHome.name}`] : {
     component: BusinessHome,
-    initialFetch: {
+    componentFetch: {
       operation: "get",
       store: "business"
     }
   },
   [`/${MyBusiness.name}`] : {
     component: MyBusiness,
-    initialFetch: {
+    componentFetch: {
       operation: "get",
-      store: "business"
+      store: "business",
+      refdata: ["products"]
     }
   },
   [`/${Product.name}`] : {
     component: Product,
-    initialFetch: {
+    componentFetch: {
       operation: "getOne",
       store: "products",
-      recordid: true
+      urlidField: "recordid"
     }
   }
 }
