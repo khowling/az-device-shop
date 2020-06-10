@@ -94,9 +94,9 @@ export const AppRouteCfg = {
   [`/${MyBusiness.name}`] : {
     component: MyBusiness,
     componentFetch: {
-      operation: "get",
+      operation: "getOne",
       store: "business",
-      refdata: ["products"]
+      refstores: ["products", "workitems"]
     }
   },
   [`/${Product.name}`] : {

@@ -2,8 +2,8 @@
 // Mongo require
 const {MongoClient, Binary, ObjectID} = require('mongodb'),
     bson = require ('bson'),
-    MongoURL = process.env.MONGO_DB,
-    USE_COSMOS = true
+    MongoURL = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev",
+    USE_COSMOS = false
 
     const StoreDef = {
         "orders": { collection: "orders", },
@@ -54,7 +54,7 @@ async function init() {
             { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
         ],
         { fullDocument: "updateLookup"
-        , ResumeAfter : bson.deserialize(Buffer.from("QwAAAAVfZGF0YQAyAAAAAFt7InRva2VuIjoiXCI0OVwiIiwicmFuZ2UiOnsibWluIjoiIiwibWF4IjoiRkYifX1dAA==", 'base64'))
+        //, ResumeAfter : bson.deserialize(Buffer.from("QwAAAAVfZGF0YQAyAAAAAFt7InRva2VuIjoiXCI0OVwiIiwicmFuZ2UiOnsibWluIjoiIiwibWF4IjoiRkYifX1dAA==", 'base64'))
         //, StartAfter : {_data: Binary(new Buffer.from('W3sidG9rZW4iOiJcIjI2XCIiLCJyYW5nZSI6eyJtaW4iOiIiLCJtYXgiOiJGRiJ9fV0=', 'base64'))}
         //, startAtOperationTime:   new Date()  
     });

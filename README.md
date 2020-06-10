@@ -79,10 +79,26 @@ else
     exit 1
 fi
 
-## local loop
+## local loop, setting up Mongo
+
+
+A _replica set_ in MongoDB is a group of mongod processes that maintain a syncronised copy of the same data set to provide redundancy and high availability. 
+
+Replicasets are required to allow the programmer to use the _Change Streams_ feature.
+
+One member is deemed the _primary node_, receiving all write operations, while the other nodes are deemed secondary nodes.  The secondaries replicate the primary’s oplog and apply the operations to their data sets such that the secondaries’ data sets reflect the primary’s data set.
+
+When a primary does not communicate with the other members for 10seconds, an eligible secondary calls for an election to nominate itself as the new primary
+
 
 ```
 docker volume create --name=mongodata
-docker run  -v mongodata:/data/db -d -p 27017:27017 mongo
+## its not a sharded cluster, its a Replica Set single instance, 
+docker run  -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0
+
+in mongo cli, run:  >  rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "localhost:27017" } ] } ))
+```
+
+```
 mongoimport --db dbdev --collection products --jsonArray --file ./testing/testdata_products.json
 ```

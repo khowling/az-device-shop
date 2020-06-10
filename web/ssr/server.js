@@ -59,7 +59,19 @@ const StoreDef = {
         }).xor('url', 'filename').xor('url', 'container_url')
     })
   },
+  "workitems": {
+    owner: true,
+    collection: "workitems",
+    schema: Joi.object({
+        'status': Joi.string().valid('Planned','InFactory', 'Complete').required(),
+        'product': Joi.string().required(),
+        'category': Joi.string().required(),
+        'warehouse': Joi.string().required(),
+        'qty': Joi.number().required()
+    })
+  },
   "orders": {
+    owner: true,
     status: {
         InactiveCart: 5,
         ActiveCart : 10,
@@ -97,7 +109,13 @@ const FetchOperation = {
     "get": async function (ctx, store, query, projection) {
         const s = StoreDef[store]
         if (!s) throw `unknown ${store}`
-        const cursor  = ctx.db.collection(s.collection).find(query, projection? {projection}: null)
+
+        let find_query = {...query, partition_key: "TEST"}
+        if (store.onwer) {
+            if (!ctx.session.auth.sub) throw `${store} requires signin`
+            find_query["owner._id"] = ctx.session.auth.sub
+        }
+        const cursor  = ctx.db.collection(s.collection).find(find_query, projection? {projection}: null)
 
         if (s.split_types) {
             // setup response oject with empty arrarys with all possible values of 'type'
@@ -117,6 +135,13 @@ const FetchOperation = {
     "getOne": async function (ctx, store, query, projection) {
         const s = StoreDef[store]
         if (!s) throw `unknown ${store}`
+        
+        let find_query = {...query, partition_key: "TEST"}
+        if (store.onwer) {
+            if (!ctx.session.auth.sub) throw `${store} requires signin`
+            find_query["owner._id"] = ctx.session.auth.sub
+        }
+
         return await ctx.db.collection(s.collection).findOne(query, projection? {projection}: null)
     },
     // -------------------------------
@@ -127,9 +152,6 @@ const FetchOperation = {
 
         if (componentFetch) {
 
-            async function getRefData(ctx, collection) {
-              return await FetchOperation.get (ctx, collection, {partition_key: "TEST"})
-            }
             let query = {partition_key: "TEST"}
 
             if (componentFetch.urlidField) {
@@ -145,8 +167,13 @@ const FetchOperation = {
             }
             //console.log (`ssr componentFetch (${componentFetch.operation}): ${JSON.stringify(oppArgs)}`)]
             result.data = await FetchOperation[componentFetch.operation](ctx, componentFetch.store, query)
-            if (componentFetch.refdata && componentFetch.refdata.length >0) {
-              result.refdata = await getRefData(ctx, componentFetch.refdata[0])
+            if (componentFetch.refstores && componentFetch.refstores.length >0) {
+                let fetch_promises = []
+                for (let ref_store of componentFetch.refstores) {
+                    console.log (`componentFetch: get refstore : ${ref_store}`)
+                    fetch_promises.push(FetchOperation.get (ctx, ref_store))
+                }
+                result.refstores = (await Promise.all(fetch_promises)).reduce ((o, v, i) => { return {...o, [componentFetch.refstores[i]]: v}}, {})
             }
             return result
         } else return  Promise.resolve({})
@@ -182,6 +209,7 @@ async function dbInit() {
                 }
             }
         } else {
+            console.log ('createCollection')
             await _db.createCollection(StoreDef[store].collection)
         }
     }
@@ -518,7 +546,7 @@ const api = new Router({prefix: '/api'})
                 ctx.body =  await ctx.db.collection(store.collection).updateOne({_id: ObjectID(_id), partition_key: "TEST"}, 
                 { $set: value }, {_id: ObjectID(_id), partition_key: "TEST"})
             } else {
-                ctx.body =  await ctx.db.collection(store.collection).insertOne({...value, _id: ObjectID(_id), partition_key: "TEST"})
+                ctx.body =  await ctx.db.collection(store.collection).insertOne({...value, _id: ObjectID(), owner: {_id: ctx.session.auth.sub}, partition_key: "TEST"})
             }
             await next()
         } catch (e) {

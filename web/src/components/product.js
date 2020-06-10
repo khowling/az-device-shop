@@ -20,7 +20,7 @@ import { useConstCallback } from '@uifabric/react-hooks';
 import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react/lib/ChoiceGroup';
 import { Dropdown } from '@fluentui/react/lib/Dropdown';
 
-export function Product({dismissPanel, resource, type, refdata}) {
+export function Product({dismissPanel, resource, type, refstores}) {
 
   const {status, result } = resource.read()
   //console.log (`Product: result.image : ${JSON.stringify(result.image)}`)
@@ -131,7 +131,7 @@ export function Product({dismissPanel, resource, type, refdata}) {
         
         <Stack {...columnProps}>
           { input.type == "Product" ?
-            <Dropdown label="Category" defaultSelectedKey={input.category} onChange={(e,i) => _onChange({target: {name: "category"}}, i.key)} options={refdata.Category} />
+            <Dropdown label="Category" defaultSelectedKey={input.category} onChange={(e,i) => _onChange({target: {name: "category"}}, i.key)} options={refstores.Category} />
           :
             <ChoiceGroup label="Category Position" onChange={(e,i) => _onChange({target: {name: "position"}}, i.key)}  defaultSelectedKey={input.position} options={[
               { key: 'hero', text: 'Hero', iconProps: { iconName: 'FitWidth' } },
@@ -223,13 +223,17 @@ const classNames = mergeStyleSets({
     fontFamily: ["Segoe UI", "Segoe UI Web (West European)", "Segoe UI", "-apple-system", "BlinkMacSystemFont", "Roboto", "Helvetica Neue", "sans-serif"]
   }
 })
+
+
+
+//  ----------------------------------------------------------------- ManageProducts
 export function ManageProducts({resource}) { 
   const [panel, setPanel] = React.useState({open: false})
   const {status, result } = resource.read()
 
   const openNewItem = useConstCallback((type, editid) => {
-    const refdata = type == 'Product' ? {'Category': result.Category.map(c => { return {key: c._id, text: c.heading}})} : {}
-    setPanel({open: true, type, resource: editid? _suspenseFetch('store/products', editid) :  _suspenseWrap({}), refdata})
+    const refstores = type == 'Product' ? {'Category': result.data.Category.map(c => { return {key: c._id, text: c.heading}})} : {}
+    setPanel({open: true, type, resource: editid? _suspenseFetch('store/products', editid) :  _suspenseWrap({}), refstores})
   })
   const dismissPanel = useConstCallback(() => setPanel({open: false}));
 
@@ -245,7 +249,7 @@ export function ManageProducts({resource}) {
         //type={PanelType.medium}
         closeButtonAriaLabel="Close">
           { panel.open &&
-            <Product type={panel.type} refdata={panel.refdata} dismissPanel={dismissPanel} resource={panel.resource} />
+            <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
           }
       </Panel>
 
@@ -283,7 +287,7 @@ export function ManageProducts({resource}) {
           }
         ]}
         compact={true}
-        items={result.Category}
+        items={result.data.Category || []}
         onItemInvoked={ (i) => openNewItem("Category", i._id) }
         selectionMode={SelectionMode.none}
         setKey="none"
@@ -319,7 +323,7 @@ export function ManageProducts({resource}) {
                 minWidth: 25,
                 maxWidth: 150,
                 onRender: (item) => {
-                return <Text variant="medium">{result.Category.find(i => item.category == i._id).heading}</Text> ;
+                return <Text variant="medium">{result.data.Category.find(i => item.category == i._id).heading}</Text> ;
                 }
             },
             {
@@ -374,7 +378,7 @@ export function ManageProducts({resource}) {
             },
         ]}
         compact={false}
-        items={result.Product}
+        items={result.data.Product || []}
         selectionMode={SelectionMode.none}
         setKey="none"
         onItemInvoked={ (i) => openNewItem("Product", i._id) }
