@@ -29,7 +29,7 @@ function WorkItem({resource, dismissPanel, refstores}) {
   const [input, handleInputChange] = useState ({
     'qty': result.qty,
     'engineers': result.engineers,
-    'status': "Planned",
+    'status': "Required",
     'category': result.category,
     'product': result.product,
     'price': result.price,
@@ -45,7 +45,7 @@ function WorkItem({resource, dismissPanel, refstores}) {
 
  function _save() {
     setError(null)
-    _fetchit('POST','/api/store/workitems', result._id? {_id: result._id, ...input}: input).then(succ => {
+    _fetchit('POST','/api/store/inventory', result._id? {_id: result._id, ...input}: input).then(succ => {
       console.log (`created success : ${JSON.stringify(succ)}`)
       navTo("/MyBusiness")
       dismissPanel()
@@ -92,11 +92,13 @@ function WorkItem({resource, dismissPanel, refstores}) {
 export function MyBusiness({resource}) { 
 
   const {status, result } = resource.read()
-  const mybusiness = result.data
-  const {products, workitems } = result.refstores
-  
 
+  const mybusiness = result.data
+  const {products } = result.refstores
+  
+  const [workitems, setWorkitems] = React.useState([])
   const [panel, setPanel] = React.useState({open: false})
+  const [message, setMessage] = React.useState({type: MessageBarType.info, msg: "Not Connected to Factory Controller"})
 
   const openWorkItem = useConstCallback((type, editid) => {
     const refstores = {
@@ -128,13 +130,47 @@ export function MyBusiness({resource}) {
     width: '100%'
   }
 
+  
+  useEffect(() => {
+    // Update the document title using the browser API
+    let ws, recordederror = false
+    try {
+      console.log (`connect to factoryOperator`)
+      // async!
+      ws = new WebSocket(`ws://${window.location.hostname}:9090/path`)
+      ws.onopen = (e) => {
+        setMessage({type: MessageBarType.success, msg: `Connected to Factory Controller`})
+      }
+      ws.onerror = (e) => {
+        recordederror = true
+        setMessage({type: MessageBarType.error, msg: `Failed to connect to Factory Controller : Refresh page to retry`})
+      }
+      ws.onclose = () => {
+        if (!recordederror) setMessage({type: MessageBarType.warning, msg: `Not Connected, refresh page to reconnect`})
+      }
+      ws.onmessage = (e) => {
+        //console.log(`dispatching message from server ${event.data}`);
+        var msg = JSON.parse(e.data)
+        setWorkitems(msg)
+        console.log (msg)
+      }
+    } catch (e) {
+      setMessage ({type: MessageBarType.severeWarning, msg: `Cannot Connect to Factory Controller : ${e}`})
+    }
+    return function cleanup() {
+      console.log (`cleaning up ws : ${ws}`)
+      ws.close()
+    }
+  }, [])
+
+
 
 
   return (
     <Stack  wrap tokens={{ childrenGap: 0, padding: 0 }}>
 
       <Panel
-        headerText="Create WorkItem"
+        headerText="New Inventory Request"
         isOpen={panel.open}
         onDismiss={dismissPanel}
         type={PanelType.medium}
@@ -175,49 +211,70 @@ export function MyBusiness({resource}) {
       <Separator></Separator>
 
 
-      <h3>Factory</h3>
-      <Stack  horizontal  tokens={{ childrenGap: 5, padding: 10 }}>
-      
-        <Stack  
-          tokens={{ childrenGap: 8, padding: 8 }}
-          styles={{root: {
-            background: 'rgb(225, 228, 232)',
-            width: '100%',
-          }}} >
-          <h4>Planned</h4>
-          { workitems.map (i => 
-            <span style={workItemStyle}>{products.Product.find(p => p._id === i.product).heading} - {i.qty}</span>
-          )}
+      <h3>Factory Operator</h3>
+      <Stack tokens={{ childrenGap: 5, padding: 10 }}>
+      <MessageBar messageBarType={message.type}>{message.msg}</MessageBar>
+        <Stack  horizontal  tokens={{ childrenGap: 5, padding: 0 }}>
+        
+          <Stack  
+            tokens={{ childrenGap: 8, padding: 8 }}
+            styles={{root: {
+              background: 'rgb(225, 228, 232)',
+              width: '100%',
+            }}} >
+            <h4>Planned</h4>
+            { workitems && workitems.filter(i => i.status.stage === 0).map ((i,idx) => 
+              <div key={idx} style={workItemStyle}>
+                {products.Product.find(p => p._id === i.spec.product).heading} - {i.spec.qty}
+                <br/>
+                <span>{i.status.waittime}%</span>
+              </div>
+            )}
+            
+            
+          </Stack>
           
-          <DefaultButton iconProps={{ iconName: 'Add' }}  text="Create Factory Order" styles={{root: {margin: 10}}} onClick={openWorkItem} />
-        </Stack>
-      
-        <Stack  
-          tokens={{ childrenGap: 8, padding: 8 }}
-          styles={{root: {
-            background: 'rgb(225, 228, 232)',
-            width: '100%',
-          }}} >
-          <h4>In Progress</h4>
-          <span style={workItemStyle}>1</span>
-          <span style={workItemStyle}>2</span>
-        </Stack>
-  
-        <Stack  
-          tokens={{ childrenGap: 8, padding: 8 }}
-          styles={{root: {
-            background: 'rgb(225, 228, 232)',
-            width: '100%',
-          }}} >
-          <h4>Complete</h4>
-          <span style={workItemStyle}>1</span>
-          <span style={workItemStyle}>2</span>
-        </Stack>
+        
+          <Stack  
+            tokens={{ childrenGap: 8, padding: 8 }}
+            styles={{root: {
+              background: 'rgb(225, 228, 232)',
+              width: '100%',
+            }}} >
+            <h4>In Progress</h4>
+            { workitems && workitems.filter(i => i.status.stage === 1).map ((i,idx) => 
+              <div key={idx} style={workItemStyle}>
+                {products.Product.find(p => p._id === i.spec.product).heading} - {i.spec.qty}
+                <br/>
+                <span>{i.status.progress}%</span>
+              </div>
+            )}
+          </Stack>
+    
+          <Stack  
+            tokens={{ childrenGap: 8, padding: 8 }}
+            styles={{root: {
+              background: 'rgb(225, 228, 232)',
+              width: '100%',
+            }}} >
+            <h4>Complete</h4>
+            { workitems && workitems.filter(i => i.status.stage === 2).map ((i,idx) => 
+              <div key={idx} style={workItemStyle}>
+                {products.Product.find(p => p._id === i.spec.product).heading} - {i.spec.qty}
+                <br/>
+                <span>{i.status.progress}%</span>
+              </div>
+            )}
+          </Stack>
 
-
+          
+        </Stack>
+        <DefaultButton iconProps={{ iconName: 'Add' }}  text="Create Intentory" styles={{root: {width: 180}}} onClick={openWorkItem} />
       </Stack>
 
+
       <Separator></Separator>
+
       <h3>Warehouses</h3>
       <Stack tokens={{ childrenGap: 5, padding: 10 }}>
         <Stack  horizontal tokens={{ childrenGap: 30, padding: 0 }}>

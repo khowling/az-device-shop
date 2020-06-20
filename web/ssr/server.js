@@ -59,11 +59,11 @@ const StoreDef = {
         }).xor('url', 'filename').xor('url', 'container_url')
     })
   },
-  "workitems": {
+  "inventory": {
     owner: true,
-    collection: "workitems",
+    collection: "inventory",
     schema: Joi.object({
-        'status': Joi.string().valid('Planned','InFactory', 'Complete').required(),
+        'status': Joi.string().valid('Required','InFactory', 'Cancel', 'Available').required(),
         'product': Joi.string().required(),
         'category': Joi.string().required(),
         'warehouse': Joi.string().required(),
@@ -100,7 +100,7 @@ const FetchOperation = {
     "mycart": async function (ctx) {
         const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({owner: {_id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id}, status: StoreDef["orders"].status.ActiveCart, partition_key: "TEST"})
         if (cart && cart.items) {
-            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }}).toArray()
+            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }, partition_key: "TEST"}).toArray()
             const ref_products_map = ref_products.reduce((a,c) => Object.assign({},a,{ [String(c._id)]: c}),null)
             cart.items = cart.items.map(i => Object.assign(i, {item: ref_products_map[String(i.item._id)] || {_id: i.item._id, _error: 'missing item'}}))
         }
@@ -535,7 +535,7 @@ const api = new Router({prefix: '/api'})
 
             const   {_id, ...body }  = ctx.request.body,
                     store = StoreDef[ctx.params.store]
-            
+            if (!ctx.session.auth) throw `unauthenticated`
             if (!store) throw `unknown store: ${ctx.params.store}`
 
             const {value, error} = store.schema.validate(body, {allowUnknown: false})
@@ -546,7 +546,7 @@ const api = new Router({prefix: '/api'})
                 ctx.body =  await ctx.db.collection(store.collection).updateOne({_id: ObjectID(_id), partition_key: "TEST"}, 
                 { $set: value }, {_id: ObjectID(_id), partition_key: "TEST"})
             } else {
-                ctx.body =  await ctx.db.collection(store.collection).insertOne({...value, _id: ObjectID(), owner: {_id: ctx.session.auth.sub}, partition_key: "TEST"})
+                ctx.body =  await ctx.db.collection(store.collection).insertOne({...value, _id: ObjectID(), owner: {_id: ctx.session.auth.sub}, creation: Date.now(), partition_key: "TEST"})
             }
             await next()
         } catch (e) {

@@ -19,9 +19,18 @@ Ecommerce - Azure Example application highlighting the following architectural p
 
 ## Design Rationals
 
+### Serivces Coupling
+
+Questions:
+
+Can independent services share a collection definition?  This is an antipattern for shared dependencies?
+Can services call other services syncronously?  This is a antipattern for building reliable systems?
+Can differnet services 'master' specific fields on a collection?
+
+
 ### Data Persistance
 
-The Design of the application is highly influenced by the choice of the features of the chosen data persistance service, in this case, CosmosDB.
+The Design of the application is highly influenced by the choice of the features of the chosen data persistance service, in this case, CosmosDB/Mongodb.
 
 ### Resilience
 

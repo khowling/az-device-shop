@@ -96,7 +96,7 @@ export const AppRouteCfg = {
     componentFetch: {
       operation: "getOne",
       store: "business",
-      refstores: ["products", "workitems"]
+      refstores: ["products"]//, "workitems"]
     }
   },
   [`/${Product.name}`] : {
