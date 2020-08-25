@@ -1,14 +1,14 @@
-import React, {useContext, Suspense} from 'react';
-import {useRouter} from './components/router'
-import {Nav} from './components/page'
-import {Panes, Panes3x} from './components/store'
-import {AddToCart, MyCart} from './components/cart'
-import {ManageOrders, Order} from './components/order'
-import {ManageProducts, Product} from './components/product'
-import {MyBusiness, BusinessHome} from './components/business'
+import React, { useContext, Suspense } from 'react';
+import { useRouter } from './components/router'
+import { Nav } from './components/page'
+import { Panes, Panes3x } from './components/store'
+import { AddToCart, MyCart } from './components/cart'
+import { ManageOrders, Order } from './components/order'
+import { ManageProducts, Product } from './components/product'
+import { MyBusiness, StartBusiness } from './components/business'
 
 import RenderContext from './RenderContext'
-import {_suspenseFetch, _suspenseWrap} from './utils/fetch'
+import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
 
 import './App.css';
 import { initializeIcons } from '@uifabric/icons';
@@ -22,7 +22,7 @@ export const AppRouteCfg = {
     componentFetch: {
       operation: "get",
       store: "products",
-      query: {type: "Category"}
+      query: { type: "Category" }
     }
   },
   '/p': {
@@ -31,18 +31,20 @@ export const AppRouteCfg = {
       operation: "get",
       store: "products",
       urlidField: "category",
-      query: {type: "Product"}
+      query: { type: "Product" },
+      refstores: [{ store: "products", lookup_field: "urlidField" }]
     }
   },
-  [`/${AddToCart.name}`] : {
+  [`/${AddToCart.name}`]: {
     component: AddToCart,
     componentFetch: {
       operation: "getOne",
       store: "products",
-      urlidField: "recordid"
+      urlidField: "recordid",
+      refstores: [{ store: "products", lookup_field: "category" }]
     }
   },
-  [`/mycart`] : {
+  [`/mycart`]: {
     component: MyCart,
     routeProps: {
       checkout: false
@@ -51,7 +53,7 @@ export const AppRouteCfg = {
       operation: "mycart"
     }
   },
-  [`/checkout`] : {
+  [`/checkout`]: {
     component: MyCart,
     routeProps: {
       checkout: true
@@ -61,15 +63,15 @@ export const AppRouteCfg = {
       operation: "mycart"
     }
   },
-  [`/${ManageOrders.name}`] : {
+  [`/${ManageOrders.name}`]: {
     component: ManageOrders,
     componentFetch: {
       operation: "get",
       store: "orders",
-      query: { status: { $gte: 30}},
+      query: { status: { $gte: 30 } },
     }
   },
-  [`/${Order.name}`] : {
+  [`/${Order.name}`]: {
     component: Order,
     componentFetch: {
       operation: "getOne",
@@ -77,29 +79,29 @@ export const AppRouteCfg = {
       urlidField: "recordid"
     }
   },
-  [`/${ManageProducts.name}`] : {
+  [`/${ManageProducts.name}`]: {
     component: ManageProducts,
     componentFetch: {
       operation: "get",
       store: "products"
     }
   },
-  [`/${BusinessHome.name}`] : {
-    component: BusinessHome,
+  [`/${StartBusiness.name}`]: {
+    component: StartBusiness,
     componentFetch: {
       operation: "get",
       store: "business"
     }
   },
-  [`/${MyBusiness.name}`] : {
+  [`/${MyBusiness.name}`]: {
     component: MyBusiness,
     componentFetch: {
-      operation: "getOne",
-      store: "business",
-      refstores: ["products"]//, "workitems"]
+      operation: "get",
+      store: "inventory",
+      refstores: [{ store: "products" }]//, "workitems"]
     }
   },
-  [`/${Product.name}`] : {
+  [`/${Product.name}`]: {
     component: Product,
     componentFetch: {
       operation: "getOne",
@@ -109,17 +111,17 @@ export const AppRouteCfg = {
   }
 }
 
-export function App({startUrl}) {
-  const routeElements = useRouter (startUrl, AppRouteCfg)
+export function App({ startUrl }) {
+  const routeElements = useRouter(startUrl, AppRouteCfg)
 
-  const {ssrContext, session} = useContext(RenderContext)
+  const { ssrContext, session } = useContext(RenderContext)
   let sessionResource
   if (ssrContext === "spa") {
     try {
       // call server AJAX for session state
       sessionResource = _suspenseFetch('session_status')
     } catch (e) {
-      console.log (e)
+      console.log(e)
     }
   } else {
     // session state injected from the server, so immediatly resolve 
@@ -130,7 +132,7 @@ export function App({startUrl}) {
     <Fabric>
       <main id="mainContent" data-grid="container">
         <Suspense fallback={<div>wait</div>}>
-          <Nav resource={sessionResource}/>
+          <Nav resource={sessionResource} />
         </Suspense>
         {routeElements}
       </main>
