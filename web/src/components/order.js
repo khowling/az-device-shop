@@ -17,7 +17,7 @@ export function ManageOrders({ resource }) {
             <Breadcrumb
                 items={[
                     { text: 'Home', key: 'home', href: '/' },
-                    { text: 'My Orders', key: 'cat', href: `/ManageOrders` }]} />
+                    { text: 'My Orders', key: 'myorder', href: `/ManageOrders` }]} />
 
             <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
 

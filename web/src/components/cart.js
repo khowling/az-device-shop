@@ -79,7 +79,7 @@ function Summary({ cart, checkout }) {
   function _checkout() {
     setState({ state: "wait" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('PUT', '/api/checkout').then(succ => {
+    _fetchit('/api/checkout', 'PUT').then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
       setState({ state: "ordered", response: succ })
       //navTo("ManageOrders")
@@ -113,7 +113,7 @@ function Summary({ cart, checkout }) {
 
 
       {checkout ? [
-        <Stack.Item>
+        <Stack.Item key="address">
           <Label block={true}>Delivery Address:</Label>
           <Text style={{ marginLeft: "40px" }} block={true}>999 The Good Street</Text>
           <Text style={{ marginLeft: "40px" }} block={true}>Great Town</Text>
@@ -121,7 +121,7 @@ function Summary({ cart, checkout }) {
           <Text style={{ marginLeft: "40px" }} block={true}>PC1 TPC</Text>
         </Stack.Item>,
 
-        <ChoiceGroup style={{ marginTop: "40px" }}
+        <ChoiceGroup key="shipping" style={{ marginTop: "40px" }}
           label="Select Shipping option"
           onChange={(e, i) => setShipping(i.key)}
           defaultSelectedKey={shipping}
@@ -133,11 +133,11 @@ function Summary({ cart, checkout }) {
 
         />,
 
-        <Text style={{ marginTop: "20px" }} variant="large">
+        <Text key="ordertotal" style={{ marginTop: "20px" }} variant="large">
           Order Total ({cart.items_count || 0} items)  : £{(shipping === 'B' ? 9.99 : 0) + (Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00)}
         </Text>,
 
-        <PrimaryButton text="Place Order" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'} />
+        <PrimaryButton key="order" text="Place Order" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'} />
       ]
         :
         <Stack.Item >
@@ -164,7 +164,7 @@ export function MyCart({ resource, checkout }) {
 
   function _removeitem(cartline) {
     console.log(cartline)
-    _fetchit('PUT', '/api/cartdelete/' + cartline).then(succ => {
+    _fetchit('/api/cartdelete/' + cartline, 'PUT').then(succ => {
       window.location.reload()
       //navTo('/mycart')
     }, err => {
@@ -220,7 +220,7 @@ export function MyCart({ resource, checkout }) {
       <Breadcrumb
         items={[
           { text: 'Home', key: 'home', href: '/' },
-          { text: 'My Cart', key: 'cat', href: `/mycart` }]} />
+          { text: 'My Cart', key: cart._id, href: `/mycart` }]} />
 
       <Stack horizontal wrap tokens={{ childrenGap: 15 }}>
         <Stack.Item styles={{ root: { width: "700px" } }} grow={1}>
@@ -246,7 +246,7 @@ export function AddToCart({ resource }) {
   function addorder() {
     setState({ state: "adding" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('POST', '/api/cartadd', { itemid: product._id, options: { "Colour": optColor } }).then(succ => {
+    _fetchit('/api/cartadd', 'POST', {}, { itemid: product._id, options: { "Colour": optColor } }).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
       setState({ state: "added", response: succ })
       //navTo("ViewOrder")
@@ -264,8 +264,8 @@ export function AddToCart({ resource }) {
       <Breadcrumb
         items={[
           { text: 'Home', key: 'home', href: '/' },
-          { text: category.heading, key: 'cat', href: `/p/${category._id}` },
-          { text: product.heading, key: 'cat', href: `/AddToCart/${product._id}` }]} />
+          { text: category.heading, key: category._id, href: `/p/${category._id}` },
+          { text: product.heading, key: product._id, href: `/AddToCart/${product._id}` }]} />
 
       <Stack horizontal wrap tokens={{ childrenGap: 15 }} >
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar } }} grow={1}>

@@ -58,8 +58,8 @@ const StoreDef = {
             'image': Joi.object({
                 'url': Joi.string().uri(),
                 'container_url': Joi.string().uri(),
-                'filename': Joi.string().uri({ relativeOnly: true })
-            }).xor('url', 'filename').xor('url', 'container_url')
+                'pathname': Joi.string().uri({ relativeOnly: true })
+            }).xor('url', 'pathname').xor('url', 'container_url')
         })
     },
     "inventory": {
@@ -226,7 +226,13 @@ async function dbInit() {
 // Init Web
 const app = new Koa();
 app.use(bodyParser())
-
+/*
+app.use(async function (ctx, next) {
+    ctx.set('Access-Control-Allow-Headers', '*')
+    ctx.set('Access-Control-Allow-origin', '*')
+    await next()
+})
+*/
 async function init() {
     // Init DB
     const db = app.context.db = await dbInit()
@@ -281,6 +287,7 @@ const path = require('path')
 const fs = require('fs')
 const stringReplaceStream = require('string-replace-stream')
 const fetch = require('./server_fetch')
+const { AzBlobWritable, createServiceSAS } = require('./AzBlobWritable')
 
 const PUBLIC_PATH = "/_assets_"
 const BUILD_PATH = "../build"
@@ -369,13 +376,8 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
             try {
                 const flow_body = `client_id=${client_id}&client_secret=${client_secret}&scope=openid&code=${encodeURIComponent(ctx.query.code)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(`http://localhost:3000/connect/microsoft/callback`)}`
 
-                const { access_token, id_token } = await fetch(app.context.openid_configuration.token_endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': "application/x-www-form-urlencoded",
-                        'Content-Length': Buffer.byteLength(flow_body)
-                    }
-                }, flow_body)
+                const { access_token, id_token } = await fetch(app.context.openid_configuration.token_endpoint, 'POST',
+                    { 'content-type': 'application/x-www-form-urlencoded' }, flow_body)
 
                 // Validated the signature of the ID token
                 // https://docs.microsoft.com/en-us/azure/active-directory-b2c/active-directory-b2c-reference-oidc#validate-the-id-token
@@ -441,68 +443,11 @@ function LoggedIn(ctx, next) {
     return ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
 }
 
-function createServiceSAS(key, storageacc, container, minutes, file) {
-
-    // first construct the string-to-sign from the fields comprising the request,
-    // then encode the string as UTF-8 and compute the signature using the HMAC-SHA256 algorithm
-    // Note that fields included in the string-to-sign must be URL-decoded
-
-    let exp_date = new Date(Date.now() + (minutes * 60 * 1000)),
-        //  The permissions associated with the shared access signature 
-        // (Blob: r=read, a=add, c=create, w=write,  d=delete)
-        // (Container: r=read, a=add, c=create, w=write,  d=delete, l=list)
-        signedpermissions = file ? "racw" : "rl",
-        signedstart = '',
-        signedexpiry = exp_date.toISOString().substring(0, 19) + 'Z',
-        // for Blob or Container level Signed Resoure
-        canonicalizedresource = file ? `/blob/${storageacc}/${container}/${file}` : `/blob/${storageacc}/${container}`,
-        signedidentifier = '', //if you are associating the request with a stored access policy.
-        signedIP = '',
-        signedProtocol = 'https',
-        signedversion = '2018-03-28',
-        rscc = '', // Blob Service and File Service Only, To define values for certain response headers, Cache-Control
-        rscd = '', // Content-Disposition
-        rsce = '', // Content-Encoding
-        rscl = '', // Content-Language
-        rsct = '', // Content-Type
-        stringToSign =
-            signedpermissions + "\n" +
-            signedstart + "\n" +
-            signedexpiry + "\n" +
-            canonicalizedresource + "\n" +
-            signedidentifier + "\n" +
-            signedIP + "\n" +
-            signedProtocol + "\n" +
-            signedversion + "\n" +
-            rscc + "\n" +
-            rscd + "\n" +
-            rsce + "\n" +
-            rscl + "\n" +
-            rsct
-
-    // create the string, then encode the string as UTF-8 and compute the signature using the HMAC-SHA256 algorithm
-    const sig = crypto.createHmac('sha256', Buffer.from(key, 'base64')).update(stringToSign, 'utf-8').digest('base64');
-    //console.log (`createServiceSAS stringToSign : ${stringToSign}`)
-    return {
-        exp_date: exp_date.getTime(),
-        container_url: `https://${storageacc}.blob.core.windows.net/${container}`,
-        sas:
-            //`st=2016-08-15T11:03:04Z&" +
-            // signed expire 2017-08-15T19:03:04Z
-            `se=${encodeURIComponent(signedexpiry)}&` +
-            //  The permissions associated with the shared access signature
-            `sp=${signedpermissions}&` +
-            // API Version
-            `sv=${signedversion}&` +
-            // The signedresource (sr) field specifies which resources are accessible via the shared access signature
-            // signed resource 'c' = the shared resource is a Container (and to the list of blobs in the container) 'b' = the shared resource is a Blob
-            `sr=${file ? "b" : "c"}&` +
-
-            //    "sip=0.0.0.0-255.255.255.255&" +
-            // The Protocal (https)
-            `spr=${signedProtocol}&` +
-            `sig=${encodeURIComponent(sig)}`
-    }
+function getFileSaS(store, filename) {
+    const fileprefix = encodeURIComponent(filename.substring(filename.lastIndexOf(".")))
+    const pathname = store + '/' + (new ObjectID()).toString() + fileprefix
+    const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10, pathname)
+    return Object.assign({ pathname }, retsas)
 }
 
 
@@ -647,10 +592,7 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(400, `No filename provided`)
         }
 
-        const fileprefix = encodeURIComponent(userdoc.filename.substring(userdoc.filename.lastIndexOf(".")))
-        const filename = 'products' + '/' + (new ObjectID()).toString() + fileprefix
-        const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10, filename)
-        ctx.body = Object.assign({ filename }, retsas)
+        ctx.body = getFileSaS('products', userdoc.filename)
         await next()
     })
     .get('/export', async function (ctx, next) {
@@ -683,6 +625,15 @@ const api = new Router({ prefix: '/api' })
     })
     .post('/import/:tenant', async function (ctx, next) {
         if (!ctx.request.body) throw `no body`
+
+        const { images, products } = await fetch('https://raw.githubusercontent.com/khowling/az-device-shop/master/setup/bikes.json')
+        const { Product, Category } = products
+
+        for (i of images) {
+            const myStream = AzBlobWritable(getFileSaS('products', 'image'))
+
+        }
+
     })
     .all('/*', async function (ctx, next) {
         if (!ctx._matchedRoute) {

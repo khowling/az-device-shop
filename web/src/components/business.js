@@ -48,7 +48,7 @@ function WorkItem({ resource, dismissPanel, refstores }) {
 
   function _save() {
     setError(null)
-    _fetchit('POST', '/api/store/inventory', result._id ? { _id: result._id, ...input } : input).then(succ => {
+    _fetchit('/api/store/inventory', 'POST', {}, result._id ? { _id: result._id, ...input } : input).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
       //navTo("/MyBusiness")
       dismissPanel()

@@ -16,7 +16,7 @@ export function Panes({ resource }) {
         <div className="m-panes" data-grid="col-12" style={{ "paddingTop": "0" }}>
             {hero.map(i =>
 
-                <section className="f-align-middle">
+                <section key={i._id} className="f-align-middle">
                     <div className="m-panes-product-placement-item">
                         <picture className="c-image" >
                             <MyImage styles={{ root: { margin: "0 auto;" } }} imageFit={ImageFit.CenterContain} width={450} image={i.image} alt="no pic" />
@@ -50,7 +50,7 @@ export function Panes({ resource }) {
 
             <section className="f-stacked">
                 {highlight.map(i =>
-                    <div>
+                    <div key={i._id}>
                         <div className="m-panes-product-placement-item">
                             <picture className="c-image">
                                 <MyImage imageFit={ImageFit.CenterContain} width={300} image={i.image} alt="no pic" />
@@ -99,7 +99,7 @@ export function Panes3x({ resource }) {
             <Breadcrumb
                 items={[
                     { text: 'Home', key: 'home', href: '/' },
-                    { text: category.heading, key: 'cat', href: '/' }]} />
+                    { text: category.heading, key: category._id, href: '/' }]} />
 
 
             <div className="m-panes" data-grid="col-12">

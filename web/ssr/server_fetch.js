@@ -1,20 +1,34 @@
 const https = require('https')
 const http = require('http')
 
-module.exports = async function (url, options = { method: "GET" }, body) {
+module.exports = async function (url, method = 'GET', headers = {}, body) {
+
+    let opts = { method }, req_body
+    if (body) {
+        if (typeof body === 'object') {
+            req_body = JSON.stringify(body)
+            opts.headers = {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(req_body),
+                ...headers
+            }
+        } else {
+            req_body = body
+            opts.headers = {
+                'content-length': Buffer.byteLength(req_body),
+                ...headers
+            }
+        }
+    }
+
+
     let http_s = https
     if (url.startsWith('http://')) http_s = http
     return new Promise(function (resolve, reject) {
-        const req = http_s.request(url, options, (res) => {
-            const { statusCode } = res;
-            const contentType = res.headers['content-type']
+        const req = http_s.request(url, opts, (res) => {
 
-            // This will cause the 'chunks' to be returned in unencoded Buffers, not strings!
-            //res.setEncoding(null)
-
-
-            if (statusCode !== 200) {
-                let error = new Error(`Request Failed: Status Code: ${statusCode}`)
+            if (res.statusCode !== 200) {
+                let error = new Error(`Request Failed: Status Code: ${res.statusCode}`)
                 console.error(error.message)
                 // Consume response data to free up memory
                 res.resume();
@@ -29,6 +43,7 @@ module.exports = async function (url, options = { method: "GET" }, body) {
                 strings.push(chunk)
             })
             res.on('end', () => {
+                const contentType = res.headers['content-type']
                 let body = strings.join('')
                 if (/^application\/json/.test(contentType)) {
 
@@ -53,9 +68,9 @@ module.exports = async function (url, options = { method: "GET" }, body) {
             return reject(e.message)
         })
 
-        if (options.method === 'POST') {
+        if (opts.method === 'POST') {
             // Write data to request body
-            req.write(body)
+            req.write(req_body)
         }
         req.end()
     })
