@@ -2,31 +2,29 @@ import React, { useState, useEffect } from 'react'
 import { Link, navTo, _encodeURL } from './router.js'
 import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react/lib/DetailsList'
 import { CommandBar } from '@fluentui/react/lib/CommandBar'
-import { TextField, MaskedTextField } from '@fluentui/react/lib/TextField'
+import { TextField } from '@fluentui/react/lib/TextField'
 import { Text } from '@fluentui/react/lib/Text'
-import { Toggle } from '@fluentui/react/lib/Toggle'
 import { Stack, IStackProps } from '@fluentui/react/lib/Stack'
 import { Image, IImageProps, ImageFit } from '@fluentui/react/lib/Image'
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar'
-import { Alert, MyImage } from '../utils/common'
+import { Alert, MyImage, EditImage } from '../utils/common'
 import { Label } from '@fluentui/react/lib/Label'
-import { PrimaryButton, Button, DefaultButton } from '@fluentui/react/lib/Button'
+import { PrimaryButton, DefaultButton } from '@fluentui/react/lib/Button'
 import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react/lib/Styling';
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { putBlob, listFiles } from '../utils/azureBlob.js'
 import { Separator } from '@fluentui/react/lib/Separator';
 import { Panel, PanelType } from '@fluentui/react/lib/Panel';
 import { useConstCallback } from '@uifabric/react-hooks';
 import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react/lib/ChoiceGroup';
 import { Dropdown } from '@fluentui/react/lib/Dropdown';
 
+
 export function Product({ dismissPanel, resource, type, refstores }) {
 
   const { status, result } = resource.read()
-  //console.log (`Product: result.image : ${JSON.stringify(result.image)}`)
+
   const [error, setError] = useState(null)
-  const [imageTypeUrl, setImageTypeUrl] = useState(result.image ? result.image.hasOwnProperty('url') : false)
-  const [imageUrl, setImageUrl] = useState(imageTypeUrl && result.image && result.image.url ? result.image.url : '')
+
   const [input, handleInputChange] = useState({
     'type': result.type || type,
     'heading': result.heading,
@@ -45,60 +43,10 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     })
   }
 
-
-  // Picture
-  const fileInputRef = React.createRef()
-
-  function _onImageUrlChange(e) {
-
-    if (imageTypeUrl) {
-      console.log(`_onImageUrlChange: update image ${e.currentTarget.value}`)
-      _onChange({ target: { name: "image" } }, { "url": e.currentTarget.value })
-    }
-  }
-
-  function _clickFile() {
-    fileInputRef.current.click()
-  }
-
-  function _fileuploadhtml5(e) {
-    var file = e.currentTarget.files[0];
-
-    if (file) {
-      console.log(`_fileuploadhtml5: ${file.name} - ${file.type}`)
-      putBlob(file, progressEvt => {
-        console.log('progress ' + progressEvt.loaded);
-        if (progressEvt.lengthComputable) {
-          //this.line.animate(Math.round(progressEvt.loaded / progressEvt.total));
-        } else {
-          //this.line.animate(0.5);
-        }
-      }, err => {
-        alert(`_fileuploadhtml5 Upload failed: ${err}`)
-      }).then(attachment => {
-
-        //this.line.animate(1, () => this.line.set(0));
-        console.log(`_fileuploadhtml5 Got : ${JSON.stringify(attachment)}`)
-
-        _onChange({ target: { name: "image" } }, attachment)
-
-        //data.documents[field.name] = evt.target.responseText;
-      }, err => {
-        // console.log ("There was an error attempting to upload the file:" + JSON.stringify(errEvt));
-        alert(`Upload failed: ${err}`)
-        //this.line.set(0);
-      })
-    } else {
-      console.log('pressed cancel')
-    }
-    return false;
-  }
-
   const columnProps = {
     tokens: { childrenGap: 15 },
     styles: { root: { width: 300 } }
   }
-
 
   function _save() {
     setError(null)
@@ -123,8 +71,9 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     })
   }
 
-  let previewsrc = !input.image ? "http://placehold.it/300x150" : imageTypeUrl ? input.image.url : input.image.container_url + "/" + input.image.pathname
-  return (
+  if (status === 'error')
+    return <Alert txt={result} />
+  else return (
     <Stack>
       <Separator></Separator>
       {/*<Stack horizontal tokens={{ childrenGap: 50 }} styles={{ root: { width: 650 } }}>*/}
@@ -182,20 +131,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
           />
         ]}
 
-        <Toggle label="Image location" inlineLabel onText="external Url" offText="File Upload" defaultChecked={imageTypeUrl} onChange={(e, val) => { console.log(`setImageTypeUrl ${val}`); setImageTypeUrl(val) }} />
-        <input type="file" ref={fileInputRef} name="file" style={{ display: "none" }} accept="image/*" onChange={_fileuploadhtml5} />
-
-        <a href={previewsrc} target="_won">
-          <Image
-            width={300} height={150}
-            src={previewsrc}
-            imageFit={ImageFit.centerContain}
-            alt="" />
-        </a>
-
-        <TextField prefix="Full Url" name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />
-        <DefaultButton iconProps={{ iconName: 'upload' }} styles={{ root: { display: imageTypeUrl ? "none" : "block" } }} onClick={_clickFile} >Upload file</DefaultButton>
-
+        <EditImage result_image={input.image} onChange={_onChange} />
 
         {error &&
           <MessageBar messageBarType={MessageBarType.error} isMultiline={false} truncated={true}>
@@ -204,9 +140,9 @@ export function Product({ dismissPanel, resource, type, refstores }) {
         }
         <Stack horizontal tokens={{ childrenGap: 5 }}>
           <PrimaryButton text="Save" onClick={_save} allowDisabledFocus disabled={false} />
-          <Button text="Cancel" /*href={_encodeURL("/ManageProducts")}*/ onClick={dismissPanel} allowDisabledFocus disabled={false} />
+          <DefaultButton text="Cancel" /*href={_encodeURL("/ManageProducts")}*/ onClick={dismissPanel} allowDisabledFocus disabled={false} />
           {result._id &&
-            <Button text="Delete" onClick={_delete} allowDisabledFocus disabled={false} />
+            <DefaultButton text="Delete" onClick={_delete} allowDisabledFocus disabled={false} />
           }
         </Stack>
       </Stack>

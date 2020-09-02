@@ -72,22 +72,23 @@ const { Writable } = require('stream'),
     BLOCK_SIZE = 4 * 1024 * 1024 // 4MB blocks
 
 class AzBlobWritable extends Writable {
-    constructor({ pathname, container_url, sas }, filetype, options = {}) {
-        super(options);
+
+    constructor({ pathname, container_url, sas, extension }, options = {}) {
+        super(options)
         this.saslocator = `${container_url}/${pathname}?${sas}`
         this.pathname = pathname
-        this.filetype = filetype
+        this.filetype = 'image/' + extension
         // fixed-sized, raw memory allocations outside the V8 heap, size =  bytes
         this.blockBuffer = Buffer.allocUnsafe(BLOCK_SIZE)
         this.blockBuffer_length = 0
         this.currblock = 0
-        this.sentBlockIDs = []
+        this.sendblockids = []
         this.totalbytes = 0
     }
 
-    _write(chunk, encoding, callback) {
-        // Callback for when this chunk of data is flushed. The return value indicates if you should continue writing right now
-        // Once the callback is invoked, the stream will emit a 'drain' event
+    _write(chunk, encoding, done) {
+        // done for when this chunk of data is flushed. The return value indicates if you should continue writing right now
+        // Once the done is invoked, the stream will emit a 'drain' event
         let space_left = BLOCK_SIZE - this.blockBuffer_length,
             chunk_to_copy = Math.min(space_left, chunk.length),
             chunk_remaining = chunk.length - chunk_to_copy
@@ -100,21 +101,24 @@ class AzBlobWritable extends Writable {
 
         if (this.blockBuffer_length < BLOCK_SIZE) {
             // blockBuffer got space_left
-            callback() // send callback data (add a error string if error)
+            done() // send done data (add a error string if error)
         } else {
             // blockBuffer
             let blockid = this.pathname + ('0000' + this.currblock++).slice(-4)
-            this.sentBlockIDs.push(blockid)
-            console.log(`putting block (${sendblockids.length}) ${blockid}`)
+            this.sendblockids.push(blockid)
+            console.log(`putting block (${this.sendblockids.length}) ${blockid}`)
 
 
 
-            fetch(`${this.saslocator}&comp=block&blockid=${new Buffer(this.blockid).toString('base64')}`, 'PUT', {
+            fetch(`${this.saslocator}&comp=block&blockid=${Buffer.from(blockid).toString('base64')}`, 'PUT', {
                 "x-ms-blob-content-type": this.filetype,
                 "x-ms-version": "2018-03-28"
             }, this.blockBuffer.slice(0, this.blockBuffer_length))
 
-                // this._putblock (this.currblock, this.blockBuffer.slice(0, this.blockBuffer_length))
+                //.catch(err => {
+                //    console.error(`AzBlobWritable _write caught: ${err}`)
+                //    done(new Error(err))
+                //})
                 .then(() => {
                     this.blockBuffer_length = 0
                     if (chunk_remaining > 0) {
@@ -124,38 +128,78 @@ class AzBlobWritable extends Writable {
                         this.blockBuffer_length = chunk_remaining
                         //console.log (`copying remaining, buffer new length ${this.blockBuffer_length},  chunk.length ${chunk.length}, chunk copied ${chunk_remaining}`)
                     }
-                    callback() // send callback data (add a error string if error)
-                }, (err) => callback(err))
+                    done() // send done data (add a error string if error)
+                }, (err) => {
+                    console.error(`AzBlobWritable _write reject: ${err}`)
+                    done(new Error(err))
+                })
         }
     }
 
-    _final(callback) {
-        let finalBlockFn = () => {
-            fetch(`${this.saslocator}&comp=blocklist`, 'PUT', {
+    _final(done) {
+
+        const finalBlockFn = () => {
+            return fetch(
+                `${this.saslocator}&comp=blocklist`, 'PUT', {
+                "content-type": "application/xml",
                 "x-ms-blob-content-type": this.filetype,
                 "x-ms-version": "2018-03-28",
-            }, '<?xml version="1.0" encoding="utf-8"?>' +
-            '<BlockList>' + this.sendblockids.map((l) => `<Latest>${new Buffer(l).toString('base64')}</Latest>`).join('') +
-            '</BlockList>')
-                .then(() => {
-                    callback() // send callback data (add a error string if error)
-                }, (err) => callback(err))
+            },
+                '<?xml version="1.0" encoding="utf-8"?>' +
+                '<BlockList>' + this.sendblockids.map((l) => `<Latest>${Buffer.from(l).toString('base64')}</Latest>`).join('') +
+                '</BlockList>'
+            )
         }
+
         if (this.blockBuffer_length > 0) {
-            //console.log (`writing ${this.blockBuffer_length}`)
 
             let blockid = this.pathname + ('0000' + this.currblock++).slice(-4)
-            this.sentBlockIDs.push(blockid)
-            console.log(`putting block (${sendblockids.length}) ${blockid}`)
+            this.sendblockids.push(blockid)
+            console.log(`AzBlobWritable _final putting block (${this.sendblockids.length})b ${blockid}`)
 
-            fetch(`${this.saslocator}&comp=block&blockid=${new Buffer(this.blockid).toString('base64')}`, 'PUT', {
+            fetch(
+                `${this.saslocator}&comp=block&blockid=${Buffer.from(blockid).toString('base64')}`,
+                'PUT', {
                 "x-ms-blob-content-type": this.filetype,
                 "x-ms-version": "2018-03-28"
             }, this.blockBuffer.slice(0, this.blockBuffer_length))
-                //this._putblock (this.currblock, this.blockBuffer.slice(0, this.blockBuffer_length))
-                .then(finalBlockFn, (err) => callback(err))
+                //    .catch(err => {
+                //        console.error(`AzBlobWritable _final caught: ${err}`)
+                //        done(new Error(err))
+                //    })
+                .then(() => {
+                    console.log(`AzBlobWritable _final success, now finalBlock`)
+                    finalBlockFn()
+                        //    .catch(err => {
+                        //        console.error(`AzBlobWritable _final finalBlockFn caught: ${err}`)
+                        //        done(new Error(err))
+                        //    })
+                        .then(() => {
+                            console.log(`AzBlobWritable _final finalBlockFn success`)
+                            done()
+                        }, (err) => {
+                            console.error(`AzBlobWritable _final finalBlockFn reject: ${err}`)
+                            done(new Error(err))
+                        })
+                }, (err) => {
+                    console.error(`AzBlobWritable _final reject: ${err}`)
+                    done(new Error(err))
+                })
+
         } else {
+            console.log(`AzBlobWritable _final finalBlockFn only`)
             finalBlockFn()
+                //.catch(err => {
+                //    console.error(`AzBlobWritable _final finalBlockFn caught: ${err}`)
+                //    done(new Error(err))
+                //})
+                .then(() => {
+                    console.log(`AzBlobWritable _final finalBlockFn success`)
+                    done()
+                }, (err) => {
+                    console.error(`AzBlobWritable _final finalBlockFn reject: ${err}`)
+                    done(new Error(err))
+                })
         }
     }
 }

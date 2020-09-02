@@ -1,5 +1,9 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Image, ImageFit } from '@fluentui/react/lib/Image'
+import { putBlob, listFiles } from '../utils/azureBlob.js'
+import { Toggle } from '@fluentui/react/lib/Toggle'
+import { TextField } from '@fluentui/react/lib/TextField'
+import { PrimaryButton, DefaultButton } from '@fluentui/react/lib/Button'
 
 
 export function MyImage({ image, ...rest }) {
@@ -144,3 +148,80 @@ export function AdditionalDetails() {
         </section>
     )
 }
+
+
+
+export function EditImage({ result_image, onChange }) {
+
+    const [imageTypeUrl, setImageTypeUrl] = useState(result_image ? result_image.hasOwnProperty('url') : false)
+    const [imageUrl, setImageUrl] = useState(imageTypeUrl && result_image && result_image.url ? result_image.url : '')
+
+    console.log(`EditImage, result_image ${JSON.stringify(result_image)}`)
+    let previewsrc = !result_image ? "http://placehold.it/300x150" : imageTypeUrl ? result_image.url : result_image.container_url + "/" + result_image.pathname
+    // Picture
+    const fileInputRef = React.createRef()
+
+    function _onImageUrlChange(e) {
+
+        if (imageTypeUrl) {
+            console.log(`_onImageUrlChange: update image ${e.currentTarget.value}`)
+            onChange({ target: { name: "image" } }, { "url": e.currentTarget.value })
+        }
+    }
+
+    function _clickFile() {
+        fileInputRef.current.click()
+    }
+
+    function _fileuploadhtml5(e) {
+        var file = e.currentTarget.files[0];
+
+        if (file) {
+            console.log(`_fileuploadhtml5: ${file.name} - ${file.type}`)
+            putBlob(file, progressEvt => {
+                console.log('progress ' + progressEvt.loaded);
+                if (progressEvt.lengthComputable) {
+                    //this.line.animate(Math.round(progressEvt.loaded / progressEvt.total));
+                } else {
+                    //this.line.animate(0.5);
+                }
+            }, err => {
+                alert(`_fileuploadhtml5 Upload failed: ${err}`)
+            }).then(attachment => {
+
+                //this.line.animate(1, () => this.line.set(0));
+                console.log(`_fileuploadhtml5 Got : ${JSON.stringify(attachment)}`)
+
+                onChange({ target: { name: "image" } }, attachment)
+
+                //data.documents[field.name] = evt.target.responseText;
+            }, err => {
+                // console.log ("There was an error attempting to upload the file:" + JSON.stringify(errEvt));
+                alert(`Upload failed: ${err}`)
+                //this.line.set(0);
+            })
+        } else {
+            console.log('pressed cancel')
+        }
+        return false;
+    }
+
+
+    return [
+        <Toggle key="image_Toggle" label="Image location" inlineLabel onText="external Url" offText="File Upload" defaultChecked={imageTypeUrl} onChange={(e, val) => { console.log(`setImageTypeUrl ${val}`); setImageTypeUrl(val) }} />,
+        <input key="image_input" type="file" ref={fileInputRef} name="file" style={{ display: "none" }} accept="image/*" onChange={_fileuploadhtml5} />,
+
+        <a key="image_a" href={previewsrc} target="_won">
+            <Image
+                width={300} height={150}
+                src={previewsrc}
+                imageFit={ImageFit.centerContain}
+                alt="" />
+        </a>,
+
+        <TextField key="image_text" prefix="Full Url" name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />,
+        <DefaultButton key="image_butt" iconProps={{ iconName: 'upload' }} styles={{ root: { display: imageTypeUrl ? "none" : "block" } }} onClick={_clickFile} >Upload file</DefaultButton>
+
+    ]
+}
+

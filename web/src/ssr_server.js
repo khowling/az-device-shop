@@ -3,7 +3,6 @@ import ReactDOMServer from 'react-dom/server'
 import RenderContext from './RenderContext'
 import { App, AppRouteCfg } from './App'
 import { pathToRoute } from './components/router'
-import { pathToRoute } from './utils/azureBlob'
 
 function ssrRender(startURL, renderData) {
     return ReactDOMServer.renderToString(

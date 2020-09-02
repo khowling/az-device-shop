@@ -1,11 +1,11 @@
 const https = require('https')
 const http = require('http')
 
-module.exports = async function (url, method = 'GET', headers = {}, body) {
+module.exports = function (url, method = 'GET', headers = {}, body) {
 
     let opts = { method }, req_body
     if (body) {
-        if (typeof body === 'object') {
+        if (typeof body === 'object' && !headers['x-ms-blob-content-type']) {
             req_body = JSON.stringify(body)
             opts.headers = {
                 'content-type': 'application/json',
@@ -27,51 +27,63 @@ module.exports = async function (url, method = 'GET', headers = {}, body) {
     return new Promise(function (resolve, reject) {
         const req = http_s.request(url, opts, (res) => {
 
-            if (res.statusCode !== 200) {
+            if (res.statusCode !== 200 && res.statusCode !== 201) {
                 let error = new Error(`Request Failed: Status Code: ${res.statusCode}`)
-                console.error(error.message)
+                //console.error(error.message)
                 // Consume response data to free up memory
                 res.resume();
-                return reject(error.message)
-            }
+                //throw new Error(error)
+                reject(error.message)
+            } else {
 
-
-            var strings = []
-
-            // data from the response object must be consumed, either by calling response.read() whenever there is a 'readable' event, or by adding a 'data' handler, or by calling the .resume() method. Until the data is consumed
-            res.on('data', function (chunk) {
-                strings.push(chunk)
-            })
-            res.on('end', () => {
+                // required to process binary image data into base64
                 const contentType = res.headers['content-type']
-                let body = strings.join('')
-                if (/^application\/json/.test(contentType)) {
-
-                    try {
-                        const parsedData = JSON.parse(body)
-                        return resolve(parsedData)
-                    } catch (e) {
-                        console.error(e.message)
-                        return reject(e.message)
-                    }
-                } else if (/^application\/xml/.test(contentType)) {
-                    return resolve(body)
-                } else if (/^image/.test(contentType)) {
-                    let b64_str = Buffer.from(body, 'binary').toString('base64')
-                    return resolve(b64_str)
-                } else {
-                    return reject(`Unknown content-type : ${contentType}`)
+                if (/^image/.test(contentType)) {
+                    res.setEncoding('binary')
                 }
-            });
+
+                // collect the data chunks
+                var strings = []
+                res.on('data', function (chunk) {
+                    strings.push(chunk)
+                })
+                res.on('end', () => {
+
+                    if (strings.length === 0) {
+                        resolve()
+                    } else {
+
+                        let body = strings.join('')
+                        if (/^application\/json/.test(contentType)) {
+
+                            try {
+                                const parsedData = JSON.parse(body)
+                                resolve(parsedData)
+                            } catch (e) {
+                                console.error(`server_fetch: ${e}`)
+                                reject(e)
+                            }
+                        } else if (/^application\/xml/.test(contentType)) {
+                            return resolve(body)
+                        } else if (/^image/.test(contentType)) {
+                            resolve(Buffer.from(body, 'binary').toString('base64'))
+                        } else {
+                            reject(`Unknown content-type : ${contentType}`)
+                        }
+                    }
+                })
+            }
         }).on('error', (e) => {
-            console.error(`Got error: ${e.message}`)
-            return reject(e.message)
+            console.error(`server_fetch: ${e.message}`)
+            reject(e.message)
         })
 
-        if (opts.method === 'POST') {
+        if (opts.method === 'POST' || opts.method === 'PUT') {
             // Write data to request body
-            req.write(req_body)
+            req.end(req_body)
+        } else {
+            req.end()
         }
-        req.end()
+
     })
 }

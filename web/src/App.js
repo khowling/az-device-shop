@@ -86,12 +86,8 @@ export const AppRouteCfg = {
       store: "products"
     }
   },
-  [`/${StartBusiness.name}`]: {
-    component: StartBusiness,
-    componentFetch: {
-      operation: "get",
-      store: "business"
-    }
+  ['/init']: {
+    component: StartBusiness
   },
   [`/${MyBusiness.name}`]: {
     component: MyBusiness,

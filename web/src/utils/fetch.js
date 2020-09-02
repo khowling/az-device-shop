@@ -33,7 +33,7 @@ export const _suspenseFetch = (operation, recordid) => {
 
 
 
-export async function _fetchit(url, method = 'GET', headers = {}, body = null) {
+export async function _fetchit(url, method = 'GET', headers = {}, body = null, chunkfn) {
   return new Promise((resolve, reject) => {
 
     console.log('fetch')
