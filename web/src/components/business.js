@@ -22,6 +22,7 @@ import { Dropdown } from '@fluentui/react/lib/Dropdown';
 import { PrimaryButton, Button, DefaultButton } from '@fluentui/react/lib/Button'
 import { Label } from '@fluentui/react/lib/Label'
 import { Checkbox } from '@fluentui/react/lib/Checkbox'
+import { Spinner } from '@fluentui/react/lib/Spinner';
 
 import update from 'immutability-helper';
 
@@ -126,7 +127,7 @@ function workitemReducer(state, action) {
   }
 }
 
-export function MyBusiness({ resource }) {
+export function Inventory({ resource }) {
 
   const { status, result } = resource.read()
 
@@ -629,13 +630,7 @@ export function StartBusiness() {
           {state.state === 'reset' ?
             <PrimaryButton text={`Initialise My Business`} onClick={_createBusiness} allowDisabledFocus disabled={Object.entries(validation).reduce((a, c) => a || c[1], null)} />
             : state.state === 'resetting' ?
-              <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
+              <Spinner label="Please Wait, will take a few seonds..." ariaLive="assertive" labelPosition="right" />
               : state.state === 'error' ?
                 <div className="m-alert f-warning" role="alert">
                   <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>

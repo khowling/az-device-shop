@@ -1,11 +1,11 @@
 import React from 'react'
-import ReactDOMServer from 'react-dom/server'
+import { renderToString } from 'react-dom/server'
 import RenderContext from './RenderContext'
 import { App, AppRouteCfg } from './App'
 import { pathToRoute } from './components/router'
 
 function ssrRender(startURL, renderData) {
-    return ReactDOMServer.renderToString(
+    return renderToString(
         <RenderContext.Provider value={renderData}>
             <App startUrl={startURL} />
         </RenderContext.Provider>)

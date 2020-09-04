@@ -5,7 +5,7 @@ import { Panes, Panes3x } from './components/store'
 import { AddToCart, MyCart } from './components/cart'
 import { ManageOrders, Order } from './components/order'
 import { ManageProducts, Product } from './components/product'
-import { MyBusiness, StartBusiness } from './components/business'
+import { Inventory, StartBusiness } from './components/business'
 
 import RenderContext from './RenderContext'
 import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
@@ -89,8 +89,8 @@ export const AppRouteCfg = {
   ['/init']: {
     component: StartBusiness
   },
-  [`/${MyBusiness.name}`]: {
-    component: MyBusiness,
+  [`/${Inventory.name}`]: {
+    component: Inventory,
     componentFetch: {
       operation: "get",
       store: "inventory",
@@ -127,7 +127,7 @@ export function App({ startUrl }) {
   return (
     <Fabric>
       <main id="mainContent" data-grid="container">
-        <Suspense fallback={<div>wait</div>}>
+        <Suspense fallback={<Nav></Nav>}>
           <Nav resource={sessionResource} />
         </Suspense>
         {routeElements}

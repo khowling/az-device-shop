@@ -29,7 +29,10 @@ export function putBlob(file, evtFn) {
 
         _fetchit(`${saslocator}&comp=block&blockid=${new Buffer(blockid).toString('base64')}`, 'PUT', {
           "x-ms-blob-content-type": filetype,
-          "x-ms-version": "2018-03-28"
+          "x-ms-version": "2018-03-28",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Request-Method": "PUT",
+          "Access-Control-Request-Headers": "Content-Type"
         }, event.target.result)
 
           .then(() => {
@@ -41,6 +44,9 @@ export function putBlob(file, evtFn) {
               _fetchit(`${saslocator}&comp=blocklist`, 'PUT', {
                 "x-ms-blob-content-type": filetype,
                 "x-ms-version": "2018-03-28",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Request-Method": "PUT",
+                "Access-Control-Request-Headers": "Content-Type"
               }, '<?xml version="1.0" encoding="utf-8"?>' +
               '<BlockList>' + sendblockids.map((l) => `<Latest>${new Buffer(l).toString('base64')}</Latest>`).join('') +
               '</BlockList>')

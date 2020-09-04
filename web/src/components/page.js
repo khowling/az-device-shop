@@ -1,11 +1,11 @@
 import React from 'react'
 import { Link, Redirect } from './router.js'
-import { Alert } from '../utils/common'
+import { Alert, MyImage } from '../utils/common'
 import { CommandBarButton } from '@fluentui/react/lib/Button'
-
+import { Text } from '@fluentui/react/lib/Text'
 
 export function Nav({ resource }) {
-  const { status, result } = resource.read()
+  const { status, result } = resource ? resource.read() : {}
 
   if (result && !result.tenent) {
     return <Redirect route='/init' />
@@ -14,9 +14,12 @@ export function Nav({ resource }) {
 
       <div className="c-navigation-menu" style={{ width: "100%" }}>
 
-        <Link className="navbar-brand no-outline">
-          <img src="https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png" alt="Microsoft" height="23" />
+        <Link className="navbar-brand no-outline" style={{ "display": "inline-block", "left": "5%", "vertical-align": "middle", "margin-top": "0px" }}>
+          <MyImage image={result && result.tenent.image} height="33px" />
+          { /* <img src="https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png" alt="Microsoft" height="23" /> */}
         </Link>
+
+        <Text nowrap variant={"xLarge"} style={{ "display": "inline-block", "left": "5%", "max-width": "350px", "vertical-align": "middle", "margin-top": "0px" }}>{result && result.tenent.name}</Text>
 
         <form className="c-search" autoComplete="off" name="form1" target="_self" style={{ display: "inline-block", left: "5%", minWidth: "350px", horizontalAlign: "middle", verticalAlign: "middle", marginTop: "0" }}>
           <input aria-label="Enter your search" type="search" name="search-field" placeholder="Search *TBC*" />
@@ -49,8 +52,8 @@ export function Nav({ resource }) {
                   },
                   {
                     key: 'bots',
-                    text: 'My Cloud Business',
-                    href: '/BusinessHome',
+                    text: 'Manage Inventory',
+                    href: '/Inventory',
                     iconProps: { iconName: 'Cloud' }
                   },
                   {

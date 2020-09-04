@@ -108,29 +108,36 @@ const StoreDef = {
     }
 }
 
+// Joi schema formatted as a 'projection' for find operations
+const StoreProjections = Object.keys(StoreDef).reduce((ac, c) => ({ ...ac, [c]: [...StoreDef[c].schema._ids._byKey.keys()].reduce((ac, a) => ({ ...ac, [a]: 1 }), {}) }), {})
+
+
+
+
 // Operations
 const FetchOperation = {
     "mycart": async function (ctx) {
-        if (!ctx.tenent._id) throw `Requires init`
-        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) })
+        if (!ctx.tenent) throw `Requires init`
+        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { projection: StoreProjections["orders"] })
         if (cart && cart.items) {
-            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }, partition_key: ObjectID(ctx.tenent._id) }).toArray()
+            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }, partition_key: ctx.tenent.email }, { projection: StoreProjections["products"] }).toArray()
             const ref_products_map = ref_products.reduce((a, c) => Object.assign({}, a, { [String(c._id)]: c }), null)
             cart.items = cart.items.map(i => Object.assign(i, { item: ref_products_map[String(i.item._id)] || { _id: i.item._id, _error: 'missing item' } }))
         }
         return cart || {}
     },
-    "get": async function (ctx, store, query, projection) {
-        if (!ctx.tenent._id) throw `Requires init`
+    "get": async function (ctx, store, query, proj) {
+        if (!ctx.tenent) throw `Requires init`
         const s = StoreDef[store]
         if (!s) throw `unknown ${store}`
 
-        let find_query = { ...query, partition_key: ObjectID(ctx.tenent._id) }
+        let find_query = { ...query, partition_key: ctx.tenent.email }
         if (store.onwer) {
             if (!ctx.session.auth.sub) throw `${store} requires signin`
             find_query["owner._id"] = ctx.session.auth.sub
         }
-        const cursor = ctx.db.collection(s.collection).find(find_query, projection ? { projection } : null)
+
+        const cursor = ctx.db.collection(s.collection).find(find_query, { projection: proj || StoreProjections[store] })
 
         if (s.split_types) {
             // setup response oject with empty arrarys with all possible values of 'type'
@@ -147,32 +154,32 @@ const FetchOperation = {
             return await cursor.toArray()
         }
     },
-    "getOne": async function (ctx, store, query, projection) {
-        if (!ctx.tenent._id) throw `Requires init`
+    "getOne": async function (ctx, store, query, proj) {
+        if (!ctx.tenent) throw new Error(`Requires init`)
         const s = StoreDef[store]
-        if (!s) throw `unknown ${store}`
+        if (!s) throw new Error(`unknown ${store}`)
 
-        let find_query = { ...query, partition_key: ObjectID(ctx.tenent._id) }
+        let find_query = { ...query, partition_key: ctx.tenent.email }
         if (store.onwer) {
             if (!ctx.session.auth.sub) throw `${store} requires signin`
             find_query["owner._id"] = ctx.session.auth.sub
         }
 
-        return await ctx.db.collection(s.collection).findOne(query, projection ? { projection } : null)
+        return await ctx.db.collection(s.collection).findOne(query, { projection: proj || StoreProjections[store] })
     },
     // -------------------------------
     // componentFetch is my GraphQL :)
     // -------------------------------
     "componentFetch": async function (ctx, componentFetch, urlid) {
-        if (!ctx.tenent._id) throw `Requires init`
+        if (!ctx.tenent) throw new Error(`Requires init`)
         let result = {}
 
         if (componentFetch) {
 
-            let query = { partition_key: ObjectID(ctx.tenent._id) }
+            let query = { partition_key: ctx.tenent.email }
 
             if (componentFetch.urlidField) {
-                if (!urlid) throw "componentFetch requires urlid"
+                if (!urlid) throw new Error("componentFetch requires urlid")
                 if (componentFetch.urlidField === "recordid") {
                     query['_id'] = ObjectID(urlid)
                 } else {
@@ -218,8 +225,9 @@ async function dbInit() {
                 const { ok, code, errMsg } = await _db.command({ customAction: "CreateCollection", collection: StoreDef[store].collection, shardKey: "partition_key" })
 
                 if (ok === 1) {
-                    console.log('success')
+                    //console.log('success')
                 } else {
+
                     throw new Error(errMsg)
                 }
             } catch (err) {
@@ -230,7 +238,7 @@ async function dbInit() {
                 }
             }
         } else {
-            console.log('createCollection')
+            //console.log('createCollection')
             //await _db.createCollection(StoreDef[store].collection)
         }
     }
@@ -240,13 +248,7 @@ async function dbInit() {
 // Init Web
 const app = new Koa();
 app.use(bodyParser())
-/*
-app.use(async function (ctx, next) {
-    ctx.set('Access-Control-Allow-Headers', '*')
-    ctx.set('Access-Control-Allow-origin', '*')
-    await next()
-})
-*/
+
 async function init() {
     // Init DB
     const db = app.context.db = await dbInit()
@@ -257,15 +259,15 @@ async function init() {
         maxAge: 86400000,
         store: {
             get: async function (key) {
-                console.log(`get ${key}`)
+                //console.log(`session get ${key}`)
                 return await db.collection(session_collection_name).findOne({ _id: key, partition_key: "session" })
             },
             set: async function (key, sess, maxAge, { rolling, changed }) {
-                console.log(`set ${key} ${JSON.stringify(sess)}`)
+                //console.log(`session set ${key} ${JSON.stringify(sess)}`)
                 await db.collection(session_collection_name).replaceOne({ _id: key, partition_key: "session" }, { ...sess, ...{ _id: key, partition_key: "session" } }, { upsert: true })
             },
             destroy: async function (key) {
-                console.log(`destroy ${key}`)
+                //console.log(`session destroy ${key}`)
                 await db.collection(session_collection_name).deleteOne({ _id: key, partition_key: "session" })
             }
         }
@@ -280,7 +282,7 @@ async function init() {
     app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
 
     // Init Settings (currently single tenent)
-    app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: "singleton001", partition_key: "root" })
+    app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectId("singleton001"), partition_key: "root" })
 
 
     // Init Routes
@@ -288,16 +290,6 @@ async function init() {
     app.use(authroutes)
     app.use(api)
     app.use(catchall)
-
-    app.use(async (ctx, next) => {
-        try {
-            await next();
-        } catch (err) {
-            console.log('got error')
-            err.status = err.statusCode || err.status || 500;
-            throw err;
-        }
-    });
 
     console.log(`Starting on 3000..`)
     app.listen(3000)
@@ -319,7 +311,7 @@ const static_assets = new Router()
     .get(`${PUBLIC_PATH}/*`, async function (ctx, next) {
 
         const filePath = path.join(__dirname, ctx.request.url.replace(PUBLIC_PATH, BUILD_PATH))
-        //console.log (`serving static resource  filePath=${filePath}`)
+        //console.log(`request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
 
         if (fs.existsSync(filePath)) {
             ctx.response.body = fs.createReadStream(filePath)
@@ -335,7 +327,7 @@ const static_assets = new Router()
 async function getSession(ctx) {
     let cart_items = 0
     if (ctx.tenent) {
-        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { projection: { "items_count": true } })
+        const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { projection: { "items_count": true } })
         if (cart && cart.items_count) cart_items = cart.items_count
     }
     return {
@@ -373,7 +365,7 @@ async function catchall(ctx, next) {
                 renderData.session = session
             }
             // Get Initial DOM
-            console.log(`Server -- Rendering HTML: ${JSON.stringify(renderData)}`)
+            //console.log(`Server -- Rendering HTML: ${JSON.stringify(renderData)}`)
             const reactContent = server_ssr.ssrRender(startURL, renderData)
 
             // SEND
@@ -392,7 +384,7 @@ async function catchall(ctx, next) {
 const authroutes = new Router({ prefix: "/connect/microsoft" })
     .get('/', async function (ctx, next) {
         const nonce = ctx.session.auth_nonce = Math.random().toString(26).slice(2)
-        console.log(`login with surl=${ctx.query.surl}`)
+        //console.log(`login with surl=${ctx.query.surl}`)
         ctx.redirect(`${app.context.openid_configuration.authorization_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent('http://localhost:3000/connect/microsoft/callback')}&scope=openid&response_type=code&nonce=${nonce}${ctx.query.surl ? "&state=" + encodeURIComponent(ctx.query.surl) : ""}`)
         next()
     })
@@ -416,7 +408,7 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
                 // Validated the signature of the ID token
                 // https://docs.microsoft.com/en-us/azure/active-directory-b2c/active-directory-b2c-reference-oidc#validate-the-id-token
                 const [head, payload, sig] = id_token.split('.').map((t, i) => i < 2 ? JSON.parse(Buffer.from(t, 'base64').toString()) : t)
-                console.log(head); console.log(payload)
+                //console.log(head); console.log(payload)
                 const token_signing_key = app.context.jwks[head.kid]
                 const pem = jwkToPem(token_signing_key)
 
@@ -433,7 +425,7 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
                 // logged out -> purchase -> login -> just purchase that item, cart still contains 2 items
 
                 // we are loggin in, check if the current session has a cart (unauthenticated), if so, add items to users cart
-                const carts = await ctx.db.collection(StoreDef["orders"].collection).find({ "owner._id": { $in: [ctx.session.auth.sub, ctx.session._id] }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }).toArray(),
+                const carts = await ctx.db.collection(StoreDef["orders"].collection).find({ "owner._id": { $in: [ctx.session.auth.sub, ctx.session._id] }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }).toArray(),
                     session_cart = carts.find(c => c.owner._id === ctx.session._id),
                     user_cart = carts.find(c => c.owner._id === ctx.session.auth.sub)
 
@@ -443,12 +435,12 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
                 // if both - add records from session cart to user_cart, remove session cart
                 if (session_cart) {
                     if (!user_cart) {
-                        const res = await ctx.db.collection(StoreDef["orders"].collection).updateOne({ owner: { _id: ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { $set: { owner_type: "user", owner: { _id: ctx.session.auth.sub } } }, { upsert: false, returnOriginal: false, returnNewDocument: false })
+                        const res = await ctx.db.collection(StoreDef["orders"].collection).updateOne({ owner: { _id: ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { owner_type: "user", owner: { _id: ctx.session.auth.sub } } }, { upsert: false, returnOriginal: false, returnNewDocument: false })
                     } else {
                         // unfortunatly, this involves 2 operations, so not atomic, need to allow for cosmos ratelimiting
                         // NEED TO MAKE THIS IDEMPOTENT
-                        await ctx.db.collection(StoreDef["orders"].collection).updateOne({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { $inc: { items_count: session_cart.items_count }, $push: { items: { $each: session_cart.items } } })
-                        ctx.db.collection(StoreDef["orders"].collection).updateOne({ owner: { _id: ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { $set: { status: StoreDef["orders"].status.InactiveCart, status_reason: `Login-merged: into ${user_cart._id}` } })
+                        await ctx.db.collection(StoreDef["orders"].collection).updateOne({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $inc: { items_count: session_cart.items_count }, $push: { items: { $each: session_cart.items } } })
+                        ctx.db.collection(StoreDef["orders"].collection).updateOne({ owner: { _id: ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { status: StoreDef["orders"].status.InactiveCart, status_reason: `Login-merged: into ${user_cart._id}` } })
                     }
 
                 }
@@ -456,26 +448,29 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
                 ctx.redirect(ctx.query.state || "/")
 
             } catch (e) {
-                console.log(e)
+                console.error(e)
                 ctx.throw(400, e)
             }
         } else {
-            console.log(ctx.querystring)
+            //console.log(ctx.querystring)
             if (ctx.querystring.indexOf('=access_denied') > 0 && ctx.querystring.indexOf('=AADB2C90118') > 0) {
                 // &redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fconnect%2Fmicrosoft%2Fcallback&scope=openid&response_type=code&prompt=login
                 ctx.redirect(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/oauth2/v2.0/authorize?p=${passwd_reset_policy}&client_id=${client_id}&nonce=${nonce}&scope=openid&response_type=code&redirect_uri=${encodeURIComponent(`http://localhost:3000/connect/microsoft/callback`)}`)
             } else {
-                ctx.throw(401, "no code")
+                console.error("/connect/microsoft/callback : no code")
+                ctx.throw(401, "/connect/microsoft/callback : no code")
             }
         }
         next()
     })
     .routes()
 
+/*
 function LoggedIn(ctx, next) {
     console.log(`checking logged in with ${ctx.session.auth}`)
     return ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
 }
+*/
 
 function getFileSaS(store, filename) {
     const extension = encodeURIComponent(filename.substring(1 + filename.lastIndexOf(".")))
@@ -484,28 +479,37 @@ function getFileSaS(store, filename) {
     return Object.assign({ pathname, extension }, retsas)
 }
 
-function ensureInit(ctx, next) {
+async function ensureInit(ctx, next) {
 
     if (!ctx.tenent)
         ctx.throw(400, `Please Initialised your tenent`)
     else
-        next()
+        await next()
 }
+
+/*
+async function corsForStorage(ctx, next) {
+    ctx.set('Access-Control-Allow-Headers', '*')
+    ctx.set('Access-Control-Allow-origin', '*')
+    await next()
+}
+*/
 
 async function store(ctx, storename, doc, update_opts = {}) {
     const { _id, partition_key, ...body } = doc
     const store = StoreDef[storename]
 
     if (!store) throw new Error(`unknown store: ${storename}`)
+    if (!ctx.tenent) throw new Error(`no tenent`)
 
     const { value, error } = store.schema.validate(body, { allowUnknown: false })
 
     if (error) throw new Error(`document not valid: ${error}`)
 
-    if (_id && partition_key) {
-        return await ctx.db.collection(store.collection).updateOne({ _id: ObjectID(_id), partition_key }, { $set: value }, update_opts)
+    if (_id) {
+        return await ctx.db.collection(store.collection).updateOne({ _id: ObjectID(_id), partition_key: (partition_key && update_opts.upsert) ? partition_key : ctx.tenent.email }, { $set: value }, update_opts)
     } else {
-        return await ctx.db.collection(store.collection).insertOne({ ...value, _id: ObjectID(), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenent._id })
+        return await ctx.db.collection(store.collection).insertOne({ ...value, _id: ObjectID(), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenent.email })
     }
 }
 
@@ -521,7 +525,7 @@ const api = new Router({ prefix: '/api' })
         if (!error) {
             const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: ObjectID(value.itemid) }, { projection: { "price": 1, "active": 1 } })
             const line_total = ref_product.price * 1
-            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { $inc: { items_count: 1 }, $push: { items: { _id: ObjectID(), item: { _id: ObjectID(value.itemid) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
+            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $inc: { items_count: 1 }, $push: { items: { _id: ObjectID(), item: { _id: ObjectID(value.itemid) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
 
             ctx.assert(res.ok === 1, 500, `error`)
             ctx.body = { items_count: res.value.items_count }
@@ -533,7 +537,7 @@ const api = new Router({ prefix: '/api' })
     })
     .put('/cartdelete/:itemid', async function (ctx, next) {
         try {
-            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { $inc: { items_count: -1 }, $pull: { 'items': { _id: ObjectID(ctx.params.itemid) } } })
+            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $inc: { items_count: -1 }, $pull: { 'items': { _id: ObjectID(ctx.params.itemid) } } })
             ctx.status = 201;
             await next()
         } catch (e) {
@@ -546,8 +550,8 @@ const api = new Router({ prefix: '/api' })
         } else {
             try {
                 // TODO - check products are still OK!
-                const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ObjectID(ctx.tenent._id) }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ObjectID(ctx.tenent._id) }, { $set: { order_number: 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0'), status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub } } })
+                const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { order_number: 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0'), status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub } } })
                 ctx.body = order
                 await next()
             } catch (e) {
@@ -564,7 +568,7 @@ const api = new Router({ prefix: '/api' })
         }
     })
     /* Only used when NOT using SSR */
-    .get('/componentFetch/:component?/:urlid?', async function (ctx, next) {
+    .get('/componentFetch/:component?/:urlid?', ensureInit, async function (ctx, next) {
 
         const
             routekey = '/' + (ctx.params.component || ''),
@@ -593,7 +597,7 @@ const api = new Router({ prefix: '/api' })
     })
     .get('/store/:store/:id?', async function (ctx, next) {
         try {
-            let query = { partition_key: ObjectID(ctx.tenent._id) }
+            let query = { partition_key: ctx.tenent.email }
             if (ctx.params.id) {
                 query['_id'] = ObjectID(ctx.params.id)
                 ctx.body = await FetchOperation.getOne(ctx, ctx.params.store, query)
@@ -624,7 +628,7 @@ const api = new Router({ prefix: '/api' })
 
             if (!store) throw `unknown store: ${ctx.params.store}`
 
-            ctx.body = await ctx.db.collection(store.collection).deleteOne({ _id: ObjectID(ctx.params.id), partition_key: ObjectID(ctx.tenent._id) })
+            ctx.body = await ctx.db.collection(store.collection).deleteOne({ _id: ObjectID(ctx.params.id), partition_key: ctx.tenent.email })
             await next()
         } catch (e) {
             ctx.throw(400, `cannot find ${ctx.params.store + ':' + ctx.params.id}: ${e}`)
@@ -637,7 +641,7 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(400, `No filename provided`)
         }
 
-        ctx.body = getFileSaS('products', userdoc.filename)
+        ctx.body = getFileSaS(ctx.tenent ? ctx.tenent.email : "root", userdoc.filename)
         await next()
     })
     .get('/export', async function (ctx, next) {
@@ -662,7 +666,7 @@ const api = new Router({ prefix: '/api' })
             if (c.image && c.image.container_url) {
                 const pathname = c.image.pathname || c.image.filename || c.image.blobname
                 if (pathname && !imagesb64.hasOwnProperty(pathname)) {
-                    console.log(`getting ${c.image.container_url}/${pathname}`)
+                    //console.log(`getting ${c.image.container_url}/${pathname}`)
                     imagesb64[pathname] = await fetch(`${c.image.container_url}/${pathname}`)
                 }
             }
@@ -677,9 +681,11 @@ const api = new Router({ prefix: '/api' })
 
         try {
             const tenent = { ...ctx.request.body, _id: "singleton001", partition_key: "root" }
+            app.context.tenent = tenent
+
             const tenent_res = await store(ctx, "business", tenent, { upsert: true })
 
-            app.context.tenent = tenent
+
 
             if (ctx.request.body.catalog === 'bike') {
 
@@ -693,7 +699,7 @@ const api = new Router({ prefix: '/api' })
                         const b64 = Buffer.from(images[pathname], 'base64'),
                             bstr = b64.toString('utf-8'),
                             file_stream = Readable.from(b64),
-                            new_blob_info = getFileSaS(ctx.params.tenant, pathname),
+                            new_blob_info = getFileSaS(tenent.email, pathname),
                             blob_writeable = new AzBlobWritable(new_blob_info)
 
                         console.log(`Importing ${pathname} (${bstr.length})`)
@@ -718,7 +724,7 @@ const api = new Router({ prefix: '/api' })
                                 })
 
                             })
-                            imagemap.set(pathname, new_blob_info)
+                            imagemap.set(pathname, { pathname: new_blob_info.pathname, container_url: new_blob_info.container_url })
                         } catch (e) {
                             console.error(`write images caught error ${e}`)
                             throw new Error(e)
@@ -734,10 +740,13 @@ const api = new Router({ prefix: '/api' })
                 const catmap = new Map()
                 const newcats = Category.map(function (c) {
                     console.log(`Processing catalog ${c.heading}`)
-                    const old_id = c._id, new_id = ObjectID()
-                    const newc = { ...c, _id: new_id, partition_key: ctx.params.tenant, creation: Date.now() }
-                    if (c.image) {
-                        newc.image = imagemap.get(c.pathname)
+                    const old_id = c._id, new_id = ObjectID().toHexString()
+                    const newc = { ...c, _id: ObjectID(new_id), partition_key: tenent.email, creation: Date.now() }
+                    if (c.image && c.image.pathname) {
+                        newc.image = imagemap.get(c.image.pathname)
+                        if (!newc.image) {
+                            console.error(`Cannot find image pathname ${c.image.pathname}`)
+                        }
                     }
                     catmap.set(old_id, new_id)
                     return newc
@@ -748,13 +757,19 @@ const api = new Router({ prefix: '/api' })
 
                 const newproducts = Product.map(function (p) {
                     console.log(`Processing product ${p.heading}`)
-                    const old_id = p._id, new_id = ObjectID()
-                    const newp = { ...p, _id: new_id, partition_key: ctx.params.tenant, creation: Date.now() }
+                    const old_id = p._id, new_id = ObjectID().toHexString()
+                    const newp = { ...p, _id: ObjectID(new_id), partition_key: tenent.email, creation: Date.now() }
                     if (p.category) {
                         newp.category = catmap.get(p.category)
+                        if (!newp.category) {
+                            console.error(`Cannot find category ${p.category}`)
+                        }
                     }
-                    if (p.image) {
-                        newp.image = imagemap.get(p.pathname)
+                    if (p.image && p.image.pathname) {
+                        newp.image = imagemap.get(p.image.pathname)
+                        if (!newp.image) {
+                            console.error(`Cannot find image pathname ${p.image.pathname}`)
+                        }
                     }
                     return newp
                 })

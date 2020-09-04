@@ -111,7 +111,7 @@ export function Panes3x({ resource }) {
 
                 <div className="m-panes" data-grid="col-12">
                     {products.map(i =>
-                        <section>
+                        <section key={i._id}>
                             <div className="m-panes-product-placement-item">
                                 <picture className="c-image">
                                     <MyImage imageFit={ImageFit.CenterContain} image={i.image} alt="no pic" />
