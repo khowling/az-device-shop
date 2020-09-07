@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { Link, navTo } from './router.js'
-import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react/lib/DetailsList'
-import { CommandBar } from '@fluentui/react/lib/CommandBar'
-import { Stack, IStackProps } from '@fluentui/react/lib/Stack'
-import { Breadcrumb } from '@fluentui/react/lib/Breadcrumb'
+import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react'
+import { CommandBar } from '@fluentui/react'
+import { Stack, IStackProps } from '@fluentui/react'
+import { Breadcrumb } from '@fluentui/react'
 
 export function ManageOrders({ resource }) {
 
@@ -17,7 +17,7 @@ export function ManageOrders({ resource }) {
             <Breadcrumb
                 items={[
                     { text: 'Home', key: 'home', href: '/' },
-                    { text: 'My Orders', key: 'myorder', href: `/ManageOrders` }]} />
+                    { text: 'My Orders', key: 'myorder', href: `/myorders` }]} />
 
             <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
 
@@ -42,7 +42,7 @@ export function ManageOrders({ resource }) {
                     <tbody>
                         {status === 'success' && result.data && result.data.map((o, idx) =>
                             <tr>
-                                <td><Link route="/Order" urlid={o._id}>{o.order_number}</Link></td>
+                                <td><Link route="/o" urlid={o._id}>{o.order_number}</Link></td>
                                 <td>{Date(o._ts).substr(0, 24)}</td>
                                 <td>{o.status && <strong className="c-badge f-small f-highlight">{o.status}</strong>}
                                 </td>

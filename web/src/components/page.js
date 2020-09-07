@@ -1,25 +1,26 @@
 import React from 'react'
 import { Link, Redirect } from './router.js'
 import { Alert, MyImage } from '../utils/common'
-import { CommandBarButton } from '@fluentui/react/lib/Button'
-import { Text } from '@fluentui/react/lib/Text'
+import { CommandBarButton } from '@fluentui/react'
+import { Text } from '@fluentui/react'
 
 export function Nav({ resource }) {
   const { status, result } = resource ? resource.read() : {}
 
   if (result && !result.tenent) {
-    return <Redirect route='/init' />
+    //return <Redirect route='/init' />
+    return null
   } else return (
     <nav className="m-navigation-bar" role="menubar">
 
       <div className="c-navigation-menu" style={{ width: "100%" }}>
 
-        <Link className="navbar-brand no-outline" style={{ "display": "inline-block", "left": "5%", "vertical-align": "middle", "margin-top": "0px" }}>
+        <Link className="navbar-brand no-outline" style={{ "display": "inline-block", "left": "5%", "verticalAlign": "middle", "marginTop": "0px" }}>
           <MyImage image={result && result.tenent.image} height="33px" />
           { /* <img src="https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png" alt="Microsoft" height="23" /> */}
         </Link>
 
-        <Text nowrap variant={"xLarge"} style={{ "display": "inline-block", "left": "5%", "max-width": "350px", "vertical-align": "middle", "margin-top": "0px" }}>{result && result.tenent.name}</Text>
+        <Text nowrap variant={"xLarge"} style={{ "display": "inline-block", "left": "5%", "maxWidth": "350px", "verticalAlign": "middle", "marginTop": "0px" }}>{result && result.tenent.name}</Text>
 
         <form className="c-search" autoComplete="off" name="form1" target="_self" style={{ display: "inline-block", left: "5%", minWidth: "350px", horizontalAlign: "middle", verticalAlign: "middle", marginTop: "0" }}>
           <input aria-label="Enter your search" type="search" name="search-field" placeholder="Search *TBC*" />
@@ -41,19 +42,19 @@ export function Nav({ resource }) {
                   {
                     key: 'orders',
                     text: 'My Orders',
-                    href: '/ManageOrders',
+                    href: '/myorders',
                     iconProps: { iconName: 'ActivateOrders' }
                   },
                   {
                     key: 'products',
                     text: 'Manage Products',
-                    href: '/ManageProducts',
+                    href: '/products',
                     iconProps: { iconName: 'ProductRelease' }
                   },
                   {
                     key: 'bots',
                     text: 'Manage Inventory',
-                    href: '/Inventory',
+                    href: '/inv',
                     iconProps: { iconName: 'Cloud' }
                   },
                   {

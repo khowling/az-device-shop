@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { Image, ImageFit } from '@fluentui/react/lib/Image'
+import { Image, ImageFit } from '@fluentui/react'
 import { putBlob, listFiles } from '../utils/azureBlob.js'
-import { Toggle } from '@fluentui/react/lib/Toggle'
-import { TextField } from '@fluentui/react/lib/TextField'
-import { PrimaryButton, DefaultButton } from '@fluentui/react/lib/Button'
-
+import { Toggle } from '@fluentui/react'
+import { TextField } from '@fluentui/react'
+import { PrimaryButton, DefaultButton } from '@fluentui/react'
+import { Stack, IStackProps } from '@fluentui/react'
 
 export function MyImage({ image, ...rest }) {
     if (image) {
@@ -207,21 +207,22 @@ export function EditImage({ result_image, onChange }) {
     }
 
 
-    return [
-        <Toggle key="image_Toggle" label="Image location" inlineLabel onText="external Url" offText="File Upload" defaultChecked={imageTypeUrl} onChange={(e, val) => { console.log(`setImageTypeUrl ${val}`); setImageTypeUrl(val) }} />,
-        <input key="image_input" type="file" ref={fileInputRef} name="file" style={{ display: "none" }} accept="image/*" onChange={_fileuploadhtml5} />,
+    return (
+        <Stack tokens={{ childrenGap: 5, padding: 20 }} styles={{ root: { border: "1px solid" } }}>
+            <Toggle key="image_Toggle" label="Image location" inlineLabel onText="external Url" offText="File Upload" defaultChecked={imageTypeUrl} onChange={(e, val) => { console.log(`setImageTypeUrl ${val}`); setImageTypeUrl(val) }} />
+            <input key="image_input" type="file" ref={fileInputRef} name="file" style={{ display: "none" }} accept="image/*" onChange={_fileuploadhtml5} />
 
-        <a key="image_a" href={previewsrc} target="_won">
-            <Image
-                width={300} height={150}
-                src={previewsrc}
-                imageFit={ImageFit.centerContain}
-                alt="" />
-        </a>,
+            <a key="image_a" href={previewsrc} target="_won">
+                <Image
+                    width={250} height={100}
+                    src={previewsrc}
+                    imageFit={ImageFit.centerContain}
+                    alt="" />
+            </a>
 
-        <TextField key="image_text" prefix="Full Url" name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />,
-        <DefaultButton key="image_butt" iconProps={{ iconName: 'upload' }} styles={{ root: { display: imageTypeUrl ? "none" : "block" } }} onClick={_clickFile} >Upload file</DefaultButton>
-
-    ]
+            <TextField key="image_text" prefix="Full Url" name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />
+            <DefaultButton key="image_butt" iconProps={{ iconName: 'upload' }} styles={{ root: { display: imageTypeUrl ? "none" : "block" } }} onClick={_clickFile} >Upload file</DefaultButton>
+        </Stack>
+    )
 }
 

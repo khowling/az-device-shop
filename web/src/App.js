@@ -10,9 +10,9 @@ import { Inventory, StartBusiness } from './components/business'
 import RenderContext from './RenderContext'
 import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
 
-import './App.css';
+//import './App.css';
 import { initializeIcons } from '@uifabric/icons';
-import { Fabric } from '@fluentui/react/lib/Fabric';
+import { Fabric } from '@fluentui/react'
 initializeIcons();
 
 
@@ -25,7 +25,7 @@ export const AppRouteCfg = {
       query: { type: "Category" }
     }
   },
-  '/p': {
+  "/shop": {
     component: Panes3x,
     componentFetch: {
       operation: "get",
@@ -35,7 +35,7 @@ export const AppRouteCfg = {
       refstores: [{ store: "products", lookup_field: "urlidField" }]
     }
   },
-  [`/${AddToCart.name}`]: {
+  "/a2c": {
     component: AddToCart,
     componentFetch: {
       operation: "getOne",
@@ -44,7 +44,7 @@ export const AppRouteCfg = {
       refstores: [{ store: "products", lookup_field: "category" }]
     }
   },
-  [`/mycart`]: {
+  "/mycart": {
     component: MyCart,
     routeProps: {
       checkout: false
@@ -53,7 +53,7 @@ export const AppRouteCfg = {
       operation: "mycart"
     }
   },
-  [`/checkout`]: {
+  "/checkout": {
     component: MyCart,
     routeProps: {
       checkout: true
@@ -63,7 +63,7 @@ export const AppRouteCfg = {
       operation: "mycart"
     }
   },
-  [`/${ManageOrders.name}`]: {
+  "/myorders": {
     component: ManageOrders,
     componentFetch: {
       operation: "get",
@@ -71,7 +71,7 @@ export const AppRouteCfg = {
       query: { status: { $gte: 30 } },
     }
   },
-  [`/${Order.name}`]: {
+  "/o": {
     component: Order,
     componentFetch: {
       operation: "getOne",
@@ -79,35 +79,36 @@ export const AppRouteCfg = {
       urlidField: "recordid"
     }
   },
-  [`/${ManageProducts.name}`]: {
+  "/products": {
     component: ManageProducts,
     componentFetch: {
       operation: "get",
       store: "products"
     }
   },
-  ['/init']: {
-    component: StartBusiness
-  },
-  [`/${Inventory.name}`]: {
-    component: Inventory,
-    componentFetch: {
-      operation: "get",
-      store: "inventory",
-      refstores: [{ store: "products" }]//, "workitems"]
-    }
-  },
-  [`/${Product.name}`]: {
+  "/product": {
     component: Product,
     componentFetch: {
       operation: "getOne",
       store: "products",
       urlidField: "recordid"
     }
+  },
+  "/init": {
+    component: StartBusiness
+  },
+  "/inv": {
+    component: Inventory,
+    componentFetch: {
+      operation: "get",
+      store: "inventory",
+      refstores: [{ store: "products" }]//, "workitems"]
+    }
   }
 }
 
 export function App({ startUrl }) {
+  console.log(`App - ${JSON.stringify(AppRouteCfg)}`)
   const routeElements = useRouter(startUrl, AppRouteCfg)
 
   const { ssrContext, session } = useContext(RenderContext)

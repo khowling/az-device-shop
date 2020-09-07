@@ -1,28 +1,28 @@
 import React, { useState, useEffect } from 'react'
 import { Link, navTo } from './router.js'
 import { Alert, MyImage, EditImage } from '../utils/common'
-import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react/lib/DetailsList'
-import { CommandBar } from '@fluentui/react/lib/CommandBar'
-import { Stack, IStackProps } from '@fluentui/react/lib/Stack'
+import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react'
+import { CommandBar } from '@fluentui/react'
+import { Stack, IStackProps } from '@fluentui/react'
 import { DefaultPalette } from '@uifabric/styling'
 import { Card } from '@uifabric/react-cards'
-import { Text } from '@fluentui/react/lib/Text'
-import { Image, ImageFit } from '@fluentui/react/lib/Image'
-import { Separator } from '@fluentui/react/lib/Separator';
+import { Text } from '@fluentui/react'
+import { Image, ImageFit } from '@fluentui/react'
+import { Separator } from '@fluentui/react'
 import { initializeIcons } from '@uifabric/icons';
-import { Icon } from '@fluentui/react/lib/Icon';
-import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar'
+import { Icon } from '@fluentui/react'
+import { MessageBar, MessageBarType } from '@fluentui/react'
 import { useConstCallback } from '@uifabric/react-hooks';
-import { Panel, PanelType } from '@fluentui/react/lib/Panel';
-import { Slider } from '@fluentui/react/lib/Slider';
-import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react/lib/ChoiceGroup';
-import { TextField, MaskedTextField } from '@fluentui/react/lib/TextField'
+import { Panel, PanelType } from '@fluentui/react'
+import { Slider } from '@fluentui/react'
+import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react'
+import { TextField, MaskedTextField } from '@fluentui/react'
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { Dropdown } from '@fluentui/react/lib/Dropdown';
-import { PrimaryButton, Button, DefaultButton } from '@fluentui/react/lib/Button'
-import { Label } from '@fluentui/react/lib/Label'
-import { Checkbox } from '@fluentui/react/lib/Checkbox'
-import { Spinner } from '@fluentui/react/lib/Spinner';
+import { Dropdown } from '@fluentui/react'
+import { PrimaryButton, Button, DefaultButton } from '@fluentui/react'
+import { Label } from '@fluentui/react'
+import { Checkbox } from '@fluentui/react'
+import { Spinner } from '@fluentui/react';
 
 import update from 'immutability-helper';
 
@@ -554,7 +554,7 @@ export function StartBusiness() {
         </Stack.Item>
 
         <Stack.Item>
-          <Label name="Store Logo (on nav bar)" />
+          <Label>Store Logo (on nav bar)</Label>
           <EditImage result_image={input.image} onChange={_onChange} />
         </Stack.Item>
         <Stack.Item>
@@ -562,7 +562,7 @@ export function StartBusiness() {
         </Stack.Item>
         <Stack.Item>
           <Stack horizontal tokens={{ childrenGap: 30 }}>
-
+            { /*
             <Card
               aria-label="Clickable vertical card with image bleeding at the top of the card"
               onClick={() => _onChange({ target: { name: "catalog" } }, "bike")}
@@ -621,13 +621,13 @@ export function StartBusiness() {
               </Card.Section>
 
             </Card>
-
+*/ }
           </Stack>
 
         </Stack.Item>
 
         <Stack.Item>
-          {state.state === 'reset' ?
+          { /* state.state === 'reset' ?
             <PrimaryButton text={`Initialise My Business`} onClick={_createBusiness} allowDisabledFocus disabled={Object.entries(validation).reduce((a, c) => a || c[1], null)} />
             : state.state === 'resetting' ?
               <Spinner label="Please Wait, will take a few seonds..." ariaLive="assertive" labelPosition="right" />
@@ -659,7 +659,7 @@ export function StartBusiness() {
                     </div>
                   </div>
                   : <div></div>
-          }
+*/ }
 
         </Stack.Item>
 

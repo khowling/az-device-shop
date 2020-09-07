@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, Suspense } from 'react'
 import { _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 import RenderContext from '../RenderContext'
-import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
+import { Spinner, SpinnerSize } from '@fluentui/react';
 
 // Used by Link & NavTo
 export function _encodeURL(route, urlid, props) {

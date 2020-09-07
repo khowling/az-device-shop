@@ -304,8 +304,11 @@ const fetch = require('./server_fetch')
 const { AzBlobWritable, createServiceSAS } = require('./AzBlobWritable')
 
 const PUBLIC_PATH = "/_assets_"
-const BUILD_PATH = "../build"
-const server_ssr = require(BUILD_PATH + "/ssr_server.js")
+const BUILD_PATH = "./build"
+
+// all requires after this will use babel transpile, using 'babel.config.json'
+require("@babel/register")()
+const server_ssr = require('./src/ssr_server')
 
 const static_assets = new Router()
     .get(`${PUBLIC_PATH}/*`, async function (ctx, next) {

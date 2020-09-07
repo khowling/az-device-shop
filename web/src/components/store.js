@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { Link } from './router.js'
 import { Alert, MyImage } from '../utils/common'
-import { Image, IImageProps, ImageFit } from '@fluentui/react/lib/Image'
-import { Breadcrumb } from '@fluentui/react/lib/Breadcrumb'
-import { Stack, IStackProps } from '@fluentui/react/lib/Stack'
+import { Image, IImageProps, ImageFit } from '@fluentui/react'
+import { Breadcrumb } from '@fluentui/react'
+import { Stack, IStackProps } from '@fluentui/react'
 
 export function Panes({ resource }) {
 
@@ -41,7 +41,7 @@ export function Panes({ resource }) {
                                     <div aria-hidden="true"></div>
                                 </div>
                                 <div>
-                                    <Link route="/p" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                                    <Link route="/shop" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
                                         <span>Shop now</span>
                                     </Link>
                                 </div>
@@ -75,7 +75,7 @@ export function Panes({ resource }) {
                                         <div aria-hidden="true"></div>
                                     </div>
                                     <div>
-                                        <Link route="/p" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                                        <Link route="/shop" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
                                             <span>Shop now</span>
                                         </Link>
                                     </div>
@@ -106,7 +106,7 @@ export function Panes3x({ resource }) {
                 <Breadcrumb
                     items={[
                         { text: 'Home', key: 'home', href: '/' },
-                        { text: category.heading, key: category._id, href: '/' }]} />
+                        { text: category.heading, key: category._id, href: `/shop/${category._id}` }]} />
 
 
                 <div className="m-panes" data-grid="col-12">
@@ -134,7 +134,7 @@ export function Panes3x({ resource }) {
                                         <div aria-hidden="true"></div>
                                     </div>
                                     <div>
-                                        <Link route="/AddToCart" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
+                                        <Link route="/a2c" urlid={i._id} className="c-call-to-action c-glyph" aria-label="More verbose call to action text">
                                             <span>Details</span>
                                         </Link>
                                     </div>

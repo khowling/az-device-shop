@@ -3,24 +3,24 @@ import { Alert, MyImage } from '../utils/common'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link } from './router.js'
-import { DropdownMenuItemType, Dropdown } from '@fluentui/react/lib/Dropdown'
-import { PrimaryButton, MessageBarButton } from '@fluentui/react/lib/Button'
-import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar'
-import { ChoiceGroup } from '@fluentui/react/lib/ChoiceGroup'
-import { Label } from '@fluentui/react/lib/Label'
-import { Text } from '@fluentui/react/lib/Text'
-import { Spinner } from '@fluentui/react/lib/Spinner'
-import { Depths } from '@uifabric/fluent-theme/lib/fluent/FluentDepths'
-import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react/lib/Styling';
-import { List } from '@fluentui/react/lib/List'
-import { Image, ImageFit } from '@fluentui/react/lib/Image'
+import { DropdownMenuItemType, Dropdown } from '@fluentui/react'
+import { PrimaryButton, MessageBarButton } from '@fluentui/react'
+import { MessageBar, MessageBarType } from '@fluentui/react'
+import { ChoiceGroup } from '@fluentui/react'
+import { Label } from '@fluentui/react'
+import { Text } from '@fluentui/react'
+import { Spinner } from '@fluentui/react'
+import { Depths } from '@uifabric/fluent-theme'
+import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
+import { List } from '@fluentui/react'
+import { Image, ImageFit } from '@fluentui/react'
 import { FontWeights } from '@uifabric/styling'
 import { Card } from '@uifabric/react-cards'
-import { Icon } from '@fluentui/react/lib/Icon'
-import { Stack, IStackProps } from '@fluentui/react/lib/Stack'
-import { /* SharedColors, */ NeutralColors } from '@uifabric/fluent-theme/lib/fluent/FluentColors';
-import { Separator } from '@fluentui/react/lib/Separator'
-import { Breadcrumb } from '@fluentui/react/lib/Breadcrumb'
+import { Icon } from '@fluentui/react'
+import { Stack, IStackProps } from '@fluentui/react'
+import { /* SharedColors, */ NeutralColors } from '@uifabric/fluent-theme';
+import { Separator } from '@fluentui/react'
+import { Breadcrumb } from '@fluentui/react'
 
 
 const theme = getTheme();
@@ -264,8 +264,8 @@ export function AddToCart({ resource }) {
       <Breadcrumb
         items={[
           { text: 'Home', key: 'home', href: '/' },
-          { text: category.heading, key: category._id, href: `/p/${category._id}` },
-          { text: product.heading, key: product._id, href: `/AddToCart/${product._id}` }]} />
+          { text: category.heading, key: category._id, href: `/shop/${category._id}` },
+          { text: product.heading, key: product._id, href: `/a2c/${product._id}` }]} />
 
       <Stack horizontal wrap tokens={{ childrenGap: 15 }} >
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar } }} grow={1}>

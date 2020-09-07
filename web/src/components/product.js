@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react'
 import { Link, navTo, _encodeURL } from './router.js'
-import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react/lib/DetailsList'
-import { CommandBar } from '@fluentui/react/lib/CommandBar'
-import { TextField } from '@fluentui/react/lib/TextField'
-import { Text } from '@fluentui/react/lib/Text'
-import { Stack, IStackProps } from '@fluentui/react/lib/Stack'
-import { Image, IImageProps, ImageFit } from '@fluentui/react/lib/Image'
-import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar'
+import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react'
+import { CommandBar } from '@fluentui/react'
+import { TextField } from '@fluentui/react'
+import { Text } from '@fluentui/react'
+import { Stack, IStackProps } from '@fluentui/react'
+import { Image, IImageProps, ImageFit } from '@fluentui/react'
+import { MessageBar, MessageBarType } from '@fluentui/react'
 import { Alert, MyImage, EditImage } from '../utils/common'
-import { Label } from '@fluentui/react/lib/Label'
-import { PrimaryButton, DefaultButton } from '@fluentui/react/lib/Button'
-import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react/lib/Styling';
+import { Label } from '@fluentui/react'
+import { PrimaryButton, DefaultButton } from '@fluentui/react'
+import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { Separator } from '@fluentui/react/lib/Separator';
-import { Panel, PanelType } from '@fluentui/react/lib/Panel';
+import { Separator } from '@fluentui/react'
+import { Panel, PanelType } from '@fluentui/react'
 import { useConstCallback } from '@uifabric/react-hooks';
-import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react/lib/ChoiceGroup';
-import { Dropdown } from '@fluentui/react/lib/Dropdown';
+import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react'
+import { Dropdown } from '@fluentui/react'
 
 
 export function Product({ dismissPanel, resource, type, refstores }) {
@@ -52,7 +52,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     setError(null)
     _fetchit('/api/store/products', 'POST', {}, result._id ? { _id: result._id, ...input } : input).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
-      navTo("/ManageProducts")
+      navTo("/products")
       dismissPanel()
     }, err => {
       console.error(`created failed : ${err}`)
@@ -64,7 +64,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     setError(null)
     _fetchit('/api/store/products/' + result._id, 'DELETE').then(succ => {
       console.log(`delete success : ${JSON.stringify(succ)}`)
-      navTo("/ManageProducts")
+      navTo("/products")
     }, err => {
       console.error(`delete failed : ${err}`)
       setError(`delete failed : ${err}`)
@@ -182,7 +182,8 @@ export function ManageProducts({ resource }) {
         headerText={"Create " + panel.type}
         isOpen={panel.open}
         onDismiss={dismissPanel}
-        //type={PanelType.medium}
+        type={PanelType.custom}
+        customWidth='360px'
         closeButtonAriaLabel="Close">
         {panel.open &&
           <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
