@@ -177,7 +177,7 @@ export function MyCart({ resource, checkout }) {
     console.log(`rendering ${line}`)
     return (
       <div className={classNames.itemCell} data-is-focusable={true}>
-        <MyImage image={line.item.image} imageFit={ImageFit.Contain} width={150} />
+        <MyImage image={line.item.image} width={150} />
         <div className={classNames.itemContent}>
           <div className={classNames.itemName}>{line.item.heading}</div>
           <div className={classNames.itemIndex}>{Object.keys(line.options).map(o => <span key={o}>{o} : {line.options[o].text}</span>)}</div>
@@ -270,7 +270,7 @@ export function AddToCart({ resource }) {
       <Stack horizontal wrap tokens={{ childrenGap: 15 }} >
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar } }} grow={1}>
 
-          <MyImage imageFit={ImageFit.Contain} styles={{ image: { maxWidth: '100%' } }} image={product.image} />
+          <MyImage image={product.image} style={{ "width": "100%", "maxWidth": "400px" }} />
 
         </Stack.Item>
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar, width: '300px' } }} grow={1} >

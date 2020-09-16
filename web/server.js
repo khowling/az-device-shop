@@ -1,3 +1,6 @@
+const path = require('path')
+const fs = require('fs')
+
 // Web require
 const
     Koa = require('koa'),
@@ -245,6 +248,24 @@ async function dbInit() {
     return _db
 }
 
+
+// Serve Static files
+const PUBLIC_PATH = "/static"
+const BUILD_PATH = "./build"
+async function serve_static(ctx, next) {
+
+    const filePath = path.join(__dirname, BUILD_PATH, ctx.request.url)
+    console.log(`serve_static: request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
+
+    if (fs.existsSync(filePath)) {
+        ctx.response.body = fs.createReadStream(filePath)
+    } else {
+        ctx.throw(404, `${ctx.request.url} not found`)
+    }
+    next()
+}
+
+
 // Init Web
 const app = new Koa();
 app.use(bodyParser())
@@ -286,44 +307,18 @@ async function init() {
 
 
     // Init Routes
-    app.use(static_assets)
+    app.use(new Router()
+        .get(`${PUBLIC_PATH}/*`, serve_static)
+        .get(/^\/[^\/]*\./, serve_static)
+        .routes())
+
     app.use(authroutes)
     app.use(api)
-    app.use(catchall)
+    app.use(ssr)
 
     console.log(`Starting on 3000..`)
     app.listen(3000)
 }
-
-// ----------------------------------------------------------- Server SSR
-const path = require('path')
-const fs = require('fs')
-const stringReplaceStream = require('string-replace-stream')
-const { Readable } = require('stream')
-const fetch = require('./server_fetch')
-const { AzBlobWritable, createServiceSAS } = require('./AzBlobWritable')
-
-const PUBLIC_PATH = "/_assets_"
-const BUILD_PATH = "./build"
-
-// all requires after this will use babel transpile, using 'babel.config.json'
-require("@babel/register")()
-const server_ssr = require('./src/ssr_server')
-
-const static_assets = new Router()
-    .get(`${PUBLIC_PATH}/*`, async function (ctx, next) {
-
-        const filePath = path.join(__dirname, ctx.request.url.replace(PUBLIC_PATH, BUILD_PATH))
-        //console.log(`request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
-
-        if (fs.existsSync(filePath)) {
-            ctx.response.body = fs.createReadStream(filePath)
-        } else {
-            ctx.throw(404, `${ctx.request.url} not found`)
-        }
-        next()
-    })
-    .routes()
 
 // TODO - I want to re-implement this so goes into client state cookie??
 //  Function called via /api/session_status for client-side, or catchall for server-side
@@ -340,9 +335,20 @@ async function getSession(ctx) {
     }
 }
 
-// catchall middleware (ensure this this the LAST middleware to be used)
-async function catchall(ctx, next) {
-    if (!ctx._matchedRoute && !ctx.request.url.endsWith('.png')) {
+
+// ----------------------------------------------------------- Server SSR
+const stringReplaceStream = require('string-replace-stream')
+const { Readable } = require('stream')
+const fetch = require('./server_fetch')
+const { AzBlobWritable, createServiceSAS } = require('./AzBlobWritable')
+
+// all requires after this will use babel transpile, using 'babel.config.json'
+require("@babel/register")()
+const server_ssr = require('./src/ssr_server')
+
+// ssr middleware (ensure this this the LAST middleware to be used)
+async function ssr(ctx, next) {
+    if (!ctx._matchedRoute) {
         //console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.auth && ctx.session.auth.given_name}`)
         var filePath = path.join(__dirname, BUILD_PATH, 'index.html')
 
@@ -357,31 +363,29 @@ async function catchall(ctx, next) {
         } else if (requireAuth && !ctx.session.auth) {
             ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
         } else {
-            const renderData = { ssrContext: "server" }
+            const renderContext = { ssrContext: "server" }
 
             if (componentFetch) {
                 let initfetchfn = FetchOperation.componentFetch(ctx, componentFetch, urlid)
 
                 // Parallel fetch
                 const [serverInitialData, session] = await Promise.all([initfetchfn, getSession(ctx)])
-                renderData.serverInitialData = serverInitialData
-                renderData.session = session
+                renderContext.serverInitialData = serverInitialData
+                renderContext.session = session
+            } else {
+                renderContext.session = await getSession(ctx)
             }
-            // Get Initial DOM
-            //console.log(`Server -- Rendering HTML: ${JSON.stringify(renderData)}`)
-            const reactContent = server_ssr.ssrRender(startURL, renderData)
 
             // SEND
-            reactContent.ssrContext = "hydrate"
             ctx.response.type = 'text/html'
             ctx.body = fs.createReadStream(filePath)
-                .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${reactContent}</div>`))
-                .pipe(stringReplaceStream('"SERVER_INITAL_DATA"', JSON.stringify(renderData)))
-                .pipe(stringReplaceStream('%PUBLIC_URL%', PUBLIC_PATH))
+                .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${server_ssr.ssrRender(startURL, renderContext)}</div>`))
+                .pipe(stringReplaceStream('"SERVER_INITAL_DATA"', JSON.stringify(renderContext)))
         }
     }
     next()
 }
+
 
 // ----------------------------------------------------------- AUTH
 const authroutes = new Router({ prefix: "/connect/microsoft" })

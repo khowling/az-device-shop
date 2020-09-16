@@ -10,20 +10,20 @@ export function MyImage({ image, ...rest }) {
     if (image) {
         if (image.url) {
             return (
-                <Image src={image.url} {...rest} />
+                <img src={image.url} {...rest} />
             )
         } else if (image.container_url && image.pathname) {
             return (
-                <Image src={image.container_url + "/" + image.pathname}  {...rest} />
+                <img src={image.container_url + "/" + image.pathname}  {...rest} />
             )
         } else {
             return (
-                <Image src={"http://placehold.it/50x50"} {...rest} />
+                <img src={"http://placehold.it/50x50"} {...rest} />
             )
         }
     } else {
         return (
-            <Image src={"http://placehold.it/50x50"} {...rest} />
+            <img src={"http://placehold.it/50x50"} {...rest} />
         )
     }
 }
@@ -213,11 +213,7 @@ export function EditImage({ result_image, onChange }) {
             <input key="image_input" type="file" ref={fileInputRef} name="file" style={{ display: "none" }} accept="image/*" onChange={_fileuploadhtml5} />
 
             <a key="image_a" href={previewsrc} target="_won">
-                <Image
-                    width={250} height={100}
-                    src={previewsrc}
-                    imageFit={ImageFit.centerContain}
-                    alt="" />
+                <MyImage width="250" src={previewsrc} alt="" />
             </a>
 
             <TextField key="image_text" prefix="Full Url" name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />

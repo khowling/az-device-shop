@@ -100,7 +100,7 @@ export function useRouter(startUrl, cfg) {
   const [renderRoute, setRenderRoute] = useState(() => pathToRoute(startUrl))
   const { ssrContext, serverInitialData } = useContext(RenderContext)
 
-  console.log(`useRouter() ssrContext=${ssrContext} renderRoute=${JSON.stringify(renderRoute)}`)
+
 
   // Subscribe to <Link> events
   useEffect(() => {
@@ -130,12 +130,14 @@ export function useRouter(startUrl, cfg) {
 
   // return child components
   const { component, componentFetch, routeProps = {}, requireAuth } = cfg[renderRoute.routekey] || {}
+  console.log(`useRouter() ssrContext=${ssrContext} routekey=${renderRoute.routekey}`)
   if (!component) {
+    console.error(`useRouter()  error, unknown route ${renderRoute.routekey}`)
     return `404 - error, unknown route ${renderRoute.routekey}`
   } else {
     let resource
     if (componentFetch) {
-      if (ssrContext === "server" || ssrContext === "hydrate") {
+      if (ssrContext === "server") {
         // the data has been fetched on the server, so just wrap in a completed Promise
         resource = _suspenseWrap(serverInitialData)
       } else {
@@ -148,13 +150,16 @@ export function useRouter(startUrl, cfg) {
         resource = _suspenseFetch('componentFetch' + renderRoute.routekey, renderRoute.urlid)
 
       }
+      console.log(`useRouter() wrapped suspense createElement`)
       return (
         <Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
-          {React.createElement(component, Object.assign({ key: component.name }, routeProps, renderRoute.props, { resource }))}
+          {React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
         </Suspense>
       )
+    } else {
+      console.log(`useRouter() no componentFetch, createElement`)
+      return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
     }
-    return React.createElement(component, Object.assign({ key: component.name }, routeProps, renderRoute.props))
 
   }
 }

@@ -8,8 +8,9 @@ const { MongoClient, Binary, ObjectID } = require('mongodb'),
     USE_COSMOS = false
 
 const StoreDef = {
-    "orders": { collection: "orders", },
-    "inventory": { collection: "inventory", }
+    "orders": { collection: "orders" },
+    "inventory": { collection: "inventory" },
+    "business": { collection: "business" }
 }
 
 async function dbInit() {
@@ -181,7 +182,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                     let update_wi: WorkItem
                     if (timeleft > 0) {
                         console.log(`${MSEC_TO_COMPLETE_ALL} / 100.0) * ${timeleft}`)
-                        const progress = 100 - ((timeleft / MSEC_TO_COMPLETE_ALL) * 100.0)
+                        const progress = Math.floor(100 - ((timeleft / MSEC_TO_COMPLETE_ALL) * 100.0))
                         // in progress
                         new_capacity += status.allocated_capacity
                         update_wi = { status: { ...status, last_update: nownow, progress }, spec, metadata }
@@ -240,11 +241,11 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
             if (action.inventory_spec.status === 'Draft') {
 
                 if (workitem_idx < 0) {
-                    console.log(`No eixting factory workitem, add one in Draft status - no change`)
+                    console.log(`factory_operation: Sync: No existing factory workitem for Draft Inventory, add one`)
                     return factory_operation(state, { type: ActionType.Add, inventory_spec: action.inventory_spec })
 
                 } else if (workitem.status.stage === WorkItem_Stage.Waiting) {
-                    console.log(`Existing factory workitem waiting, can just move back to Draft!`)
+                    console.log(`factory_operation: Sync: Eixting Waiting factory workitem, add one`)
                     return factory_operation(state, { type: ActionType.StatusUpdate, workitem_idx, inventory_spec: { stage: WorkItem_Stage.Draft } })
 
                 } else if (workitem.status.stage === WorkItem_Stage.Complete) {
@@ -257,7 +258,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
             } else if (action.inventory_spec.status === 'Required') {
 
                 if (workitem_idx < 0) {
-                    console.log(` no eixting spec, creating`)
+                    console.log(`factory_operation: Sync: No existing factory workitem for Required Inventory, add one`)
                     return factory_operation(state, { type: ActionType.Add, inventory_spec: action.inventory_spec })  //add_workitem(action.inventory_spec)
                 } else if (workitem.status.stage === WorkItem_Stage.Complete) {
                     console.log(`workitem already completed, cannot accept any changes!`)
@@ -288,6 +289,7 @@ async function factory_startup() {
 
     // Init DB
     const db = await dbInit()
+    const tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
 
     /////////////////////////////////////////////////////////
     // Factory Operator - Custom Resource -> "EventsFactory"
@@ -299,7 +301,7 @@ async function factory_startup() {
 
 
     // watch for new new Inventory
-    watch(db, "inventory", (doc) => {
+    watch(db, StoreDef["inventory"].collection, (doc) => {
         if (doc.status === 'Required') {
             console.log(`Found new required Inventory`)
             const workitem_updates = factory_op({ type: ActionType.Add, inventory_spec: doc })
@@ -337,7 +339,7 @@ async function factory_startup() {
 
         let workitem_updates: Array<WorkItemUpdate> = []
 
-        console.log(`Factory Control Loop, looking for _InProgress_  workitems to update/complete.......`)
+        //console.log(`Factory Control Loop, looking for _InProgress_  workitems to update/complete.......`)
         workitem_updates = factory_op({ type: ActionType.CheckInProgress })
 
         let update_complete = []
@@ -347,17 +349,17 @@ async function factory_startup() {
             }
         }
 
-        console.log(`Factory Control Loop, looking for _Waiting_ workitems to schedule.......`)
+        //console.log(`Factory Control Loop, looking for _Waiting_ workitems to schedule.......`)
         workitem_updates = workitem_updates.concat(factory_op({ type: ActionType.CheckWaiting }))
 
         // Update Complete Inventory
         if (update_complete.length > 0) {
-            await db.collection("inventory").updateMany({ _id: { $in: update_complete }, partition_key: "TEST" }, { $set: { status: "Available" } })
+            await db.collection("inventory").updateMany({ _id: { $in: update_complete }, partition_key: tenent.email }, { $set: { status: "Available" } })
         }
 
         // Look for any changes to Required Inventory, and apply to the factory
-        const inventory = await db.collection("inventory").find({ status: { $ne: "Available" }, partition_key: "TEST" }).toArray()
-        console.log(`Factory Control Loop, looking for Desired Inventory ${inventory.length}.......`)
+        const inventory = await db.collection("inventory").find({ status: { $ne: "Available" }, partition_key: tenent.email }).toArray()
+        //console.log(`Factory Control Loop, looking for Desired Inventory ${inventory.length}.......`)
 
         for (let inventory_record of inventory) {
             // check desired state (inventory) matches current state

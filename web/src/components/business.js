@@ -9,7 +9,6 @@ import { Card } from '@uifabric/react-cards'
 import { Text } from '@fluentui/react'
 import { Image, ImageFit } from '@fluentui/react'
 import { Separator } from '@fluentui/react'
-import { initializeIcons } from '@uifabric/icons';
 import { Icon } from '@fluentui/react'
 import { MessageBar, MessageBarType } from '@fluentui/react'
 import { useConstCallback } from '@uifabric/react-hooks';
@@ -25,8 +24,6 @@ import { Checkbox } from '@fluentui/react'
 import { Spinner } from '@fluentui/react';
 
 import update from 'immutability-helper';
-
-initializeIcons();
 
 function WorkItem({ resource, dismissPanel, refstores }) {
   const { status, result } = resource.read()
@@ -507,6 +504,7 @@ export function StartBusiness() {
     'email': 'Required',
     'catalog': 'Required'
   })
+  const [state, setState] = useState({ state: 'reset', description: '' })
 
   function _onChange(e, val) {
     handleInputChange({ ...input, [e.target.name]: val })
@@ -519,9 +517,6 @@ export function StartBusiness() {
       setValidation({ ...validation, [e.target.name]: !val ? 'Required' : null })
     }
   }
-
-  const [state, setState] = useState({ state: 'reset', description: '' })
-
 
   function _createBusiness(a) {
     setState({ state: 'resetting' })
@@ -542,9 +537,6 @@ export function StartBusiness() {
         <Text variant="xxLarge"  >Build a retail business like a BOSS</Text>
         <Text variant="large">Create your product catalogue, assign a Warehouse, build Inventory, and open your online business</Text>
 
-
-
-
         <Stack.Item>
           <Text variant="large" >Create a tenent for your business:</Text>
         </Stack.Item>
@@ -554,15 +546,17 @@ export function StartBusiness() {
         </Stack.Item>
 
         <Stack.Item>
+
           <Label>Store Logo (on nav bar)</Label>
           <EditImage result_image={input.image} onChange={_onChange} />
+
         </Stack.Item>
         <Stack.Item>
           <Label >Choose your product catalogue:</Label>
         </Stack.Item>
         <Stack.Item>
           <Stack horizontal tokens={{ childrenGap: 30 }}>
-            { /*
+
             <Card
               aria-label="Clickable vertical card with image bleeding at the top of the card"
               onClick={() => _onChange({ target: { name: "catalog" } }, "bike")}
@@ -621,13 +615,12 @@ export function StartBusiness() {
               </Card.Section>
 
             </Card>
-*/ }
           </Stack>
 
         </Stack.Item>
 
         <Stack.Item>
-          { /* state.state === 'reset' ?
+          {state.state === 'reset' ?
             <PrimaryButton text={`Initialise My Business`} onClick={_createBusiness} allowDisabledFocus disabled={Object.entries(validation).reduce((a, c) => a || c[1], null)} />
             : state.state === 'resetting' ?
               <Spinner label="Please Wait, will take a few seonds..." ariaLive="assertive" labelPosition="right" />
@@ -659,13 +652,10 @@ export function StartBusiness() {
                     </div>
                   </div>
                   : <div></div>
-*/ }
+          }
 
         </Stack.Item>
-
-
       </Stack>
-
 
       <Stack styles={{ root: { width: "45%" } }}>
         <Image src="https://3er1viui9wo30pkxh1v2nh4w-wpengine.netdna-ssl.com/wp-content/uploads/2014/09/Satya_smiling-print-1024x683.jpg" />

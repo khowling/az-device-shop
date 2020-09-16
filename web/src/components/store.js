@@ -21,7 +21,7 @@ export function Panes({ resource }) {
                     <section key={i._id} className="f-align-middle">
                         <div className="m-panes-product-placement-item">
                             <picture className="c-image" >
-                                <MyImage styles={{ root: { margin: "0 auto;" } }} imageFit={ImageFit.CenterContain} width={450} image={i.image} alt="no pic" />
+                                <MyImage width="450" image={i.image} alt="no pic" />
                             </picture>
                             <div>
                                 <h3 className="c-heading">{i.heading}</h3>
@@ -55,7 +55,7 @@ export function Panes({ resource }) {
                         <div key={i._id}>
                             <div className="m-panes-product-placement-item">
                                 <picture className="c-image">
-                                    <MyImage imageFit={ImageFit.CenterContain} width={300} image={i.image} alt="no pic" />
+                                    <MyImage width="300" image={i.image} alt="no pic" />
                                 </picture>
                                 <div>
                                     <h3 style={{ padding: 0 }} className="c-heading">{i.heading}</h3>
@@ -114,7 +114,7 @@ export function Panes3x({ resource }) {
                         <section key={i._id}>
                             <div className="m-panes-product-placement-item">
                                 <picture className="c-image">
-                                    <MyImage imageFit={ImageFit.CenterContain} image={i.image} alt="no pic" />
+                                    <MyImage image={i.image} style={{ "width": "100%", "maxWidth": "400px" }} />
                                 </picture>
                                 <div>
                                     <h3 className="c-heading">{i.heading}</h3>

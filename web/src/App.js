@@ -6,6 +6,7 @@ import { AddToCart, MyCart } from './components/cart'
 import { ManageOrders, Order } from './components/order'
 import { ManageProducts, Product } from './components/product'
 import { Inventory, StartBusiness } from './components/business'
+import { Spinner, SpinnerSize } from '@fluentui/react';
 
 import RenderContext from './RenderContext'
 import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
@@ -13,6 +14,7 @@ import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
 //import './App.css';
 import { initializeIcons } from '@uifabric/icons';
 import { Fabric } from '@fluentui/react'
+
 initializeIcons();
 
 
@@ -108,7 +110,7 @@ export const AppRouteCfg = {
 }
 
 export function App({ startUrl }) {
-  console.log(`App - ${JSON.stringify(AppRouteCfg)}`)
+  //console.log(`App - ${JSON.stringify(AppRouteCfg)}`)
   const routeElements = useRouter(startUrl, AppRouteCfg)
 
   const { ssrContext, session } = useContext(RenderContext)
@@ -128,10 +130,11 @@ export function App({ startUrl }) {
   return (
     <Fabric>
       <main id="mainContent" data-grid="container">
-        <Suspense fallback={<Nav></Nav>}>
+        <Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
           <Nav resource={sessionResource} />
+          {routeElements}
         </Suspense>
-        {routeElements}
+
       </main>
     </Fabric>
   )

@@ -4,7 +4,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin')
 var HtmlReplaceWebpackPlugin = require('html-replace-webpack-plugin')
 const TerserPlugin = require('terser-webpack-plugin');
 
-const PUBLIC_PATH = "/_assets_"
+const PUBLIC_PATH = "/static"
 const BUILD_PATH = './build'
 const mode = process.env.NODE_ENV || 'development'
 
@@ -18,7 +18,7 @@ module.exports = [
     target: 'web',
     output: {
       // requires absolute path
-      path: path.resolve(__dirname, BUILD_PATH),
+      path: path.resolve(__dirname, BUILD_PATH, PUBLIC_PATH),
       filename: "[name].[chunkhash:8].js",
       publicPath: PUBLIC_PATH
     },

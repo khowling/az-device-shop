@@ -219,7 +219,7 @@ export function ManageProducts({ resource }) {
             fieldName: 'image',
             minWidth: 50, maxWidth: 50,
             onRender: (item) => {
-              return <MyImage imageFit={ImageFit.Contain} image={item.image} height={50} alt="no pic" />;
+              return <MyImage image={item.image} height="40" alt="no pic" />;
             }
           }
         ]}
@@ -278,7 +278,7 @@ export function ManageProducts({ resource }) {
             minWidth: 75,
             maxWidth: 150,
             onRender: (item) => {
-              return <MyImage imageFit={ImageFit.Contain} image={item.image} height={75} alt="no pic" />;
+              return <MyImage image={item.image} height={45} alt="no pic" />;
             }
           },
           {
