@@ -556,7 +556,25 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(401, 'please login')
         } else {
             try {
-                // TODO - check products are still OK!
+
+                // Preprocess payment (interactive) (paypal etc)
+
+                // Update to 'OrderPlaced'
+
+                // orderController
+
+                // Allocate Order #
+
+                // Reserve Inventory
+
+                // Finalise Payment
+
+                // Warehouse Picking/packing
+
+                //Shipping
+
+
+
                 const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
                 const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { order_number: 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0'), status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub } } })
                 ctx.body = order

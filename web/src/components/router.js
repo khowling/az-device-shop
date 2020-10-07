@@ -152,9 +152,11 @@ export function useRouter(startUrl, cfg) {
       }
       console.log(`useRouter() wrapped suspense createElement`)
       return (
-        <Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
-          {React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
-        </Suspense>
+        //<Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
+        //{
+        React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))
+        //}
+        //</Suspense>
       )
     } else {
       console.log(`useRouter() no componentFetch, createElement`)

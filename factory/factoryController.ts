@@ -1,6 +1,3 @@
-import { ifError } from "assert";
-
-export { };
 
 // Mongo require
 const { MongoClient, Binary, ObjectID } = require('mongodb'),
@@ -69,11 +66,23 @@ async function watch(db: any, collection: string, fn: (doc: any) => void) {
     })
 }
 
+interface FactoryState {
+    workitems: Array<WorkItem>;
+    allocated_capacity: number;
+    lastupdated: number;
+}
+
+interface WorkItem {
+    metadata: WorkItem_metadata;
+    spec: any;
+    status: WorkItem_status;
+}
+
 interface WorkItem_metadata {
     created_time: number;
 }
 
-enum WorkItem_Stage { Draft, Waiting, InProgress, Complete }
+
 interface WorkItem_status {
     stage: WorkItem_Stage;
     starttime?: number;
@@ -83,29 +92,23 @@ interface WorkItem_status {
     allocated_capacity?: number;
     progress?: number;
 }
+enum WorkItem_Stage { Draft, Waiting, InProgress, Complete }
 
-interface WorkItem {
-    metadata: WorkItem_metadata;
-    spec: any;
-    status: WorkItem_status;
-}
 
-interface FactoryState {
-    workitems: Array<WorkItem>;
-    allocated_capacity: number;
-    lastupdated: number;
-}
 
 interface FactoryUpdate {
-    workitem_updates: Array<WorkItemUpdate>;
+    workitem_updates: Array<WorkItemEvent>;
     allocated_capacity: number;
     lastupdated: number;
 }
-enum WorkItemUpdateType { New, Complete, ProgressUpdate }
-interface WorkItemUpdate {
-    type: WorkItemUpdateType;
+
+
+interface WorkItemEvent {
+    type: WorkItemEventType;
     workitem: WorkItem;
 }
+enum WorkItemEventType { New, Complete, ProgressUpdate }
+
 
 enum ActionType { Add, CheckInProgress, CheckWaiting, StatusUpdate, Sync }
 interface FactoryAction {
@@ -141,16 +144,16 @@ const FACTORY_CAPACITY = 10000
 
 var factory_state = { lastupdated: Date.now(), allocated_capacity: 0, workitems: [] }
 
-function factory_op(action: FactoryAction): Array<WorkItemUpdate> {
+function factory_op(action: FactoryAction): Array<WorkItemEvent> {
     const [new_state, changes] = factory_operation(factory_state, action)
     factory_state = new_state
     return changes
 }
 
-function factory_operation(state: FactoryState, action: FactoryAction): [FactoryState, Array<WorkItemUpdate>] {
+function factory_operation(state: FactoryState, action: FactoryAction): [FactoryState, Array<WorkItemEvent>] {
 
     const nownow = Date.now()
-    let factory_update: Array<WorkItemUpdate> = [], new_capacity = 0
+    let factory_update: Array<WorkItemEvent> = [], new_capacity = 0
 
     switch (action.type) {
 
@@ -159,18 +162,16 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
             const new_wi = { status: { stage: action.inventory_spec.status === 'Draft' ? WorkItem_Stage.Draft : WorkItem_Stage.Waiting, allocated_capacity: 0, waittime: 0 }, metadata: { created_time: Date.now() }, spec: action.inventory_spec }
             return [
                 { lastupdated: nownow, allocated_capacity: state.allocated_capacity, workitems: state.workitems.concat(new_wi) },
-                [{ type: WorkItemUpdateType.New, workitem: new_wi }]
+                [{ type: WorkItemEventType.New, workitem: new_wi }]
             ]
-            break
 
         case ActionType.StatusUpdate:
 
             const update_wi = { ...state.workitems[action.workitem_idx].status, ...action.inventory_spec }
             return [
                 { lastupdated: nownow, allocated_capacity: state.allocated_capacity, workitems: [...state.workitems.slice(0, action.workitem_idx), update_wi, ...state.workitems.slice(action.workitem_idx + 1, state.workitems.length)] },
-                [{ type: WorkItemUpdateType.ProgressUpdate, workitem: update_wi }]
+                [{ type: WorkItemEventType.ProgressUpdate, workitem: update_wi }]
             ]
-            break
 
         case ActionType.CheckInProgress:
 
@@ -187,11 +188,11 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                         new_capacity += status.allocated_capacity
                         update_wi = { status: { ...status, last_update: nownow, progress }, spec, metadata }
 
-                        factory_update.push({ type: WorkItemUpdateType.ProgressUpdate, workitem: update_wi })
+                        factory_update.push({ type: WorkItemEventType.ProgressUpdate, workitem: update_wi })
                     } else {
                         // finished
                         update_wi = { status: { ...status, last_update: nownow, progress: 100, stage: WorkItem_Stage.Complete, allocated_capacity: 0 }, spec, metadata }
-                        factory_update.push({ type: WorkItemUpdateType.Complete, workitem: update_wi })
+                        factory_update.push({ type: WorkItemEventType.Complete, workitem: update_wi })
                     }
                     return update_wi
 
@@ -199,11 +200,11 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                     return wi
                 }
             })
+
             return [
                 { lastupdated: nownow, allocated_capacity: new_capacity, workitems: update_complete },
                 factory_update
             ]
-            break
 
         case ActionType.CheckWaiting:
 
@@ -221,7 +222,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                         // still need to wait
                         update_wi = { status: { ...status, last_update: nownow, waittime: nownow - wi.status.starttime }, spec, metadata }
                     }
-                    factory_update.push({ type: WorkItemUpdateType.ProgressUpdate, workitem: update_wi })
+                    factory_update.push({ type: WorkItemEventType.ProgressUpdate, workitem: update_wi })
                     return update_wi
                 } else {
                     return wi
@@ -231,7 +232,6 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                 { lastupdated: nownow, allocated_capacity: (state.allocated_capacity + new_capacity), workitems: update_waiting },
                 factory_update
             ]
-            break
 
         case ActionType.Sync:
 
@@ -279,7 +279,6 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
             return [state, factory_update]
         default:
             return [state, factory_update]
-            break
     }
 }
 
@@ -337,14 +336,14 @@ async function factory_startup() {
         // look for existing workorders 
         // perform required actions to get to desired state.
 
-        let workitem_updates: Array<WorkItemUpdate> = []
+        let workitem_updates: Array<WorkItemEvent> = []
 
         //console.log(`Factory Control Loop, looking for _InProgress_  workitems to update/complete.......`)
         workitem_updates = factory_op({ type: ActionType.CheckInProgress })
 
         let update_complete = []
         for (let action of workitem_updates) {
-            if (action.type === WorkItemUpdateType.Complete) {
+            if (action.type === WorkItemEventType.Complete) {
                 update_complete.push(ObjectID(action.workitem.spec._id))
             }
         }

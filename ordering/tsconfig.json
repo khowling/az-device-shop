@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es2015",
+    "module": "commonjs",
+    "outDir": "out",
+    "sourceMap": true,
+    "downlevelIteration": true
+  },
+  "types": [
+    "node"
+  ]
+}

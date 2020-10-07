@@ -6,6 +6,7 @@ import { AddToCart, MyCart } from './components/cart'
 import { ManageOrders, Order } from './components/order'
 import { ManageProducts, Product } from './components/product'
 import { Inventory, StartBusiness } from './components/business'
+import { OrderMgr } from './components/ordermgr'
 import { Spinner, SpinnerSize } from '@fluentui/react';
 
 import RenderContext from './RenderContext'
@@ -106,6 +107,14 @@ export const AppRouteCfg = {
       store: "inventory",
       refstores: [{ store: "products" }]//, "workitems"]
     }
+  },
+  "/omgr": {
+    component: OrderMgr,
+    componentFetch: {
+      operation: "get",
+      store: "inventory",
+      refstores: [{ store: "products" }]//, "workitems"]
+    }
   }
 }
 
@@ -130,7 +139,10 @@ export function App({ startUrl }) {
   return (
     <Fabric>
       <main id="mainContent" data-grid="container">
-        <Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
+        <Suspense fallback={[
+          <Nav />,
+          <Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />
+        ]}>
           <Nav resource={sessionResource} />
           {routeElements}
         </Suspense>
