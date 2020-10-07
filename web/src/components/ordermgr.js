@@ -132,17 +132,43 @@ export function OrderMgr({ resource }) {
         }
     }, [])
 
+    const stage_txt = ['NewRequiredOrder', 'InventoryAllocated', 'OrderNumberGenerated', 'Picking', 'Shipping', 'Complete']
 
+    function OrderDisplay(o, idx) {
+
+        return (
+            <Stack key={idx} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
+
+                <Label variant="small">Order Number {o.status.order_number || "<TBC>"}</Label>
+                {
+                    o.status.failed &&
+                    <MessageBar messageBarType={MessageBarType.severeWarning}>
+                        <Text variant="xSmall">{o.status.message}</Text>
+                    </MessageBar>
+                }
+
+                <Stack horizontal tokens={{ childrenGap: 3 }}>
+                    <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }}>
+                        <Label >Spec:</Label>
+
+                        <Text variant="xSmall">Full details: <Link route="/o" urlid={o.spec._id}><Text variant="xSmall">open</Text></Link></Text>
+                        <Text variant="xSmall">Status: {o.spec.status}</Text>
+                    </Stack>
+                    <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }} >
+                        <Label>Status:</Label>
+                        <Text variant="xSmall">{stage_txt[o.status.stage]}</Text>
+                        <Text variant="xSmall">Wait Time : {o.status.waittime / 1000}</Text>
+                        <Text variant="xSmall">Progess (%) : {o.status.progress}</Text>
+                    </Stack>
+                </Stack>
+            </Stack>
+        )
+    }
 
 
     return (
         <Stack wrap tokens={{ childrenGap: 0, padding: 0 }}>
-
-
-
             <Separator></Separator>
-
-
             <h3>Order Operator</h3>
             <Stack tokens={{ childrenGap: 5, padding: 10 }}>
                 <MessageBar messageBarType={message.type}>{message.msg}</MessageBar>
@@ -166,116 +192,28 @@ export function OrderMgr({ resource }) {
 
                 </Stack>
 
-
                 <Stack horizontal tokens={{ childrenGap: 5, padding: 0 }}>
 
-                    <Stack
-                        tokens={{ childrenGap: 8, padding: 8 }}
-                        styles={{
-                            root: {
-                                background: 'rgb(225, 228, 232)',
-                                width: '100%',
-                            }
-                        }} >
-                        <h4>Planned</h4>
-                        {orders && orders.filter(i => i.status.stage <= 1).map((i, idx) =>
+                    {[[2, "Processing"], [3, stage_txt[3]], [4, stage_txt[4]], [5, stage_txt[5]]].map(([stage_idx, desc], idx) => {
+                        return (
+                            <Stack
+                                tokens={{ childrenGap: 8, padding: 8 }}
+                                styles={{
+                                    root: {
+                                        background: 'rgb(225, 228, 232)',
+                                        width: '100%',
+                                    }
+                                }} >
+                                <h4>{desc}</h4>
+                                {orders && orders.filter(i => i.status.stage === stage_idx || (idx === 0 && i.status.stage < stage_idx)).map(OrderDisplay)}
+                            </Stack>
+                        )
 
-                            <Card key={idx} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
-                                <Card.Item>
-                                    <Text variant="small">Order {i.status.order_number}</Text>
-                                </Card.Item>
-                                <Card.Section horizontal tokens={{ childrenGap: 3 }}>
-                                    <Card.Section tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#CCCC00" } }}>
-                                        <Text variant="small">Spec:</Text>
-                                        <Link > <Text variant="xSmall">{i.spec._id}</Text></Link>
-                                        <Text variant="xSmall">Qty: {i.spec.qty}</Text>
-                                        <Text variant="xSmall">Status: {i.spec.status}</Text>
-                                    </Card.Section>
-                                    <Card.Section tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: i.status.failed ? "red" : "rgb(223, 246, 221)" } }}>
-                                        <Text variant="small">Status: {i.status.message}</Text>
-                                        <Text variant="xSmall">Stage: {i.status.stage === 0 ? 'Draft' : 'Waiting'}</Text>
-                                        <Text variant="xSmall">Wait Time (Seconds) : {i.status.waittime / 1000}</Text>
-                                        <Text variant="xSmall">Progess (%) : {i.status.progress}</Text>
-                                    </Card.Section>
-                                </Card.Section>
-                            </Card>
-
-                        )}
-
-
-                    </Stack>
-
-
-                    <Stack
-                        tokens={{ childrenGap: 8, padding: 8 }}
-                        styles={{
-                            root: {
-                                background: 'rgb(225, 228, 232)',
-                                width: '100%',
-                            }
-                        }} >
-                        <h4>In Progress</h4>
-                        {orders && orders.filter(i => i.status.stage === 2).map((i, idx) =>
-                            <Card key={idx} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
-                                <Card.Item>
-                                    <Text variant="small">Factory</Text>
-                                </Card.Item>
-                                <Card.Section horizontal tokens={{ childrenGap: 3 }}>
-                                    <Card.Section tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#CCCC00" } }}>
-                                        <Text variant="small">Inventory Spec:</Text>
-
-                                        <Text variant="xSmall">Qty: {i.spec.qty}</Text>
-                                        <Text variant="xSmall">Status: {i.spec.status}</Text>
-                                    </Card.Section>
-                                    <Card.Section tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(223, 246, 221)" } }}>
-                                        <Text variant="small">Inventory Build Status</Text>
-                                        <Text variant="xSmall">Stage: {i.status.stage === 0 ? 'Draft' : 'Waiting'}</Text>
-                                        <Text variant="xSmall">Wait Time (Seconds) : {i.status.waittime / 1000}</Text>
-                                        <Text variant="xSmall">Progess (%) : {i.status.progress}</Text>
-                                    </Card.Section>
-                                </Card.Section>
-                            </Card>
-                        )}
-                    </Stack>
-
-                    <Stack
-                        tokens={{ childrenGap: 8, padding: 8 }}
-                        styles={{
-                            root: {
-                                background: 'rgb(225, 228, 232)',
-                                width: '100%',
-                            }
-                        }} >
-                        <h4>Complete</h4>
-                        {orders && orders.filter(i => i.status.stage === 3).map((i, idx) =>
-                            <Card key={idx} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
-                                <Card.Item>
-                                    <Text variant="small">Factory</Text>
-                                </Card.Item>
-                                <Card.Section horizontal tokens={{ childrenGap: 3 }}>
-                                    <Card.Section tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#CCCC00" } }}>
-                                        <Text variant="small">Inventory Spec:</Text>
-
-                                        <Text variant="xSmall">Qty: {i.spec.qty}</Text>
-                                        <Text variant="xSmall">Status: {i.spec.status}</Text>
-                                    </Card.Section>
-                                    <Card.Section tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#DDDD00" } }}>
-                                        <Text variant="small">Inventory Build Status</Text>
-                                        <Text variant="xSmall">Stage: {i.status.stage === 0 ? 'Draft' : 'Waiting'}</Text>
-                                        <Text variant="xSmall">Wait Time (Seconds) : {i.status.waittime / 1000}</Text>
-                                        <Text variant="xSmall">Progess (%) : {i.status.progress}</Text>
-                                    </Card.Section>
-                                </Card.Section>
-                            </Card>
-                        )}
-                    </Stack>
-
+                    })
+                    }
 
                 </Stack>
             </Stack>
-
-
-
-        </Stack>
+        </Stack >
     )
 }

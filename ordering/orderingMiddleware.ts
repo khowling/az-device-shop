@@ -159,7 +159,7 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
                 const new_order = { spec: action.spec, status: { failed: false, stage: Order_Stage.NewRequiredOrder } }
                 return [{ lastupdated: Date.now(), orders: state.orders.concat([new_order]), picking_capacity: state.picking_capacity, inventory: state.inventory }, new_order]
             } else {
-                const failed_order = { spec: action.spec, status: { failed: true, stage: Order_Stage.NewRequiredOrder, message: "Invalid Order - no items" } }
+                const failed_order = { spec: action.spec, status: { failed: true, stage: Order_Stage.NewRequiredOrder, message: "Invalid spec - no items" } }
                 return [{ lastupdated: Date.now(), orders: state.orders.concat([failed_order]), picking_capacity: state.picking_capacity, inventory: state.inventory }, failed_order]
             }
         case ActionType.AllocateNumber:
@@ -268,17 +268,14 @@ async function order_startup() {
     orderProcessor.context.eventfn = ws_server_emit
 
     // Watch for new new Required Orders
-    const orderAggregationPipeline = [
-        { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Required" }] } }
-        //,{ $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
-    ]
-    var orderStreamIterator = db.collection(StoreDef["orders"].collection).watch(
-        orderAggregationPipeline,
+    db.collection(StoreDef["orders"].collection).watch(
+        [
+            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Required" }] } }
+            //,{ $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+        ],
         // By default, watch() returns the delta of those fields modified by an update operation
         // Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
-        //{ fullDocument: "updateLookup" }
-    )
-    orderStreamIterator.on('change', orderProcessor.callback())
+    ).on('change', orderProcessor.callback())
 
     // Watch for new new Available Inventory
     const inventoryAggregationPipeline = [
