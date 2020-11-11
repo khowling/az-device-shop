@@ -4,11 +4,11 @@
   "private": true,
   "dependencies": {
     "@azure/cosmos": "^3.5.4",
-    "bson": "^4.0.3",
-    "mongodb": "^3.5.2",
     "@azure/event-hubs": "^5.0.1",
-    "rhea-promise": "^1.0.0",
-    "node-rdkafka": "^2.8.1"
+    "bson": "^4.0.3",
+    "mongodb": "^3.6.2",
+    "node-rdkafka": "^2.8.1",
+    "rhea-promise": "^1.0.0"
   },
   "scripts": {
     "start": "node ./server.js"

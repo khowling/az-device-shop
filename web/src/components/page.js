@@ -1,8 +1,7 @@
 import React from 'react'
-import { Link, Redirect } from './router.js'
+import { Link /*, Redirect */ } from './router.js'
 import { Alert, MyImage } from '../utils/common'
-import { CommandBarButton } from '@fluentui/react'
-import { Text } from '@fluentui/react'
+import { CommandBarButton, Text } from '@fluentui/react'
 
 export function Nav({ resource }) {
   const { status, result } = resource ? resource.read() : {}
@@ -55,6 +54,12 @@ export function Nav({ resource }) {
                     key: 'bots',
                     text: 'Manage Inventory',
                     href: '/inv',
+                    iconProps: { iconName: 'Cloud' }
+                  },
+                  {
+                    key: 'bots',
+                    text: 'Manage Orders',
+                    href: '/omgr',
                     iconProps: { iconName: 'Cloud' }
                   },
                   {

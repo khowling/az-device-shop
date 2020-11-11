@@ -5,7 +5,8 @@ import { Panes, Panes3x } from './components/store'
 import { AddToCart, MyCart } from './components/cart'
 import { ManageOrders, Order } from './components/order'
 import { ManageProducts, Product } from './components/product'
-import { Inventory, StartBusiness } from './components/business'
+import { StartBusiness } from './components/business'
+import { Inventory } from './components/factorymgr'
 import { OrderMgr } from './components/ordermgr'
 import { Spinner, SpinnerSize } from '@fluentui/react';
 
@@ -140,8 +141,8 @@ export function App({ startUrl }) {
     <Fabric>
       <main id="mainContent" data-grid="container">
         <Suspense fallback={[
-          <Nav />,
-          <Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />
+          <Nav key="nav" />,
+          <Spinner key="spinner" size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />
         ]}>
           <Nav resource={sessionResource} />
           {routeElements}

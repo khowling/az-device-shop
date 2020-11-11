@@ -1,17 +1,16 @@
-import React, { useEffect } from 'react';
+import React /*, { useEffect }*/ from 'react';
 import { Link } from './router.js'
-import { Alert, MyImage } from '../utils/common'
-import { Image, IImageProps, ImageFit } from '@fluentui/react'
-import { Breadcrumb } from '@fluentui/react'
-import { Stack, IStackProps } from '@fluentui/react'
+import { MyImage } from '../utils/common'
+
+import { Stack, Breadcrumb } from '@fluentui/react'
 
 export function Panes({ resource }) {
 
     const { status, result } = resource.read()
 
     if (status !== 'success') return null; else {
-        const hero = result.data.Category.filter(c => c.position == "hero")
-        const highlight = result.data.Category.filter(c => c.position == "highlight")
+        const hero = result.data.Category.filter(c => c.position === "hero")
+        const highlight = result.data.Category.filter(c => c.position === "highlight")
 
         return (
 

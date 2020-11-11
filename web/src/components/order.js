@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react'
-import { Link, navTo } from './router.js'
-import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react'
-import { CommandBar } from '@fluentui/react'
-import { Stack, IStackProps } from '@fluentui/react'
-import { Breadcrumb } from '@fluentui/react'
+import React from 'react'
+import { Link } from './router.js'
+
+import { Stack, Breadcrumb } from '@fluentui/react'
 
 export function ManageOrders({ resource }) {
 
@@ -69,7 +67,7 @@ export function ManageOrders({ resource }) {
 export function Order({ resource }) {
 
     const { status, result } = resource.read()
-
+    console.log(status)
 
     return (
         <div>

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useContext, Suspense } from 'react'
+import React, { useState, useEffect, useContext /*, Suspense */ } from 'react'
 import { _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 import RenderContext from '../RenderContext'
-import { Spinner, SpinnerSize } from '@fluentui/react';
 
 // Used by Link & NavTo
 export function _encodeURL(route, urlid, props) {
@@ -47,7 +46,7 @@ export function Redirect({ route, urlid, props }) {
     let redirect = true
     // (1) Update the browser URL
     if (typeof window !== 'undefined') {
-      const { routekey, props, hash } = pathToRoute(new URL(window.location))
+      const { routekey /*, props, urlid */ } = pathToRoute(new URL(window.location))
       if (routekey === route) {
         redirect = false
       }
@@ -56,11 +55,12 @@ export function Redirect({ route, urlid, props }) {
         window.history.replaceState("", "", _encodeURL(route, urlid, props))
       }
     }
+
     if (redirect) {
       // (2) Now notify the router!!
       listeners.forEach(listener => listener({ routekey: route || '/', urlid, props }))
     }
-  }, [])
+  }, [props, urlid, route])
 
   return null
 }

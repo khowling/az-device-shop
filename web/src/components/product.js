@@ -1,23 +1,10 @@
-import React, { useState, useEffect } from 'react'
-import { Link, navTo, _encodeURL } from './router.js'
-import { DetailsList, DetailsListLayoutMode, Selection, SelectionMode, IColumn } from '@fluentui/react'
-import { CommandBar } from '@fluentui/react'
-import { TextField } from '@fluentui/react'
-import { Text } from '@fluentui/react'
-import { Stack, IStackProps } from '@fluentui/react'
-import { Image, IImageProps, ImageFit } from '@fluentui/react'
-import { MessageBar, MessageBarType } from '@fluentui/react'
+import React, { useState } from 'react'
+import { navTo /*, _encodeURL */ } from './router.js'
 import { Alert, MyImage, EditImage } from '../utils/common'
-import { Label } from '@fluentui/react'
-import { PrimaryButton, DefaultButton } from '@fluentui/react'
-import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { Separator } from '@fluentui/react'
-import { Panel, PanelType } from '@fluentui/react'
-import { useConstCallback } from '@uifabric/react-hooks';
-import { ChoiceGroup, IChoiceGroupOption } from '@fluentui/react'
-import { Dropdown } from '@fluentui/react'
 
+import { Dropdown, ChoiceGroup, Panel, PanelType, Separator, mergeStyleSets, PrimaryButton, DefaultButton, Label, MessageBar, MessageBarType, Stack, Text, TextField, DetailsList, DetailsListLayoutMode, SelectionMode } from '@fluentui/react'
+import { useConstCallback } from '@uifabric/react-hooks';
 
 export function Product({ dismissPanel, resource, type, refstores }) {
 
@@ -79,7 +66,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
       {/*<Stack horizontal tokens={{ childrenGap: 50 }} styles={{ root: { width: 650 } }}>*/}
 
       <Stack {...columnProps}>
-        {input.type == "Product" ?
+        {input.type === "Product" ?
           <Dropdown label="Category" defaultSelectedKey={input.category} onChange={(e, i) => _onChange({ target: { name: "category" } }, i.key)} options={refstores.Category} />
           :
           <ChoiceGroup label="Category Position" onChange={(e, i) => _onChange({ target: { name: "position" } }, i.key)} defaultSelectedKey={input.position} options={[
@@ -91,7 +78,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
         <TextField label="Heading" name="heading" value={input.heading} onChange={_onChange} required />
 
         <TextField label="Description" name="description" value={input.description} onChange={_onChange} multiline rows={5} required />
-        {input.type == "Product" &&
+        {input.type === "Product" &&
           <TextField label="Price" name="price" value={input.price} onChange={_onChange} required />
         }
 
@@ -100,7 +87,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
 
         {/*<Stack {...columnProps}>*/}
 
-        {input.type == "Product" && [
+        {input.type === "Product" && [
 
           <Label key="features">Features</Label>,
           <DetailsList key="detaillist"
@@ -166,9 +153,10 @@ const classNames = mergeStyleSets({
 export function ManageProducts({ resource }) {
   const [panel, setPanel] = React.useState({ open: false })
   const { status, result } = resource.read()
+  console.log(status)
 
   const openNewItem = useConstCallback((type, editid) => {
-    const refstores = type == 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
+    const refstores = type === 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
     setPanel({ open: true, type, resource: editid ? _suspenseFetch('store/products', editid) : _suspenseWrap({}), refstores })
   })
   const dismissPanel = useConstCallback(() => setPanel({ open: false }));
@@ -194,7 +182,7 @@ export function ManageProducts({ resource }) {
         columns={[
           {
             key: 'heading',
-            name: 'Heading',
+            name: 'Categories',
             fieldName: 'heading',
             className: classNames.fileIconHeaderIcon,
             minWidth: 100, maxWidth: 250
@@ -219,34 +207,31 @@ export function ManageProducts({ resource }) {
             fieldName: 'image',
             minWidth: 50, maxWidth: 50,
             onRender: (item) => {
-              return <MyImage image={item.image} height="40" alt="no pic" />;
+              return <MyImage image={item.image} height={35} alt="no pic" />;
             }
           }
         ]}
-        compact={true}
+        compact={false}
         items={result.data.Category || []}
-        onItemInvoked={(i) => openNewItem("Category", i._id)}
-        selectionMode={SelectionMode.none}
+        //onItemInvoked={(i) => openNewItem("Category", i._id)}
+        onActiveItemChanged={(i) => openNewItem("Category", i._id)}
+        selectionMode={SelectionMode.single}
         setKey="none"
         layoutMode={DetailsListLayoutMode.justified}
         isHeaderVisible={true}
       />
 
-      <CommandBar
-        items={[{
-          key: 'addRow',
-          text: 'New Category',
-          iconProps: { iconName: 'Add' },
-          onClick: () => openNewItem("Category")
-          //href: _encodeURL("/Product", null, {type:"category"})
-        }]}
+      <PrimaryButton
+        text='Create New Category'
+        iconProps={{ iconName: 'Add' }}
+        onClick={() => openNewItem("Category")}
       />
 
       <DetailsList
         columns={[
           {
             key: 'heading',
-            name: 'Heading',
+            name: 'Products',
             fieldName: 'heading',
             className: classNames.fileIconHeaderIcon,
             minWidth: 50,
@@ -260,7 +245,7 @@ export function ManageProducts({ resource }) {
             minWidth: 25,
             maxWidth: 150,
             onRender: (item) => {
-              return <Text variant="medium">{result.data.Category.find(i => item.category == i._id).heading}</Text>;
+              return <Text variant="medium">{result.data.Category.find(i => item.category === i._id).heading}</Text>;
             }
           },
           {
@@ -278,7 +263,7 @@ export function ManageProducts({ resource }) {
             minWidth: 75,
             maxWidth: 150,
             onRender: (item) => {
-              return <MyImage image={item.image} height={45} alt="no pic" />;
+              return <MyImage image={item.image} height={40} alt="no pic" />;
             }
           },
           {
@@ -286,8 +271,8 @@ export function ManageProducts({ resource }) {
             name: 'Price',
             fieldName: 'price',
             className: classNames.fileIconHeaderIcon,
-            minWidth: 30,
-            maxWidth: 100
+            minWidth: 50,
+            maxWidth: 60
           },
           {
             key: 'features',
@@ -316,23 +301,17 @@ export function ManageProducts({ resource }) {
         ]}
         compact={false}
         items={result.data.Product || []}
-        selectionMode={SelectionMode.none}
-        setKey="none"
-        onItemInvoked={(i) => openNewItem("Product", i._id)}
+        onActiveItemChanged={(i) => openNewItem("Product", i._id)}
+        selectionMode={SelectionMode.single}
         layoutMode={DetailsListLayoutMode.justified}
         isHeaderVisible={true}
       />
 
-      <CommandBar
-        items={[{
-          key: 'addRow',
-          text: 'New Product',
-          iconProps: { iconName: 'Add' },
-          onClick: () => openNewItem("Product")
-          //href: _encodeURL("/Product")
-        }]}
+      <PrimaryButton
+        text='Create New Product'
+        iconProps={{ iconName: 'Add' }}
+        onClick={() => openNewItem("Product")}
       />
-
     </Stack>
   )
 }

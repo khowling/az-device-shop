@@ -15,21 +15,21 @@ class Processor extends Emitter {
         return this;
     }
 
-    callback() {
+    callback(inflate = false) {
 
         function compose(middleware) {
 
             return function (context, next) {
 
                 // last called middleware #
-
                 let index = -1
-                //const init_event = { type: OrderingEventType.NewOrder, failed: false }
                 return dispatch(0, null)
 
-                function dispatch(i, event: Order) {
-                    if (context.eventfn && event) context.eventfn([event])
-                    if (event && event.status.failed) return Promise.reject(event.status.message)
+                function dispatch(i, changes: Array<ChangeEvent>) {
+                    if (context.eventfn && changes && changes.length > 0) {
+                        context.eventfn(context, changes)
+                        if (changes[0].status.failed) return Promise.reject(changes[0].status.message)
+                    }
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
                     index = i
                     let fn = middleware[i]
@@ -52,7 +52,7 @@ class Processor extends Emitter {
             // doc.opertionType == "insert"
             // doc.ns.coll == "Collection"
             // doc.documentKey == A document that contains the _id of the document created or modified
-
+            console.log('Processor Triggered')
             const ctx = this.createContext(doc)
             return this.handleRequest(ctx, fn);
         }
@@ -76,28 +76,42 @@ class Processor extends Emitter {
 }
 
 const StoreDef = {
-    "orders": { collection: "orders" },
+    "orders": {
+        collection: "orders",
+        status: {
+            InactiveCart: 5,
+            ActiveCart: 10,
+            NewOrder: 30
+        }
+    },
     "inventory": { collection: "inventory" },
-    "business": { collection: "business" }
+    "business": { collection: "business" },
+    "events": {
+        description: "collection for immutable event log, when transient state is derrived from material views",
+        collection: "events"
+    }
 }
 
 
 interface OrderingState {
-    inventory: Map<string, Inventory>;
-    orders: Array<Order>;
+    sequence: number;
+    inventory: Map<string, InventoryObject>;
+    orders: Array<OrderObject>;
     picking_capacity: number;
     lastupdated: number;
 }
 
 
-interface Order {
-    //metadata: Order_metadata;
-    spec: any;
-    status: Order_status;
+interface OrderObject {
+    spec: any; // What state you desire for the object
+    metadata: {
+        doc_id: string;
+    };
+    status: OrderStatus;
 }
 
-interface Order_status {
-    stage: Order_Stage;
+interface OrderStatus extends DocStatus {
+    stage: OrderStage;
     starttime?: number;
 
     order_number?: string;
@@ -107,95 +121,149 @@ interface Order_status {
     waittime?: number;
     allocated_capacity?: number;
     progress?: number;
+}
 
+enum OrderStage { NewRequiredOrder, InventoryAllocated, OrderNumberGenerated, WaitingPicking, Picking, Shipping, Complete }
+
+
+type InventoryObject = {
+    onhand: number;
+    category: string;
+}
+
+
+enum InventoryStage { NewInventory }
+
+
+// Change Events
+
+interface ChangeEvent {
+    kind: string;
+    metadata: {
+        type?: ChangeEventType;
+        sequence: number;
+        doc_id: string;
+    };
+    status: OrderStatus | InventoryStatus;
+}
+enum ChangeEventType {
+    CREATE,
+    UPDATE,
+    DELETE
+}
+interface InventoryStatus extends DocStatus {
+    stage: InventoryStage;
+    onhand: number;
+}
+
+interface DocStatus {
     failed: boolean;
     message?: string;
 }
-enum Order_Stage { NewRequiredOrder, InventoryAllocated, OrderNumberGenerated, Picking, Shipping, Complete, NewInventory }
 
-
-
-
-type Inventory = { onhand: number; };
-interface InventoryState {
-
-    lastupdated: number;
-}
 
 // Perform Action on ordering_state
-enum ActionType { NewInventory, NewOrder, AllocateNumber, AllocateInventory }
+
 interface OrderingAction {
 
     // Order actions
     type: ActionType;
-    spec?: any; // full doc used for NewOrder
-    doc_id?: string; // used for all other Order updates
+    spec?: any; // full doc used for NewOrder / New Inventory
+    doc_id?: string; // used for all updates
     data?: any;
-
-    // stock actions
-    sku?: string;
-    qty?: number;
 }
-const update = require('immutability-helper')
-var ordering_state: OrderingState = { lastupdated: Date.now(), picking_capacity: 0, inventory: new Map(), orders: [] }
+enum ActionType { NewInventory, NewOrder, AllocateNumber, AllocateInventory }
 
-function local_state_op(action: OrderingAction): Order {
-    const [new_state, changes] = ordering_operation(ordering_state, action)
+// Store in "https://github.com/Level/level"
+// In Memory, volatile state
+// Storing large objects in a GC language is questionable, maybe look at rocksdb
+var ordering_state: OrderingState = { sequence: 0, lastupdated: Date.now(), picking_capacity: 0, inventory: new Map(), orders: [] }
+
+function local_state_op(action: OrderingAction): Array<ChangeEvent> {
+    const [new_state, change] = ordering_operation(ordering_state, action)
     ordering_state = new_state
-    return changes
+    return change
 }
 
-function ordering_operation(state: OrderingState, action: OrderingAction): [OrderingState, Order] {
+function imm_splice(array, index, val) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
+function ordering_operation(state: OrderingState, action: OrderingAction): [OrderingState, Array<ChangeEvent>] {
 
-    const nownow = Date.now()
-    const order_key_idx = action.doc_id ? state.orders.findIndex(o => o.spec._id.toHexString() === action.doc_id) : -1
+    const sequence = state.sequence + 1
+    const newstate = { ...state, sequence, lastupdated: Date.now() }
 
     switch (action.type) {
-        case ActionType.NewInventory:
-            return [{ lastupdated: Date.now(), orders: state.orders, picking_capacity: state.picking_capacity, inventory: state.inventory.set(action.sku, { onhand: action.qty }) }, null]
+        case ActionType.NewInventory: {
+            const inventory_updates: Map<string, InventoryObject> = new Map()
+            inventory_updates.set(action.spec.product, { category: action.spec.category, onhand: action.spec.qty + (state.inventory.has(action.spec.product) ? state.inventory.get(action.spec.product).onhand : 0) })
 
-        case ActionType.NewOrder:
-            if (action.spec && action.spec.items && action.spec.items.length > 0) {
-                const new_order = { spec: action.spec, status: { failed: false, stage: Order_Stage.NewRequiredOrder } }
-                return [{ lastupdated: Date.now(), orders: state.orders.concat([new_order]), picking_capacity: state.picking_capacity, inventory: state.inventory }, new_order]
+            return [{ ...newstate, inventory: new Map([...state.inventory, ...inventory_updates]) },
+            Array.from(inventory_updates).map(([sku, inv_obj]): ChangeEvent => {
+                return { kind: "Inventory", metadata: { sequence, doc_id: sku, type: ChangeEventType.CREATE }, status: { failed: false, stage: InventoryStage.NewInventory, ...inv_obj } }
+            })
+            ]
+        }
+        case ActionType.NewOrder: {
+            const spec = action.spec
+            let new_order_status
+            if (spec && spec.items && spec.items.length > 0) {
+                new_order_status = { failed: false, stage: OrderStage.NewRequiredOrder }
             } else {
-                const failed_order = { spec: action.spec, status: { failed: true, stage: Order_Stage.NewRequiredOrder, message: "Invalid spec - no items" } }
-                return [{ lastupdated: Date.now(), orders: state.orders.concat([failed_order]), picking_capacity: state.picking_capacity, inventory: state.inventory }, failed_order]
+                new_order_status = { failed: true, stage: OrderStage.NewRequiredOrder, message: "Invalid spec - no items" }
             }
-        case ActionType.AllocateNumber:
-            const new_order = { spec: state.orders[order_key_idx].spec, status: { ...state.orders[order_key_idx].status, stage: Order_Stage.OrderNumberGenerated, order_number: action.data } }
-            return [{ lastupdated: Date.now(), picking_capacity: state.picking_capacity, inventory: state.inventory, orders: state.orders.splice(order_key_idx, 1, new_order) }, new_order]
-
-        case ActionType.AllocateInventory:
+            return [{ ...newstate, orders: state.orders.concat([{ spec, metadata: { doc_id: spec._id.toHexString() }, status: new_order_status }]) }, [{ kind: "Order", metadata: { sequence, doc_id: spec._id, type: ChangeEventType.CREATE }, status: new_order_status }]]
+        }
+        case ActionType.AllocateNumber: {
+            const order_key_idx = action.doc_id ? state.orders.findIndex(o => o.metadata.doc_id === action.doc_id) : -1
+            const existing_order = state.orders[order_key_idx]
+            const new_order = { ...existing_order, status: { ...existing_order.status, stage: OrderStage.OrderNumberGenerated, order_number: action.data } }
+            return [{ ...newstate, orders: imm_splice(state.orders, order_key_idx, new_order) }, [{ kind: "Order", metadata: { ...new_order.metadata, sequence, type: ChangeEventType.UPDATE }, status: new_order.status }]]
+        }
+        case ActionType.AllocateInventory: {
             // Check aviable Inventory, if any failed, fail the whole order
-            const inventory_updates: Map<string, Inventory> = new Map()
-            const order: Order = state.orders[order_key_idx]
-            if (order.spec.items && order.spec.items.length > 0) {
-                for (let i of order.spec.items.items) {
+            const inventory_updates: Map<string, InventoryObject> = new Map()
+            const order_key_idx = action.doc_id ? state.orders.findIndex(o => o.metadata.doc_id === action.doc_id) : -1
+            const existing_order = state.orders[order_key_idx]
+            let new_order = { ...existing_order, status: { ...existing_order.status, stage: OrderStage.InventoryAllocated } }
+            let new_inventory = state.inventory
+            if (existing_order.spec.items && existing_order.spec.items.length > 0) {
+                for (let i of existing_order.spec.items) {
                     if (i.item._id) {
                         const sku = i.item._id.toHexString(),
                             inv = state.inventory.get(sku)
 
                         if (!inv || inv.onhand < i.qty) {
-                            const failed_order = { spec: order.spec, status: { ...order.status, failed: true, stage: Order_Stage.InventoryAllocated, message: `Failed Application ${i.item._id}` } }
-                            return [{ lastupdated: Date.now(), orders: state.orders.splice(order_key_idx, 1, failed_order), picking_capacity: state.picking_capacity, inventory: state.inventory }, failed_order]
+                            new_order.status.failed = true
+                            new_order.status.message = `Inventory Allocation Failed ${i.item._id}, onhand ${inv ? inv.onhand : "no inv"}, requested ${i.qty}`
+                            break
                         } else {
-                            inventory_updates.set(sku, { onhand: inv.onhand - i.qty })
+                            inventory_updates.set(sku, { ...inv, onhand: inv.onhand - i.qty })
                         }
                     } else {
-                        const failed_order = { spec: order.spec, status: { ...order.status, failed: true, stage: Order_Stage.InventoryAllocated, message: `Failed, no Item on order` } }
-                        return [{ lastupdated: Date.now(), orders: state.orders.splice(order_key_idx, 1, failed_order), picking_capacity: state.picking_capacity, inventory: state.inventory }, failed_order]
+                        new_order.status.failed = true
+                        new_order.status.message = `Failed, no Item on order`
+                        break
                     }
                 }
 
-                // We have inventory for the order, allocate the inventory
-                const new_order = { spec: order.spec, status: { ...order.status, failed: false, stage: Order_Stage.InventoryAllocated, inventory: [] } }
-                return [{ lastupdated: Date.now(), orders: state.orders.splice(order_key_idx, 1, new_order), picking_capacity: state.picking_capacity, inventory: new Map([...state.inventory, ...inventory_updates]) }, new_order]
+                if (!new_order.status.failed) {
+                    new_inventory = new Map([...state.inventory, ...inventory_updates])
+                    new_order.status.inventory = []
+                }
             } else {
-                const failed_order = { spec: order.spec, status: { ...order.status, failed: true, stage: Order_Stage.InventoryAllocated, message: "Not valid Order" } }
-                return [{ lastupdated: Date.now(), orders: state.orders.splice(order_key_idx, 1, failed_order), picking_capacity: state.picking_capacity, inventory: state.inventory }, failed_order]
-
+                new_order.status.failed = true
+                new_order.status.message = "Not valid Order"
             }
+
+            return [
+                { ...newstate, orders: imm_splice(state.orders, order_key_idx, new_order), inventory: new_inventory },
+                [
+                    { kind: "Order", metadata: { ...new_order.metadata, sequence, type: ChangeEventType.UPDATE }, status: new_order.status },
+                    ...Array.from(inventory_updates).map(([sku, inv_obj]): ChangeEvent => {
+                        return { kind: "Inventory", metadata: { sequence, doc_id: sku, type: ChangeEventType.CREATE }, status: { failed: false, stage: InventoryStage.NewInventory, ...inv_obj } }
+                    })
+                ]
+            ]
+        }
         default:
             return [state, null]
     }
@@ -206,7 +274,7 @@ async function newReadOrder(ctx, next) {
     console.log(`newReadOrder forward, find: ${JSON.stringify(find_order)}`)
     const order = await ctx.db.collection(StoreDef["orders"].collection).findOne(find_order)
     await next(local_state_op({ type: ActionType.NewOrder, spec: order || find_order }))
-    console.log('generateOrderNo back')
+    console.log('newReadOrder back')
 }
 
 
@@ -214,40 +282,70 @@ async function generateOrderNo(ctx, next) {
     console.log(`generateOrderNo forward, spec: ${JSON.stringify(ctx.trigger)}`)
     const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
     const order_number = 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0')
-    //const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { order_number: 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0'), status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub } } })
-    //ctx.status = { ...ctx.status, order_number }
-    await next(local_state_op({ type: ActionType.AllocateNumber, data: order_number, doc_id: ctx.trigger.documentKey._id }))
+    await next(local_state_op({ type: ActionType.AllocateNumber, data: order_number, doc_id: ctx.trigger.documentKey._id.toHexString() }))
     console.log('generateOrderNo back')
 }
 
 async function allocateInventry(ctx, next) {
-    console.log(`allocateInventry forward, spec: ${JSON.stringify(ctx.spec)}, status: ${JSON.stringify(ctx.status)}`)
-    //const [event] = local_state_op({ type: ActionType.AllocateInventory, doc_id: ctx.trigger.documentKey._id })
-    //ctx.status = { ...ctx.status, inv: [] }
-    await next(local_state_op({ type: ActionType.AllocateInventory, doc_id: ctx.trigger.documentKey._id }))
+    console.log(`allocateInventry forward, trigger: ${JSON.stringify(ctx.trigger)}`)
+    await next(local_state_op({ type: ActionType.AllocateInventory, doc_id: ctx.trigger.documentKey._id.toHexString() }))
     console.log('allocateInventry back')
 }
 
+
+function picking_control_loop() {
+
+    // check orders in picking status for completion
+    // progress & complete
+
+
+    // look for waiting / new picking & start if capacity
+
+
+    //
+}
+
 async function picking(ctx, next) {
-    console.log(`picking forward, spec: ${JSON.stringify(ctx.spec)}, status: ${JSON.stringify(ctx.status)}`)
-    await next()
+
+
+
+    console.log(`picking forward, trigger: ${JSON.stringify(ctx.trigger)}`)
+    await next(local_state_op({ type: ActionType.StatusUpdate, doc_id: ctx.trigger.documentKey._id.toHexString() }))
+    await next()WaitingPicking
     console.log('picking back')
 }
 
 async function shipping(ctx, next) {
-    console.log(`shipping forward, spec: ${JSON.stringify(ctx.spec)}, status: ${JSON.stringify(ctx.status)}`)
+    console.log(`shipping forward, trigger: ${JSON.stringify(ctx.trigger)}`)
     await next()
     console.log(`shipping back`)
 }
 
 
 
-
-
 const { MongoClient, ObjectID, ObjectId } = require('mongodb'),
     MongoURL = process.env.MONGO_DB
 
+import {
+    BlobServiceClient,
+    StorageSharedKeyCredential,
+    BlobDownloadResponseModel
+} from "@azure/storage-blob";
+import { exit } from "process";
 
+function getCheckpoint() {
+    console.log(`looking for saved starting point ${process.env.STORAGE_ACCOUNT}`)
+    const sharedKeyCredential = new StorageSharedKeyCredential(process.env.STORAGE_ACCOUNT, process.env.STORAGE_MASTER_KEY)
+    const blobServiceClient = new BlobServiceClient(`https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net`, sharedKeyCredential)
+    const containerClient = blobServiceClient.getContainerClient(process.env.STORAGE_CONTAINER)
+
+    //const createContainerResponse = await containerClient.create();
+
+    console.log(`Create container ${process.env.STORAGE_CONTAINER} successfully`);
+
+    const blobClient = containerClient.getBlockBlobClient(process.env.STORAGE_CHECKPOINT_FILE);
+    return blobClient
+}
 
 async function order_startup() {
     const murl = new URL(MongoURL)
@@ -265,16 +363,59 @@ async function order_startup() {
 
     const db = orderProcessor.context.db = client.db()
     orderProcessor.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
+
+    // rehydrate - replay events
+    // db.getReplicationInfo()
+    //db.events.watch([{ $match: { "operationType": "insert" } }], { startAtOperationTime: Date.parse(db.getReplicationInfo().tFirst) })
+    const blobClient = getCheckpoint()
+
+    try {
+        let res1: Buffer = await blobClient.downloadToBuffer()
+        ordering_state = JSON.parse(res1.toString())
+
+        console.log(`inflated ordering_state : ${JSON.stringify(ordering_state)}`)
+
+        await db.collection(StoreDef["events"].collection).createIndex({ sequence: 1 })
+
+        const inflate_events = db.collection(StoreDef["events"].collection).aggregate(
+            [
+                { $match: { $and: [{ "partition_key": orderProcessor.context.tenent.email }, { sequence: { $gt: ordering_state.sequence } }] } },
+                { $sort: { "sequence": 1 } }
+            ]
+        ).toArray()
+
+
+    } catch (e) {
+        if (e.statusCode === 403) {
+            console.error('**** its wsl2 date issue dummy')
+            exit(1)
+        } else {
+            console.warn(`nothing to re-hydrate`)
+            //const content = JSON.stringify({ ordering_state, })
+            //const uploadBlobResponse = await blobClient.upload(content, content.length);
+        }
+    }
+
+    // Create a blob
+    /*
+    const content = "hello";
+    const blobName = "newblob" + new Date().getTime();
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    const uploadBlobResponse = await blockBlobClient.upload(content, Buffer.byteLength(content));
+    console.log(`Upload block blob ${blobName} successfully`, uploadBlobResponse.requestId);
+    */
+
+    // Start watch new events
     orderProcessor.context.eventfn = ws_server_emit
 
     // Watch for new new Required Orders
     db.collection(StoreDef["orders"].collection).watch(
         [
-            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Required" }] } }
-            //,{ $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["orders"].status.NewOrder }] } }
+            , { $project: { "ns": 1, "documentKey": 1, "fullDocument.status": 1, "fullDocument.partition_key": 1 } }
         ],
-        // By default, watch() returns the delta of those fields modified by an update operation
-        // Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
+        { fullDocument: "updateLookup" }
+        // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
     ).on('change', orderProcessor.callback())
 
     // Watch for new new Available Inventory
@@ -282,27 +423,34 @@ async function order_startup() {
         { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Available" }] } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
     ]
-    var inventoryStreamIterator = db.collection(StoreDef["inventory"].collection).watch(
+    var inventoryStreamWatcher = db.collection(StoreDef["inventory"].collection).watch(
         inventoryAggregationPipeline,
 
         {
             fullDocument: "updateLookup"
         }
     )
-    inventoryStreamIterator.on('change', data => {
+    inventoryStreamWatcher.on('change', data => {
         //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
-        console.log(`inventoryStreamIterator : ${JSON.stringify(data.fullDocument)}`)
-        local_state_op({ type: ActionType.NewInventory, sku: data.fullDocument._id, qty: data.fullDocument.qty })
+        console.log(`inventoryStreamWatcher : ${JSON.stringify(data.fullDocument)}`)
+        // spec 
+        // _id
+        // qty
+        // status
+        // category
+        // product 
+        // warehouse
+        ws_server_emit(orderProcessor.context, local_state_op({ type: ActionType.NewInventory, spec: data.fullDocument }))
     })
 }
-
-
 
 //  ---- Factory Monitoring Websocket & API
 type WS_ServerClientType = Record<string, any>;
 const ws_server_clients: WS_ServerClientType = new Map()
-function ws_server_emit(changes: Array<Order>) {
+function ws_server_emit(ctx, changes: Array<ChangeEvent>) {
     //if (factory_updates && factory_updates.length > 0) {
+    const res = ctx.db.collection(StoreDef["events"].collection).insertOne({ partition_key: ctx.tenent.email, trigger: ctx.trigger, changes })
+
     console.log(`sending factory updates to ${ws_server_clients.size} clients`)
     for (let [key, ws] of ws_server_clients.entries()) {
         //console.log(`${key}`)
@@ -350,7 +498,19 @@ function ws_server_startup() {
         const client_id = ws_server_clients.size
         ws_server_clients.set(client_id, ws)
 
-        ws.send(JSON.stringify({ type: "snapshot", state: ordering_state.orders }))
+
+
+        ws.send(JSON.stringify({
+            type: "snapshot", state: {
+                ...ordering_state,
+                // convert orders array from full orders object to just metadata & state
+                orders: ordering_state.orders.map((o: OrderObject) => { return { metadata: { doc_id: o.spec._id }, status: o.status } }),
+                // convert Inventry Map into Array
+                inventory: Array.from(ordering_state.inventory).map(([sku, val]) => {
+                    return { metadata: { doc_id: sku }, status: { onhand: val.onhand } }
+                })
+            }
+        }))
 
         ws.on('close', function close() {
             if (ws_server_clients.has(client_id)) {

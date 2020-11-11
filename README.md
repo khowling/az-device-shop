@@ -103,7 +103,7 @@ When a primary does not communicate with the other members for 10seconds, an eli
 ```
 docker volume create --name=mongodata
 ## its not a sharded cluster, its a Replica Set single instance, 
-docker run  -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0
+docker run --restart --name mongo_dev -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0 
 
 in mongo cli, run:  >  rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "localhost:27017" } ] } ))
 ```

@@ -1,29 +1,28 @@
 import React, { useState } from 'react'
-import { Image, ImageFit } from '@fluentui/react'
-import { putBlob, listFiles } from '../utils/azureBlob.js'
-import { Toggle } from '@fluentui/react'
-import { TextField } from '@fluentui/react'
-import { PrimaryButton, DefaultButton } from '@fluentui/react'
-import { Stack, IStackProps } from '@fluentui/react'
+
+import { putBlob /*, listFiles */ } from '../utils/azureBlob.js'
+
+import { Toggle, TextField, DefaultButton, Stack } from '@fluentui/react'
+
 
 export function MyImage({ image, ...rest }) {
     if (image) {
         if (image.url) {
             return (
-                <img src={image.url} {...rest} />
+                <img src={image.url} alt="" {...rest} />
             )
         } else if (image.container_url && image.pathname) {
             return (
-                <img src={image.container_url + "/" + image.pathname}  {...rest} />
+                <img src={image.container_url + "/" + image.pathname} alt="" {...rest} />
             )
         } else {
             return (
-                <img src={"http://placehold.it/50x50"} {...rest} />
+                <img src={"http://placehold.it/50x50"} alt="" {...rest} />
             )
         }
     } else {
         return (
-            <img src={"http://placehold.it/50x50"} {...rest} />
+            <img src={"http://placehold.it/50x50"} alt="" {...rest} />
         )
     }
 }

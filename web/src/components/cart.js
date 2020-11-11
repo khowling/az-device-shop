@@ -3,29 +3,12 @@ import { Alert, MyImage } from '../utils/common'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link } from './router.js'
-import { DropdownMenuItemType, Dropdown } from '@fluentui/react'
-import { PrimaryButton, MessageBarButton } from '@fluentui/react'
-import { MessageBar, MessageBarType } from '@fluentui/react'
-import { ChoiceGroup } from '@fluentui/react'
-import { Label } from '@fluentui/react'
-import { Text } from '@fluentui/react'
-import { Spinner } from '@fluentui/react'
-import { Depths } from '@uifabric/fluent-theme'
-import { mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
-import { List } from '@fluentui/react'
-import { Image, ImageFit } from '@fluentui/react'
-import { FontWeights } from '@uifabric/styling'
-import { Card } from '@uifabric/react-cards'
-import { Icon } from '@fluentui/react'
-import { Stack, IStackProps } from '@fluentui/react'
-import { /* SharedColors, */ NeutralColors } from '@uifabric/fluent-theme';
-import { Separator } from '@fluentui/react'
-import { Breadcrumb } from '@fluentui/react'
 
+import { Breadcrumb, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, MessageBarButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
 
 const theme = getTheme();
 
-const { palette, semanticColors, fonts } = theme
+const { palette, fonts } = theme
 
 const classNames = mergeStyleSets({
   itemCell: [
@@ -81,7 +64,9 @@ function Summary({ cart, checkout }) {
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
     _fetchit('/api/checkout', 'PUT').then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
-      setState({ state: "ordered", response: succ })
+      setState({ state: "created-success", response: succ })
+      // Poll for status
+
       //navTo("ManageOrders")
     }, err => {
       console.error(`created failed : ${err}`)
@@ -96,7 +81,7 @@ function Summary({ cart, checkout }) {
       <Separator />
 
       <Text variant="mediumPlus" block={true}>
-        Subtotal ({cart.items_count || 0} items)  <Text variant="large">£{Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00}</Text>
+        Subtotal ({cart.items_count || 0} items):  <Text variant="large">£{Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00}</Text>
       </Text>
 
 
@@ -134,12 +119,40 @@ function Summary({ cart, checkout }) {
         />,
 
         <Text key="ordertotal" style={{ marginTop: "20px" }} variant="large">
-          Order Total ({cart.items_count || 0} items)  : £{(shipping === 'B' ? 9.99 : 0) + (Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00)}
+          Order Total: £{(shipping === 'B' ? 9.99 : 0) + (Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00)}
         </Text>,
 
-        <PrimaryButton key="order" text="Place Order" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'} />
-      ]
-        :
+        <div key="oneofthem">
+          {state.state === 'ready' &&
+            <PrimaryButton key="order" text="Place Order" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'} />
+          }
+          {state.state === 'wait' &&
+            <Spinner key="wait" label="Wait..." ariaLive="assertive" labelPosition="right" />
+          }
+          {state.state === 'created-success' &&
+            <div key="ok" className="m-alert f-information" role="alert">
+              <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
+              <div>
+                <div className="c-glyph glyph-info" aria-label="Information message"></div>
+                <h1 className="c-heading">Order Created</h1>
+                <p className="c-paragraph">Click here to see your order status
+              <span className="c-group">
+                    <Link route="/myorders" className="c-action-trigger" role="button" component="ManageOrders">My Orders</Link>
+
+                  </span>
+                </p>
+              </div>
+            </div>
+          }
+          {state.state === 'error' &&
+            <MessageBar key="error" messageBarType={MessageBarType.severeWarning}>
+              <Text variant="xSmall">Failed to create Order : {state.description}, <Link route="/checkout" className="c-action-trigger" >retry</Link></Text>
+            </MessageBar>
+          }
+
+        </div>
+
+      ] :
         <Stack.Item >
           <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0 }} disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'}>Checkout cart</Link>
           <Text variant="small" nowrap={true} block={true} >or</Text>
@@ -160,6 +173,7 @@ export function MyCart({ resource, checkout }) {
 
 
   const { status, result } = resource.read()
+  console.log(status)
   const cart = result.data
 
   function _removeitem(cartline) {

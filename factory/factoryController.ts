@@ -178,7 +178,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
             const update_complete = state.workitems.map((wi: WorkItem) => {
                 const { status, spec, metadata } = wi
                 if (status.stage === WorkItem_Stage.InProgress) {
-                    const MSEC_TO_COMPLETE_ALL = 25000, timeleft = MSEC_TO_COMPLETE_ALL - (nownow - wi.status.starttime)
+                    const MSEC_TO_COMPLETE_ALL = 5000, timeleft = MSEC_TO_COMPLETE_ALL - (nownow - wi.status.starttime)
 
                     let update_wi: WorkItem
                     if (timeleft > 0) {
@@ -395,7 +395,7 @@ function ws_server_startup() {
         http = require('http'),
         //    serveStatic = require('serve-static'),
         //    useragent = require('express-useragent'),
-        port = process.env.PORT || 9090,
+        port = process.env.PORT || 9091,
         httpServer = http.createServer().listen(port)
 
     console.log(`listening to port ${port}`)
