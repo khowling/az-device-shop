@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useContext } from 'react'
 import { Alert, MyImage } from '../utils/common'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
-import { Link } from './router.js'
+import { Link, navTo } from './router.js'
+import { AddedCartCount } from '../GlobalContexts'
 
-import { Breadcrumb, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, MessageBarButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
+import { DefaultButton, Breadcrumb, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, MessageBarButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
 
 const theme = getTheme();
 
@@ -55,7 +56,7 @@ const classNames = mergeStyleSets({
   }
 })
 
-function Summary({ cart, checkout }) {
+function Summary({ cart, checkout, dismissPanel }) {
   const [state, setState] = useState({ state: "ready" })
   const [shipping, setShipping] = useState('A')
 
@@ -77,121 +78,125 @@ function Summary({ cart, checkout }) {
   return (
     <Stack styles={{ root: { padding: 10, backgroundColor: palette.themeLight } }} tokens={{ childrenGap: 15 }}>
 
-      <Text variant="xLarge">Checkout shopping Cart</Text>
-      <Separator />
 
-      <Text variant="mediumPlus" block={true}>
-        Subtotal ({cart.items_count || 0} items):  <Text variant="large">£{Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00}</Text>
-      </Text>
-
-
-      {state.state === 'error' ?
-        <MessageBar messageBarType={MessageBarType.error} isMultiline={false} truncated={true} styles={{ root: { maxWidth: "300px" } }}>
-          <b>Faild to Checkout, please retry.</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {state.description}</MessageBar>
-        : state.state === 'success' ?
-          <MessageBar styles={{ root: { maxWidth: "350px" } }} actions={<div>
-            <MessageBarButton>Goto Order</MessageBarButton>
-          </div>} messageBarType={MessageBarType.success} isMultiline={false}>Order Created</MessageBar>
-          :
-          <br />
-      }
+      <Stack.Item align="end">
+        <Text variant="large" block={true}>
+          Subtotal ({cart.items_count || 0} items):  <Text variant="large">£{Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00}</Text>
+        </Text>
 
 
-      {checkout ? [
-        <Stack.Item key="address">
-          <Label block={true}>Delivery Address:</Label>
-          <Text style={{ marginLeft: "40px" }} block={true}>999 The Good Street</Text>
-          <Text style={{ marginLeft: "40px" }} block={true}>Great Town</Text>
-          <Text style={{ marginLeft: "40px" }} block={true}>OneoftheShire</Text>
-          <Text style={{ marginLeft: "40px" }} block={true}>PC1 TPC</Text>
-        </Stack.Item>,
+        {state.state === 'error' ?
+          <MessageBar messageBarType={MessageBarType.error} isMultiline={false} truncated={true} styles={{ root: { maxWidth: "300px" } }}>
+            <b>Faild to Checkout, please retry.</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {state.description}</MessageBar>
+          : state.state === 'success' ?
+            <MessageBar styles={{ root: { maxWidth: "350px" } }} actions={<div>
+              <MessageBarButton>Goto Order</MessageBarButton>
+            </div>} messageBarType={MessageBarType.success} isMultiline={false}>Order Created</MessageBar>
+            :
+            <br />
+        }
+      </Stack.Item>
 
-        <ChoiceGroup key="shipping" style={{ marginTop: "40px" }}
-          label="Select Shipping option"
-          onChange={(e, i) => setShipping(i.key)}
-          defaultSelectedKey={shipping}
-          options={[
-            { key: 'A', text: 'Within 4 working days (free)' },
-            { key: 'B', text: 'Next Day (£9.99)' },
-            { key: 'C', text: 'Same Day (not avaiable)', disabled: true }
-          ]}
 
-        />,
+      {
+        checkout ? [
+          <Stack.Item key="address">
+            <Label block={true}>Delivery Address:</Label>
+            <Text style={{ marginLeft: "40px" }} block={true}>999 The Good Street</Text>
+            <Text style={{ marginLeft: "40px" }} block={true}>Great Town</Text>
+            <Text style={{ marginLeft: "40px" }} block={true}>OneoftheShire</Text>
+            <Text style={{ marginLeft: "40px" }} block={true}>PC1 TPC</Text>
+          </Stack.Item>,
 
-        <Text key="ordertotal" style={{ marginTop: "20px" }} variant="large">
-          Order Total: £{(shipping === 'B' ? 9.99 : 0) + (Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00)}
-        </Text>,
+          <ChoiceGroup key="shipping" style={{ marginTop: "40px" }}
+            label="Select Shipping option"
+            onChange={(e, i) => setShipping(i.key)}
+            defaultSelectedKey={shipping}
+            options={[
+              { key: 'A', text: 'Within 4 working days (free)' },
+              { key: 'B', text: 'Next Day (£9.99)' },
+              { key: 'C', text: 'Same Day (not avaiable)', disabled: true }
+            ]}
 
-        <div key="oneofthem">
-          {state.state === 'ready' &&
-            <PrimaryButton key="order" text="Place Order" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'} />
-          }
-          {state.state === 'wait' &&
-            <Spinner key="wait" label="Wait..." ariaLive="assertive" labelPosition="right" />
-          }
-          {state.state === 'created-success' &&
-            <div key="ok" className="m-alert f-information" role="alert">
-              <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
-              <div>
-                <div className="c-glyph glyph-info" aria-label="Information message"></div>
-                <h1 className="c-heading">Order Created</h1>
-                <p className="c-paragraph">Click here to see your order status
+          />,
+
+          <Text key="ordertotal" style={{ marginTop: "20px" }} variant="large">
+            Order Total: £{(shipping === 'B' ? 9.99 : 0) + (Array.isArray(cart.items) ? cart.items.reduce((acc, l) => acc + l.line_total, 0) : 0.00)}
+          </Text>,
+
+          <div key="oneofthem">
+            {state.state === 'ready' &&
+              <PrimaryButton key="order" text="Place Order" onClick={_checkout} allowDisabledFocus disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'} />
+            }
+            {state.state === 'wait' &&
+              <Spinner key="wait" label="Wait..." ariaLive="assertive" labelPosition="right" />
+            }
+            {state.state === 'created-success' &&
+              <div key="ok" className="m-alert f-information" role="alert">
+                <button className="c-action-trigger c-glyph glyph-cancel" aria-label="Close alert"></button>
+                <div>
+                  <div className="c-glyph glyph-info" aria-label="Information message"></div>
+                  <h1 className="c-heading">Order Created</h1>
+                  <p className="c-paragraph">Click here to see your order status
               <span className="c-group">
-                    <Link route="/myorders" className="c-action-trigger" role="button" component="ManageOrders">My Orders</Link>
+                      <Link route="/myorders" className="c-action-trigger" role="button" component="ManageOrders">My Orders</Link>
 
-                  </span>
-                </p>
+                    </span>
+                  </p>
+                </div>
               </div>
-            </div>
-          }
-          {state.state === 'error' &&
-            <MessageBar key="error" messageBarType={MessageBarType.severeWarning}>
-              <Text variant="xSmall">Failed to create Order : {state.description}, <Link route="/checkout" className="c-action-trigger" >retry</Link></Text>
-            </MessageBar>
-          }
+            }
+            {state.state === 'error' &&
+              <MessageBar key="error" messageBarType={MessageBarType.severeWarning}>
+                <Text variant="xSmall">Failed to create Order : {state.description}, <Link route="/checkout" className="c-action-trigger" >retry</Link></Text>
+              </MessageBar>
+            }
 
-        </div>
+          </div>
 
-      ] :
-        <Stack.Item >
-          <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0 }} disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'}>Checkout cart</Link>
-          <Text variant="small" nowrap={true} block={true} >or</Text>
-          <Link route="/" disabled={state.state === 'wait'} className="c-call-to-action c-glyph" style={{ padding: 3, border: 0, color: "#0067b8", background: "transparent" }}><Text >Continue Shopping</Text></Link>
-        </Stack.Item>
+        ] :
+          <Stack.Item align="end">
+            <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0 }} disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'}>Checkout cart</Link>
+            <Text variant="small" nowrap={true} block={true} >or</Text>
+            <DefaultButton onClick={() => dismissPanel()} disabled={state.state === 'wait'} className="c-call-to-action c-glyph" style={{ padding: 3, border: 0, color: "#0067b8", background: "transparent" }}><Text >Continue Shopping</Text></DefaultButton>
+          </Stack.Item>
       }
 
-      {state.state === 'wait' &&
+      {
+        state.state === 'wait' &&
         <Stack.Item >
           <Spinner label="Wait..." ariaLive="assertive" labelPosition="right" />
         </Stack.Item>
       }
-    </Stack>
+    </Stack >
   )
 }
 
-export function MyCart({ resource, checkout }) {
-
+export function MyCart({ dismissPanel, panel, resource, checkout }) {
 
   const { status, result } = resource.read()
-  console.log(status)
-  const cart = result.data
+  console.log(`Render MyCart (${status})`)
+  const [cart, setCart] = useState(result.data)
 
-  function _removeitem(cartline) {
+  const [cartItemsAdded, setCartItemsAdded] = useContext(AddedCartCount)
+
+  async function _removeitem(cartline) {
     console.log(cartline)
-    _fetchit('/api/cartdelete/' + cartline, 'PUT').then(succ => {
-      window.location.reload()
-      //navTo('/mycart')
-    }, err => {
+    try {
+      await _fetchit('/api/cartdelete/' + cartline, 'PUT')
+      setCartItemsAdded({ count: cartItemsAdded.count - 1 })
+      setCart(await _fetchit('/componentFetch/mycart'))
+    } catch (err) {
       console.error(`created failed : ${err}`)
       //setState({state: "error", description: `POST ${err}`})
-    })
+    }
   }
 
   function _onRenderCell(line, index, isScrolling) {
-    console.log(`rendering ${line}`)
+    //console.log(`rendering ${line}`)
     return (
       <div className={classNames.itemCell} data-is-focusable={true}>
-        <MyImage image={line.item.image} width={150} />
+        <MyImage image={line.item.image} width={panel ? 100 : 150} />
         <div className={classNames.itemContent}>
           <div className={classNames.itemName}>{line.item.heading}</div>
           <div className={classNames.itemIndex}>{Object.keys(line.options).map(o => <span key={o}>{o} : {line.options[o].text}</span>)}</div>
@@ -231,17 +236,19 @@ export function MyCart({ resource, checkout }) {
 
   return (
     <Stack>
+      { /* 
       <Breadcrumb
         items={[
-          { text: 'Home', key: 'home', href: '/' },
-          { text: 'My Cart', key: cart._id, href: `/mycart` }]} />
-
+          { text: 'Home', key: 'home',  onClick: () => navTo('/') },
+          { text: 'My Cart', key: cart._id,  onClick: () => navTo('/mycart') }]} />
+      */ }
+      <Separator />
       <Stack horizontal wrap tokens={{ childrenGap: 15 }}>
         <Stack.Item styles={{ root: { width: "700px" } }} grow={1}>
           <List items={cart.items} onRenderCell={_onRenderCell} />
         </Stack.Item>
         <Stack.Item styles={{ root: { width: "300px" } }} grow={1}>
-          <Summary cart={cart} checkout={checkout} />
+          <Summary cart={cart} checkout={checkout} dismissPanel={dismissPanel} />
         </Stack.Item>
       </Stack>
     </Stack>
@@ -257,11 +264,14 @@ export function AddToCart({ resource }) {
   const product = result.data
   const category = result.refstores.products.Category[0]
 
+  const [cartItemsAdded, setCartItemsAdded] = useContext(AddedCartCount)
+
   function addorder() {
     setState({ state: "adding" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
     _fetchit('/api/cartadd', 'POST', {}, { itemid: product._id, options: { "Colour": optColor } }).then(succ => {
-      console.log(`created success : ${JSON.stringify(succ)}`)
+      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartItemsAdded.count}`)
+      setCartItemsAdded({ count: cartItemsAdded.count + 1 })
       setState({ state: "added", response: succ })
       //navTo("ViewOrder")
     }, err => {
@@ -277,9 +287,9 @@ export function AddToCart({ resource }) {
 
       <Breadcrumb
         items={[
-          { text: 'Home', key: 'home', href: '/' },
-          { text: category.heading, key: category._id, href: `/shop/${category._id}` },
-          { text: product.heading, key: product._id, href: `/a2c/${product._id}` }]} />
+          { text: 'Home', key: 'home', href: '/', onClick: () => navTo('/') },
+          { text: category.heading, key: category._id, href: `/shop/${category._id}`, onClick: () => navTo('/shop', category._id) },
+          { text: product.heading, key: product._id, href: `/a2c/${product._id}`, onClick: () => navTo('/a2c', product._id) }]} />
 
       <Stack horizontal wrap tokens={{ childrenGap: 15 }} >
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar } }} grow={1}>

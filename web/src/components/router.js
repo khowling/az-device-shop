@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useContext /*, Suspense */ } from 'react'
 import { _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import RenderContext from '../RenderContext'
+import { RenderContext } from '../GlobalContexts'
+
+import { Spinner, SpinnerSize } from '@fluentui/react';
 
 // Used by Link & NavTo
 export function _encodeURL(route, urlid, props) {
@@ -17,15 +19,16 @@ export function Link({ route, urlid, props, children, ...rest }) {
 
   function handleClick(event) {
     //console.log ('Link: handleclick')
+    //if (rest.onClick) rest.onClick()
     if (
       !event.defaultPrevented && // onClick prevented default
       event.button === 0 && // ignore everything but left clicks
       !(event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) && // ignore clicks with modifier keys
       ssrContext === "spa" // Only override links if not SSR
     ) {
-      console.log('Link: pushstate')
+      console.log('Link: first, window.history.pushState, then listener will call setRenderRoute re-render Router')
       event.preventDefault()
-      // (1) Update the browser URL
+      // (1) Update the browser URL (this does no page-reloading)
       if (typeof window !== 'undefined') {
         window.history.pushState("", "", event.currentTarget.href)
       }
@@ -35,7 +38,7 @@ export function Link({ route, urlid, props, children, ...rest }) {
 
   }
 
-  return (<a {...rest} onClick={handleClick} href={_encodeURL(route, urlid, props)}>{children}</a>)
+  return (<a {...rest} onClick={handleClick} href={_encodeURL(route, urlid, props)}> { children}</a >)
 }
 
 export function Redirect({ route, urlid, props }) {
@@ -67,7 +70,7 @@ export function Redirect({ route, urlid, props }) {
 
 // =====================================     Processes navigation routes Called from React JS 
 export function navTo(route, urlid, props) {
-  //console.log (`navTo: ${routekey}`)
+  console.log('navTo: first, window.history.pushState,  then listener will call setRenderRoute re-render Router')
   // (1) Update the browser URL
   if (typeof window !== 'undefined') {
     window.history.pushState("", "", _encodeURL(route, urlid, props))
@@ -102,10 +105,10 @@ export function useRouter(startUrl, cfg) {
 
 
 
-  // Subscribe to <Link> events
+  // Subscribe to <Link> & navTo events
   useEffect(() => {
     if (ssrContext === "spa") {
-      //console.log ('useRouter: useEffect - initialise listeners to listen for <Link>)')
+      console.log('useRouter: useEffect - initialise listeners to call setRenderRoute on <Link> & navTo()')
       listeners.push(newrouteRequested => setRenderRoute(newrouteRequested))
       return () => listeners.pop()
     }
@@ -130,7 +133,8 @@ export function useRouter(startUrl, cfg) {
 
   // return child components
   const { component, componentFetch, routeProps = {}, requireAuth } = cfg[renderRoute.routekey] || {}
-  console.log(`useRouter() ssrContext=${ssrContext} routekey=${renderRoute.routekey}`)
+
+  console.log(`Render useRouter,  ssrContext=${ssrContext} routekey=${renderRoute.routekey}`)
   if (!component) {
     console.error(`useRouter()  error, unknown route ${renderRoute.routekey}`)
     return `404 - error, unknown route ${renderRoute.routekey}`
@@ -142,7 +146,7 @@ export function useRouter(startUrl, cfg) {
         resource = _suspenseWrap(serverInitialData)
       } else {
 
-        console.log(`Start the data fetch for the route`)
+        //console.log(`Start the data fetch for the route`)
 
         if (requireAuth) {
           // TODO - router does have access to session data
@@ -150,16 +154,14 @@ export function useRouter(startUrl, cfg) {
         resource = _suspenseFetch('componentFetch' + renderRoute.routekey, renderRoute.urlid)
 
       }
-      console.log(`useRouter() wrapped suspense createElement`)
+      //console.log(`useRouter() wrapped suspense createElement`)
       return (
-        //<Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
-        //{
-        React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))
-        //}
-        //</Suspense>
+        <React.Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
+          { React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
+        </React.Suspense>
       )
     } else {
-      console.log(`useRouter() no componentFetch, createElement`)
+      //console.log(`useRouter() no componentFetch, createElement`)
       return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
     }
 

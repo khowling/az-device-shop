@@ -1,6 +1,6 @@
 import React from 'react'
 import { renderToString } from 'react-dom/server'
-import RenderContext from './RenderContext'
+import { RenderContext } from './GlobalContexts'
 import { App, AppRouteCfg } from './App'
 import { pathToRoute } from './components/router'
 

@@ -73,11 +73,7 @@ export function OrderMgr({ resource }) {
     console.log(status)
 
     //const inventory = result.data
-    const { products } = result.refstores,
-        refstores = {
-            Category: products.Category.map(c => { return { key: c._id, text: c.heading } }),
-            Product: products.Product.map(c => { return { key: c._id, text: c.heading, category: c.category } })
-        }
+    const { products } = result.refstores
 
     const [order_state, dispatchWorkitems] = React.useReducer(orderReducer, { sequence: -1, inventory: [], orders: [] })
 

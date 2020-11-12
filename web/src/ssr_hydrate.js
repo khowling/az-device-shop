@@ -1,7 +1,7 @@
 import React from 'react'
 import { hydrate } from 'react-dom'
 import { App } from './App.js'
-import RenderContext from './RenderContext'
+import { RenderContext } from './GlobalContexts'
 const { pathname, search, hash } = window.location
 
 hydrate(

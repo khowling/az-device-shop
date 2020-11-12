@@ -3,7 +3,7 @@ import { render } from 'react-dom';
 //import './index.css';
 import { App } from './App';
 import * as serviceWorker from './serviceWorker';
-import RenderContext from './RenderContext'
+import { RenderContext } from './GlobalContexts'
 
 
 const { pathname, search, hash } = window.location

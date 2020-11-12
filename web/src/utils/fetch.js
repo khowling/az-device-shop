@@ -9,12 +9,12 @@ export const _suspenseWrap = (res) => {
 
 
 export const _suspenseFetch = (operation, recordid) => {
-  console.log(`_suspenseFetch :  web fetch for ${operation} ${recordid}`)
+  //console.log(`_suspenseFetch :  web fetch for ${operation} ${recordid}`)
   let r = { status: 'pending' }
   let suspender = _fetchit(`/api/${operation}` + (recordid ? `/${recordid}` : ''))
     //  .then(async res => res.ok? res.json() : {error: res.status + ': '+ await res.text()})  
     .then(res => {
-      console.log(`_suspenseFetch response error=${res.error}`)
+      //console.log(`_suspenseFetch response error=${res.error}`)
       r = (!res.error) ? { status: 'success', result: res } : { status: 'error', result: res.error }
     })
     .catch((e) => {
@@ -36,7 +36,7 @@ export const _suspenseFetch = (operation, recordid) => {
 export async function _fetchit(url, method = 'GET', headers = {}, body = null, chunkfn) {
   return new Promise((resolve, reject) => {
 
-    console.log('fetch')
+    //console.log('fetch')
     let opts = { method }
     if (body) {
       if (typeof body === 'object' && !headers['x-ms-blob-content-type']) {

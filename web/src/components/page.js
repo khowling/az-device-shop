@@ -1,10 +1,32 @@
-import React from 'react'
-import { Link /*, Redirect */ } from './router.js'
+import React, { useState, useContext, Suspense } from 'react'
+import { Link /*, Redirect */ } from './router'
 import { Alert, MyImage } from '../utils/common'
-import { CommandBarButton, Text } from '@fluentui/react'
+import { AddedCartCount } from '../GlobalContexts'
+import { _suspenseFetch } from '../utils/fetch'
+import { MyCart } from './cart'
 
-export function Nav({ resource }) {
+import { CommandBarButton, Text, Panel, PanelType } from '@fluentui/react'
+import { useConstCallback } from '@uifabric/react-hooks';
+
+
+export function Nav({ fallback, resource }) {
+
   const { status, result } = resource ? resource.read() : {}
+  const [cartItemsAdded] = useContext(AddedCartCount)
+
+  console.log(`Render Nav, fallback: ${fallback}, status: ${status}, cartItemsAdded: ${cartItemsAdded.count}`)
+
+  ////// MyCart Panel
+  const [panel, setPanel] = useState({ open: false })
+
+  const openNewItem = useConstCallback(() => {
+    setPanel({ open: true, resource: _suspenseFetch('componentFetch/mycart') })
+  })
+  const dismissPanel = useConstCallback(() => setPanel({ open: false }));
+  /////////
+
+
+
 
   if (result && !result.tenent) {
     //return <Redirect route='/init' />
@@ -78,12 +100,32 @@ export function Nav({ resource }) {
               </a>
             }
 
-            <Link route="/mycart" className="c-call-to-action c-glyph" style={{ padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent" }}>
-              <span>Cart ({result ? result.cart_items : 0})</span>
-            </Link>
+            <CommandBarButton
+              onClick={() => openNewItem()}
+              iconProps={{ iconName: 'ShoppingCart' }}
+              text={`Cart (${(result ? result.cart_items : 0) + cartItemsAdded.count})`}
+              styles={{ root: { "vertical-align": "top", padding: "11px 12px 13px", border: "2px solid transparent", background: "transparent" }, label: { color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3" } }}
+            />
           </div>
         }
       </div>
+
+      <Panel
+        headerText="Shopping Cart"
+        isOpen={panel.open}
+        onDismiss={dismissPanel}
+        type={PanelType.medium}
+
+        closeButtonAriaLabel="Close">
+        {panel.open &&
+          <Suspense>
+            <MyCart dismissPanel={dismissPanel} resource={panel.resource} panel={true} />
+          </Suspense>
+
+        }
+      </Panel>
+
+
     </nav>
   )
 }

@@ -1,5 +1,5 @@
 import React /*, { useEffect }*/ from 'react';
-import { Link } from './router.js'
+import { Link, navTo } from './router.js'
 import { MyImage } from '../utils/common'
 
 import { Stack, Breadcrumb } from '@fluentui/react'
@@ -104,8 +104,8 @@ export function Panes3x({ resource }) {
 
                 <Breadcrumb
                     items={[
-                        { text: 'Home', key: 'home', href: '/' },
-                        { text: category.heading, key: category._id, href: `/shop/${category._id}` }]} />
+                        { text: 'Home', key: 'home', href: '/', onClick: () => navTo('/') },
+                        { text: category.heading, key: category._id, href: `/shop/${category._id}`, onClick: () => navTo('/shop', category._id) }]} />
 
 
                 <div className="m-panes" data-grid="col-12">

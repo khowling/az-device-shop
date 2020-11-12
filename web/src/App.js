@@ -1,4 +1,4 @@
-import React, { useContext, Suspense } from 'react';
+import React, { useState, useContext, Suspense } from 'react';
 import { useRouter } from './components/router'
 import { Nav } from './components/page'
 import { Panes, Panes3x } from './components/store'
@@ -10,7 +10,7 @@ import { Inventory } from './components/factorymgr'
 import { OrderMgr } from './components/ordermgr'
 import { Spinner, SpinnerSize } from '@fluentui/react';
 
-import RenderContext from './RenderContext'
+import { RenderContext, AddedCartCount } from './GlobalContexts'
 import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
 
 //import './App.css';
@@ -120,34 +120,36 @@ export const AppRouteCfg = {
 }
 
 export function App({ startUrl }) {
-  //console.log(`App - ${JSON.stringify(AppRouteCfg)}`)
+  console.log(`Render App`)
   const routeElements = useRouter(startUrl, AppRouteCfg)
 
+  // Manage Items added to Cart, add getter and setter to Context to make globally accessable
+  const [cartItemsAdded, setCartItemsAdded] = useState({ count: 0 });
+
+  // consume the value of a context! (=== <RenderContext.Consumer >)
+  // Provider is either
+  //  index.js (ssrContext == "spa")  // for development server
+  //  ssr_server.js (ssrContext: "server", serverInitialData (as request by AppRouteCfg) & session) // 1st phase of sse, dom rendered from server
+  //  ssr_hydrate.js (ssrContext: "server", serverInitialData (as request by AppRouteCfg) & session) // 2nd phase of ssr, hydrate from window.__HYDRATE__DATA__ (copy of 1st phase)
   const { ssrContext, session } = useContext(RenderContext)
-  let sessionResource
-  if (ssrContext === "spa") {
-    try {
-      // call server AJAX for session state
-      sessionResource = _suspenseFetch('session_status')
-    } catch (e) {
-      console.log(e)
-    }
-  } else {
-    // session state injected from the server, so immediatly resolve 
-    sessionResource = _suspenseWrap(session)
-  }
+  // return pending resource
+  const [sessionResource] = useState(() => {
+    console.log('App: getting getting sessionResource')
+    return ssrContext === "spa" ? _suspenseFetch('session_status') : _suspenseWrap(session)
+  })
 
   return (
     <Fabric>
       <main id="mainContent" data-grid="container">
-        <Suspense fallback={[
-          <Nav key="nav" />,
-          <Spinner key="spinner" size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />
-        ]}>
-          <Nav resource={sessionResource} />
+        <AddedCartCount.Provider value={[cartItemsAdded, setCartItemsAdded]}>
+          <Suspense fallback={[
+            <Nav fallback={true} key="nav" />,
+            <Spinner key="spinner" size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />
+          ]}>
+            <Nav resource={sessionResource} />
+          </Suspense>
           {routeElements}
-        </Suspense>
-
+        </AddedCartCount.Provider>
       </main>
     </Fabric>
   )
