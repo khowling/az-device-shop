@@ -14,8 +14,8 @@ export function ManageOrders({ resource }) {
 
             <Breadcrumb
                 items={[
-                    { text: 'Home', key: 'home', href: '/', onClick: () => navTo('/') },
-                    { text: 'My Orders', key: 'myorder', href: `/myorders`, onClick: () => navTo('/myorders') }]} />
+                    { text: 'Home', key: 'home', /*href: '/',*/ onClick: () => navTo('/') },
+                    { text: 'My Orders', key: 'myorder', /*href: `/myorders`,*/ onClick: () => navTo('/myorders') }]} />
 
             <div className="c-table f-divided" data-f-loc-ascending="Sorted by {0} - ascending" data-f-loc-descending="Sorted by {0} - descending">
 

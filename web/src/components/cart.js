@@ -156,7 +156,7 @@ function Summary({ cart, checkout, dismissPanel }) {
 
         ] :
           <Stack.Item align="end">
-            <Link route="/checkout" className="c-call-to-action c-glyph" style={{ border: 0 }} disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'}>Checkout cart</Link>
+            <Link route="/checkout" onClick={() => dismissPanel()} className="c-call-to-action c-glyph" style={{ border: 0 }} disabled={state.state === 'wait' || cart.items_count === 0 || typeof cart.items_count === 'undefined'}>Checkout cart</Link>
             <Text variant="small" nowrap={true} block={true} >or</Text>
             <DefaultButton onClick={() => dismissPanel()} disabled={state.state === 'wait'} className="c-call-to-action c-glyph" style={{ padding: 3, border: 0, color: "#0067b8", background: "transparent" }}><Text >Continue Shopping</Text></DefaultButton>
           </Stack.Item>
@@ -264,16 +264,16 @@ export function AddToCart({ resource }) {
   const product = result.data
   const category = result.refstores.products.Category[0]
 
-  const [cartItemsAdded, setCartItemsAdded] = useContext(AddedCartCount)
+  const [itemsInCart, setItemsInCart] = useContext(AddedCartCount)
 
   function addorder() {
     setState({ state: "adding" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
     _fetchit('/api/cartadd', 'POST', {}, { itemid: product._id, options: { "Colour": optColor } }).then(succ => {
-      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartItemsAdded.count}`)
-      setCartItemsAdded({ count: cartItemsAdded.count + 1 })
+      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${itemsInCart.count}`)
+      setItemsInCart({ count: itemsInCart.count + 1 })
       setState({ state: "added", response: succ })
-      //navTo("ViewOrder")
+
     }, err => {
       console.error(`created failed : ${err}`)
       setState({ state: "error", description: err })
@@ -287,9 +287,9 @@ export function AddToCart({ resource }) {
 
       <Breadcrumb
         items={[
-          { text: 'Home', key: 'home', href: '/', onClick: () => navTo('/') },
-          { text: category.heading, key: category._id, href: `/shop/${category._id}`, onClick: () => navTo('/shop', category._id) },
-          { text: product.heading, key: product._id, href: `/a2c/${product._id}`, onClick: () => navTo('/a2c', product._id) }]} />
+          { text: 'Home', key: 'home', /*href: '/', */ onClick: () => navTo('/') },
+          { text: category.heading, key: category._id, /*href: `/shop/${category._id}`, */ onClick: () => navTo('/shop', category._id) },
+          { text: product.heading, key: product._id, /*href: `/a2c/${product._id}`, */ onClick: () => navTo('/a2c', product._id) }]} />
 
       <Stack horizontal wrap tokens={{ childrenGap: 15 }} >
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar } }} grow={1}>

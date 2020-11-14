@@ -1,10 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, Suspense } from 'react'
 import { navTo /*, _encodeURL */ } from './router.js'
 import { Alert, MyImage, EditImage } from '../utils/common'
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 
 import { Dropdown, ChoiceGroup, Panel, PanelType, Separator, mergeStyleSets, PrimaryButton, DefaultButton, Label, MessageBar, MessageBarType, Stack, Text, TextField, DetailsList, DetailsListLayoutMode, SelectionMode } from '@fluentui/react'
-import { useConstCallback } from '@uifabric/react-hooks';
 
 export function Product({ dismissPanel, resource, type, refstores }) {
 
@@ -155,29 +154,29 @@ export function ManageProducts({ resource }) {
   const { status, result } = resource.read()
   console.log(status)
 
-  const openNewItem = useConstCallback((type, editid) => {
+  function openNewItem(type, editid) {
     const refstores = type === 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
     setPanel({ open: true, type, resource: editid ? _suspenseFetch('store/products', editid) : _suspenseWrap({}), refstores })
-  })
-  const dismissPanel = useConstCallback(() => setPanel({ open: false }));
-
-
+  }
+  function dismissPanel() {
+    setPanel({ open: false })
+  }
 
   return (
     <Stack>
-
-      <Panel
-        headerText={"Create " + panel.type}
-        isOpen={panel.open}
-        onDismiss={dismissPanel}
-        type={PanelType.custom}
-        customWidth='360px'
-        closeButtonAriaLabel="Close">
-        {panel.open &&
-          <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
-        }
-      </Panel>
-
+      <Suspense fallback={<span></span>}>
+        <Panel
+          headerText={"Create " + panel.type}
+          isOpen={panel.open}
+          onDismiss={dismissPanel}
+          type={PanelType.custom}
+          customWidth='360px'
+          closeButtonAriaLabel="Close">
+          {panel.open &&
+            <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
+          }
+        </Panel>
+      </Suspense>
       <DetailsList
         columns={[
           {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useConstCallback } from '@uifabric/react-hooks';
+
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 
 import { DefaultPalette } from '@uifabric/styling'
@@ -132,11 +132,12 @@ export function Inventory({ resource }) {
     const [panel, setPanel] = React.useState({ open: false })
     const [message, setMessage] = React.useState({ type: MessageBarType.info, msg: "Not Connected to Factory Controller" })
 
-    const openWorkItem = useConstCallback((editid) => {
+    function openWorkItem(editid) {
         setPanel({ open: true, refstores, resource: editid ? _suspenseFetch('store/inventory', editid) : _suspenseWrap({}) })
-    })
-    const dismissPanel = useConstCallback(() => setPanel({ open: false }));
-
+    }
+    function dismissPanel() {
+        setPanel({ open: false })
+    }
 
 
     const capacityStyle = {

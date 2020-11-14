@@ -1,32 +1,29 @@
 import React, { useState, useContext, Suspense } from 'react'
-import { Link /*, Redirect */ } from './router'
+import { Link, navTo /*, Redirect */ } from './router'
 import { Alert, MyImage } from '../utils/common'
 import { AddedCartCount } from '../GlobalContexts'
 import { _suspenseFetch } from '../utils/fetch'
 import { MyCart } from './cart'
 
 import { CommandBarButton, Text, Panel, PanelType } from '@fluentui/react'
-import { useConstCallback } from '@uifabric/react-hooks';
 
+export function Nav({ fallback, sessionResource }) {
 
-export function Nav({ fallback, resource }) {
+  const { status, result } = sessionResource ? sessionResource.read() : {}
+  const [itemsInCart] = useContext(AddedCartCount)
 
-  const { status, result } = resource ? resource.read() : {}
-  const [cartItemsAdded] = useContext(AddedCartCount)
-
-  console.log(`Render Nav, fallback: ${fallback}, status: ${status}, cartItemsAdded: ${cartItemsAdded.count}`)
+  console.log(`Render Nav, status: ${status}, fallback: ${fallback},  itemsInCart: ${itemsInCart.count}`)
 
   ////// MyCart Panel
   const [panel, setPanel] = useState({ open: false })
 
-  const openNewItem = useConstCallback(() => {
+  function openNewItem() {
     setPanel({ open: true, resource: _suspenseFetch('componentFetch/mycart') })
-  })
-  const dismissPanel = useConstCallback(() => setPanel({ open: false }));
+  }
+  function dismissPanel() {
+    setPanel({ open: false })
+  }
   /////////
-
-
-
 
   if (result && !result.tenent) {
     //return <Redirect route='/init' />
@@ -61,27 +58,31 @@ export function Nav({ fallback, resource }) {
               <CommandBarButton iconProps={{ iconName: 'Contact' }} menuProps={{
                 items: [
                   {
-                    key: 'orders',
+                    key: 'myorders',
                     text: 'My Orders',
-                    href: '/myorders',
+                    //href: '/myorders',
+                    onClick: () => navTo('/myorders'),
                     iconProps: { iconName: 'ActivateOrders' }
                   },
                   {
                     key: 'products',
                     text: 'Manage Products',
-                    href: '/products',
+                    //href: '/products',
+                    onClick: () => navTo('/products'),
                     iconProps: { iconName: 'ProductRelease' }
                   },
                   {
-                    key: 'bots',
+                    key: 'inv',
                     text: 'Manage Inventory',
-                    href: '/inv',
+                    //href: '/inv',
+                    onClick: () => navTo('/inv'),
                     iconProps: { iconName: 'Cloud' }
                   },
                   {
-                    key: 'bots',
+                    key: 'omgr',
                     text: 'Manage Orders',
-                    href: '/omgr',
+                    //href: '/omgr',
+                    onClick: () => navTo('/omgr'),
                     iconProps: { iconName: 'Cloud' }
                   },
                   {
@@ -103,28 +104,25 @@ export function Nav({ fallback, resource }) {
             <CommandBarButton
               onClick={() => openNewItem()}
               iconProps={{ iconName: 'ShoppingCart' }}
-              text={`Cart (${(result ? result.cart_items : 0) + cartItemsAdded.count})`}
+              text={`Cart (${(result ? result.cart_items : 0) + itemsInCart.count})`}
               styles={{ root: { "vertical-align": "top", padding: "11px 12px 13px", border: "2px solid transparent", background: "transparent" }, label: { color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3" } }}
             />
           </div>
         }
       </div>
+      <Suspense fallback={<span />}>
+        <Panel
+          headerText="Shopping Cart"
+          isOpen={panel.open}
+          onDismiss={dismissPanel}
+          type={PanelType.medium}
 
-      <Panel
-        headerText="Shopping Cart"
-        isOpen={panel.open}
-        onDismiss={dismissPanel}
-        type={PanelType.medium}
-
-        closeButtonAriaLabel="Close">
-        {panel.open &&
-          <Suspense>
+          closeButtonAriaLabel="Close">
+          {panel.open &&
             <MyCart dismissPanel={dismissPanel} resource={panel.resource} panel={true} />
-          </Suspense>
-
-        }
-      </Panel>
-
+          }
+        </Panel>
+      </Suspense>
 
     </nav>
   )

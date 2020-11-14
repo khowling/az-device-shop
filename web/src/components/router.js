@@ -81,7 +81,7 @@ export function navTo(route, urlid, props) {
 
 // convert parts of the url into route key, recordid and props
 export function pathToRoute({ pathname, search, hash }) {
-  //console.log (`pathToRoute pathname=${pathname} search=${search}`)
+  console.log(`pathToRoute pathname=${pathname} search=${search}`)
   const propsparam = search && search.match(/A?props=([^&]+)&*/i),
     url_props = propsparam ? propsparam[1] : null,
     withoutleadingslash = pathname.slice(1),
@@ -97,10 +97,10 @@ export function pathToRoute({ pathname, search, hash }) {
 const listeners = [];
 // =====================================     My Super Simple Router 
 // Params: cfg = routing configration (AppRouteCfg)
-export function useRouter(startUrl, cfg) {
-
+export function Router({ startUrl, cfg }) {
+  console.log(`Render Router, startUrl=${JSON.stringify(startUrl)}`)
   // renderRoute : route that needs to be rendered (default is the startURL)
-  const [renderRoute, setRenderRoute] = useState(() => pathToRoute(startUrl))
+  const [renderRoute, setRenderRoute] = useState(pathToRoute(startUrl))
   const { ssrContext, serverInitialData } = useContext(RenderContext)
 
 
@@ -108,7 +108,7 @@ export function useRouter(startUrl, cfg) {
   // Subscribe to <Link> & navTo events
   useEffect(() => {
     if (ssrContext === "spa") {
-      console.log('useRouter: useEffect - initialise listeners to call setRenderRoute on <Link> & navTo()')
+      //console.log('useRouter: useEffect - initialise listeners to call setRenderRoute on <Link> & navTo()')
       listeners.push(newrouteRequested => setRenderRoute(newrouteRequested))
       return () => listeners.pop()
     }

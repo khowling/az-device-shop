@@ -1,5 +1,5 @@
 import React, { useState, useContext, Suspense } from 'react';
-import { useRouter } from './components/router'
+import { Router } from './components/router'
 import { Nav } from './components/page'
 import { Panes, Panes3x } from './components/store'
 import { AddToCart, MyCart } from './components/cart'
@@ -8,7 +8,7 @@ import { ManageProducts, Product } from './components/product'
 import { StartBusiness } from './components/business'
 import { Inventory } from './components/factorymgr'
 import { OrderMgr } from './components/ordermgr'
-import { Spinner, SpinnerSize } from '@fluentui/react';
+
 
 import { RenderContext, AddedCartCount } from './GlobalContexts'
 import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
@@ -119,12 +119,20 @@ export const AppRouteCfg = {
   }
 }
 
-export function App({ startUrl }) {
-  console.log(`Render App`)
-  const routeElements = useRouter(startUrl, AppRouteCfg)
 
-  // Manage Items added to Cart, add getter and setter to Context to make globally accessable
-  const [cartItemsAdded, setCartItemsAdded] = useState({ count: 0 });
+// Expose Global State, allowing items deep in the Router component tree to comunicate with the header!
+export const CartProvider = ({ children }) => {
+  const [itemsInCart, setItemsInCart] = useState({ count: 0, open: false })
+
+  return (
+    <AddedCartCount.Provider value={[itemsInCart, setItemsInCart]}>
+      {children}
+    </AddedCartCount.Provider>
+  );
+};
+
+export function App({ startUrl }) {
+  console.warn(`**Render App startUrl=${startUrl.pathname}`)
 
   // consume the value of a context! (=== <RenderContext.Consumer >)
   // Provider is either
@@ -134,22 +142,19 @@ export function App({ startUrl }) {
   const { ssrContext, session } = useContext(RenderContext)
   // return pending resource
   const [sessionResource] = useState(() => {
-    console.log('App: getting getting sessionResource')
+    console.log('App: getting sessionResource')
     return ssrContext === "spa" ? _suspenseFetch('session_status') : _suspenseWrap(session)
   })
 
   return (
     <Fabric>
       <main id="mainContent" data-grid="container">
-        <AddedCartCount.Provider value={[cartItemsAdded, setCartItemsAdded]}>
-          <Suspense fallback={[
-            <Nav fallback={true} key="nav" />,
-            <Spinner key="spinner" size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />
-          ]}>
-            <Nav resource={sessionResource} />
+        <CartProvider>
+          <Suspense fallback={<Nav fallback={true} key="nav" />}>
+            <Nav sessionResource={sessionResource} />
           </Suspense>
-          {routeElements}
-        </AddedCartCount.Provider>
+          <Router startUrl={startUrl} cfg={AppRouteCfg} />
+        </CartProvider>
       </main>
     </Fabric>
   )
