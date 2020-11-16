@@ -19,7 +19,7 @@ export function Link({ route, urlid, props, children, ...rest }) {
 
   function handleClick(event) {
     //console.log ('Link: handleclick')
-    //if (rest.onClick) rest.onClick()
+
     if (
       !event.defaultPrevented && // onClick prevented default
       event.button === 0 && // ignore everything but left clicks
@@ -28,6 +28,11 @@ export function Link({ route, urlid, props, children, ...rest }) {
     ) {
       console.log('Link: first, window.history.pushState, then listener will call setRenderRoute re-render Router')
       event.preventDefault()
+
+      // if Link has onClink - call it first
+      if (rest.onClick) rest.onClick()
+
+
       // (1) Update the browser URL (this does no page-reloading)
       if (typeof window !== 'undefined') {
         window.history.pushState("", "", event.currentTarget.href)

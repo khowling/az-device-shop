@@ -142,7 +142,7 @@ export function OrderMgr({ resource }) {
                     <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }}>
                         <Label >Spec:</Label>
 
-                        <Text variant="xSmall">Full details: <Link route="/o" urlid={o.metadata.doc_id}><Text variant="xSmall">open</Text></Link></Text>
+                        <Text variant="xSmall">Full details: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
 
                     </Stack>
                     <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }} >
@@ -213,9 +213,9 @@ export function OrderMgr({ resource }) {
                     {
                         key: 'heading',
                         name: 'SKU',
-                        fieldName: 'metadata',
+                        fieldName: 'doc_id',
                         minWidth: 100, maxWidth: 250,
-                        onRender: (i) => <div>{products.Product.find(x => x._id === i.metadata.doc_id).heading}</div>
+                        onRender: (i) => <div>{products.Product.find(x => x._id === i.doc_id).heading}</div>
                     },
                     {
                         key: 'oh',
