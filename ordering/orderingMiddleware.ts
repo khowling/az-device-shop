@@ -113,16 +113,15 @@ interface OrderObject {
 
 interface OrderStatus extends DocStatus {
     stage: OrderStage;
-    starttime?: number;
-
     order_number?: string;
     inventory?: any;
-    last_update?: number;
-    waittime?: number;
-    allocated_capacity?: number;
-    progress?: number;
+    picking?: {
+        waittime: number;
+        allocated_capacity: number;
+        progress: number;
+    }
 }
-enum OrderStage { OrderQueued, InventoryAllocated, OrderNumberGenerated, WaitingPicking, Picking, Shipping, Complete }
+enum OrderStage { OrderQueued, OrderNumberGenerated, InventoryAllocated, WaitingPicking, Picking, Shipping, Complete }
 
 interface InventoryStatus { //extends DocStatus {
     //stage: InventoryStage;
@@ -171,12 +170,12 @@ interface OrderingAction {
 
     // Order actions
     type: ActionType;
-    spec?: any; // full doc used for NewOrUpdatedOrder / New Inventory
+    spec?: any; // used for NewOrUpdatedOrder / NewInventory
     doc_id?: string; // used for all updates
-    data?: any;
-    trigger?: object;
+    status?: any; // used for StatusUpdate Actions
+    trigger?: object; // used for NewOrUpdatedOrder / NewInventory
 }
-enum ActionType { ApplyChangeEvent, NewInventory, NewOrUpdatedOrder, AllocateNumber, AllocateInventory }
+enum ActionType { StatusUpdate, NewInventory, NewOrUpdatedOrder, AllocateInventory }
 
 // Store in "https://github.com/Level/level"
 // In Memory, volatile state
@@ -213,12 +212,7 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
             const { doc_id, type } = c.metadata
             switch (c.kind) {
                 case "Order":
-                    if (type === ChangeEventType.CREATE) {
-                        // using typescript "type assertion"
-                        // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
-                        newstate.orders = newstate.orders.concat([{ doc_id, status: c.status as OrderStatus }])
-                    } else if (type === ChangeEventType.UPDATE) {
-
+                    if (type === ChangeEventType.UPDATE) {
                         const order_idx = doc_id ? newstate.orders.findIndex(o => o.doc_id === doc_id) : -1
                         if (order_idx >= 0) {
                             const existing_order = newstate.orders[order_idx]
@@ -227,6 +221,10 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
                         } else {
                             throw new Error(`Cannot find existing ${c.kind} with doc_id=${doc_id}`)
                         }
+                    } else if (type === ChangeEventType.CREATE) {
+                        // using typescript "type assertion"
+                        // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
+                        newstate.orders = newstate.orders.concat([{ doc_id, status: c.status as OrderStatus }])
                     }
                     break
                 case "Inventory":
@@ -234,14 +232,14 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
                     const new_status = c.status as InventoryStatus
                     const existing_sku: InventoryStatus = newstate.inventory.get(doc_id)
 
-                    if (type === ChangeEventType.UPDATE) {
+                    if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
                         if (!existing_sku) {
                             throw new Error(`Cannot find existing ${c.kind} with doc_id=${doc_id}`)
                         }
-                        // got new Onhand value (replace)
                         inventory_updates.set(doc_id, new_status)
-                    } else if (type === ChangeEventType.CREATE) {
-                        // got new Inventory onhand (additive)
+
+                    } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
+
                         inventory_updates.set(doc_id, { onhand: existing_sku ? (existing_sku.onhand + new_status.onhand) : new_status.onhand })
                     }
 
@@ -262,28 +260,13 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
 // validate if the requested operation is ok, then generate ChangeEvents and call 'apply_change_events' to apply to local state
 function ordering_operation(state: OrderingState, action: OrderingAction): [OrderingState, ChangeEvent] {
 
-    //const sequence = state.sequence + 1
-    //let nextaction = true
-    //const newstate = { ...state, sequence, lastupdated: Date.now() }
-
     switch (action.type) {
 
         case ActionType.NewInventory: {
             const { product, qty } = action.spec
-            //const inventory_updates: Map<string, InventoryObject> = new Map()
-            //inventory_updates.set(action.spec.product, { category: action.spec.category, onhand: action.spec.qty + (state.inventory.has(action.spec.product) ? state.inventory.get(action.spec.product).onhand : 0) })
 
             return apply_change_events(state, { trigger: { type: action.type, value: action.trigger }, nextaction: true, statechanges: [{ kind: "Inventory", metadata: { doc_id: product, type: ChangeEventType.CREATE }, status: { onhand: qty } }] })
-            //})})
 
-            //return [{ ...newstate, inventory: new Map([...state.inventory, ...inventory_updates]) },
-            //{
-            //    sequence, nextaction, statechanges:
-            //        Array.from(inventory_updates).map(([sku, inv_obj]): StateChange => {
-            //            return { kind: "Inventory", metadata: { doc_id: sku, type: ChangeEventType.CREATE }, status: { failed: false, stage: InventoryStage.NewInventory, ...inv_obj } }
-            //        })
-            //}
-            //]
         }
         case ActionType.NewOrUpdatedOrder: {
             const { spec } = action
@@ -293,44 +276,27 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
             if (spec && spec.items && spec.items.length > 0) {
                 new_order_status = { failed: false, stage: OrderStage.OrderQueued }
             } else {
-                //nextaction = false
                 new_order_status = { failed: true, stage: OrderStage.OrderQueued, message: "Invalid Order - No items" }
             }
 
             // Needs to be Idempotent
             // TODO: Check if its a new Order or if state already has the Order & what the change is & if we accept the change
-
-
             return apply_change_events(state, { trigger: { type: action.type, value: action.trigger }, nextaction: !new_order_status.failed, statechanges: [{ kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.CREATE }, status: new_order_status }] })
-            //    return [{ ...newstate, orders: state.orders.concat([{ doc_id: spec._id.toHexString(), status: new_order_status }]) },
-            //    { sequence, nextaction, statechanges: [{ kind: "Order", metadata: { doc_id: spec._id, type: ChangeEventType.CREATE }, status: new_order_status }] }]
         }
-        case ActionType.AllocateNumber: {
-            const { spec, data } = action
-            //const order_idx = doc_id ? state.orders.findIndex(o => o.doc_id === doc_id) : -1
-
-            //if (order_idx >= 0) {
-            //    const existing_order = state.orders[order_idx]
+        case ActionType.StatusUpdate: {
+            const { spec, status } = action
 
             // Needs to be Idempotent
             // TODO: Check if state already has Order Number 
-
-            return apply_change_events(state, { nextaction: true, statechanges: [{ kind: "Order", metadata: { doc_id: spec.doc_id.toHexString(), type: ChangeEventType.UPDATE }, status: { failed: false, stage: OrderStage.OrderNumberGenerated, order_number: data } }] })
-
-
-            //    const new_order = { ...existing_order, status: { ...existing_order.status, stage: OrderStage.OrderNumberGenerated, order_number: data } }
-
-            //    return [{ ...newstate, orders: imm_splice(state.orders, order_key_idx, new_order) },
-            //    { sequence, nextaction, statechanges: [{ kind: "Order", metadata: { doc_id: action.doc_id, type: ChangeEventType.UPDATE }, status: new_order.status }] }]
+            return apply_change_events(state, { nextaction: true, statechanges: [{ kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE }, status: { failed: false, ...status } }] })
         }
         case ActionType.AllocateInventory: {
             // Check aviable Inventory, if any failed, fail the whole order
             const { spec } = action
 
-            const order_key_idx = spec.doc_id ? state.orders.findIndex(o => o.doc_id === spec.doc_id.toHexString()) : -1
+            const order_key_idx = spec._id ? state.orders.findIndex(o => o.doc_id === spec._id.toHexString()) : -1
             const existing_order = state.orders[order_key_idx]
 
-            //let new_order = { ...existing_order, status: { ...existing_order.status, stage: OrderStage.InventoryAllocated } }
             let order_status_update: OrderStatus = { failed: false, stage: OrderStage.InventoryAllocated }
             const inventory_updates: Map<string, InventoryStatus> = new Map()
 
@@ -353,14 +319,11 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
                         break
                     }
                 }
-                //if (!new_order.status.failed) {
-                //    new_inventory = new Map([...state.inventory, ...inventory_updates])
-                //    new_order.status.inventory = []
-                //}
+
             } else {
                 order_status_update = { ...order_status_update, failed: true, message: `No lineitems on Order` }
             }
-            const order_statechange: StateChange = { kind: "Order", metadata: { doc_id: spec.doc_id.toHexString(), type: ChangeEventType.UPDATE }, status: order_status_update }
+            const order_statechange: StateChange = { kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE }, status: order_status_update }
             let inventory_statechanges: Array<StateChange> = []
 
             if (!order_status_update.failed) {
@@ -370,18 +333,6 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
 
             }
             return apply_change_events(state, { nextaction: !order_status_update.failed, statechanges: [order_statechange].concat(inventory_statechanges) })
-
-            //return [
-            //    { ...newstate, orders: imm_splice(state.orders, order_key_idx, new_order), inventory: new_inventory },
-            //    {
-            //        sequence, nextaction, statechanges: [
-            //            { kind: "Order", metadata: { ...new_order.metadata, type: ChangeEventType.UPDATE }, status: new_order.status },
-            //            ...Array.from(inventory_updates).map(([sku, inv_obj]): StateChange => {
-            //                return { kind: "Inventory", metadata: { doc_id: sku, type: ChangeEventType.UPDATE }, status: { failed: false, stage: InventoryStage.NewInventory, ...inv_obj } }
-            //            })
-            //        ]
-            //    }
-            //]
         }
         default:
             return [state, null]
@@ -405,7 +356,7 @@ async function generateOrderNo(ctx, next) {
     console.log(`generateOrderNo forward, spec: ${JSON.stringify(ctx.trigger)}`)
     const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
     const order_number = 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0')
-    await next(local_state_op({ type: ActionType.AllocateNumber, spec: ctx.spec, data: order_number }))
+    await next(local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.OrderNumberGenerated, order_number: order_number } }))
     console.log('generateOrderNo back')
 }
 
@@ -431,7 +382,9 @@ function picking_control_loop() {
 async function picking(ctx, next) {
 
     console.log(`picking forward, trigger: ${JSON.stringify(ctx.trigger)}`)
-    //await next(local_state_op({ type: ActionType.StatusUpdate, doc_id: ctx.trigger.documentKey._id.toHexString() }))
+    //Picking
+    ctx.eventfn(ctx, local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.WaitingPicking, picking: { waitingtime: 0 } } }))
+
     await next()
     console.log('picking back')
 }
@@ -445,6 +398,7 @@ async function shipping(ctx, next) {
 
 
 const { MongoClient, ObjectID, ObjectId } = require('mongodb'),
+    assert = require('assert').strict,
     MongoURL = process.env.MONGO_DB
 
 import {
@@ -588,28 +542,32 @@ async function order_startup() {
     const db = orderProcessor.context.db = client.db()
 
     try {
+
         orderProcessor.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
+        console.log(`order_startup: starting context tenent=${orderProcessor.context.tenent.email}`)
 
         // Setup action on next()
         orderProcessor.context.eventfn = ws_server_emit
 
-
         ordering_state = await inflateState_Filesystem(orderProcessor.context)
         let lastcheckpoint_seq: number = ordering_state.sequence
+        console.log(`order_startup: inflated to seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}`)
 
-        // start the checkpointing process
+        const LOOP_MINS = 1, LOOP_CHANGES = 100
+        console.log(`order_startup: starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
         // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
         setInterval(async (ctx) => {
             console.log(`Checkpointing check: seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}`)
-            if (ordering_state.sequence > lastcheckpoint_seq + 100) {
+            if (ordering_state.sequence > lastcheckpoint_seq + LOOP_CHANGES) {
                 console.log(`do checkpoint`)
                 lastcheckpoint_seq = await orderCheckpoint_Filesystem(ctx, { ...ordering_state })
             }
-        }, 1000 * 60 * 1, orderProcessor.context)
+        }, 1000 * 60 * LOOP_MINS, orderProcessor.context)
 
 
         const order_startAfter = ordering_state.last_triggers.find(t => t.type === ActionType.NewOrUpdatedOrder)
-        // Watch for new new Required Orders
+        assert((ordering_state.orders.length === 0) === (!order_startAfter), 'Error, we we have inflated orders, we need a order continuation token')
+        console.log(`order_startup:  start watch for new "orders" (startAfter=${order_startAfter && order_startAfter.value._id})`)
         db.collection(StoreDef["orders"].collection).watch(
             [
                 { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["orders"].status.NewOrUpdatedOrder }] } }
@@ -621,7 +579,8 @@ async function order_startup() {
 
 
         const inventory_startAfter = ordering_state.last_triggers.find(t => t.type === ActionType.NewInventory)
-        // Watch for new new Available Inventory
+        assert((ordering_state.inventory.size === 0) === (!inventory_startAfter), 'Error, we we have inflated inventry, we need a inventory continuation token')
+        console.log(`order_startup:  start watch for new "inventory" (startAfter=${inventory_startAfter && inventory_startAfter.value._id})`)
         const inventoryAggregationPipeline = [
             { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Available" }] } },
             { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
@@ -658,7 +617,8 @@ function ws_server_emit(ctx, change: ChangeEvent) {
     console.log(`sending factory updates to ${ws_server_clients.size} clients`)
     for (let [key, ws] of ws_server_clients.entries()) {
         //console.log(`${key}`)
-        ws.send(JSON.stringify({ type: "events", change }))
+        const { trigger, ...changewithouttrigger } = change
+        ws.send(JSON.stringify({ type: "events", change: changewithouttrigger }))
     }
     //}
 }
@@ -702,16 +662,13 @@ function ws_server_startup() {
         const client_id = ws_server_clients.size
         ws_server_clients.set(client_id, ws)
 
-
-
+        const { last_triggers, inventory, ...statewithouttrigger } = ordering_state
         ws.send(JSON.stringify({
             type: "snapshot", state: {
-                ...ordering_state,
-                // convert orders array from full orders object to just metadata & state
-                //orders: ordering_state.orders.map((o: OrderObject) => { return { metadata: { doc_id: o.spec._id }, status: o.status } }),
+                ...statewithouttrigger,
                 // convert Inventry Map into Array
                 inventory: Array.from(ordering_state.inventory).map(([sku, val]) => {
-                    return { doc_id: sku, status: { onhand: val.onhand } }
+                    return { doc_id: sku, status: val }
                 })
             }
         }))

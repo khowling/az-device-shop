@@ -15,16 +15,16 @@ export function _encodeURL(route, urlid, props) {
 
 // =====================================     Processes navigation routes Called from DOM 
 export function Link({ route, urlid, props, children, ...rest }) {
-  const { ssrContext } = useContext(RenderContext)
+  //const { ssrContext } = useContext(RenderContext)
 
   function handleClick(event) {
     //console.log ('Link: handleclick')
 
     if (
-      !event.defaultPrevented && // onClick prevented default
-      event.button === 0 && // ignore everything but left clicks
-      !(event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) && // ignore clicks with modifier keys
-      ssrContext === "spa" // Only override links if not SSR
+      !event.defaultPrevented  // onClick prevented default
+      && event.button === 0  // ignore everything but left clicks
+      && !(event.metaKey || event.altKey || event.ctrlKey || event.shiftKey)  // ignore clicks with modifier keys
+      /* &&ssrContext === "spa" */
     ) {
       console.log('Link: first, window.history.pushState, then listener will call setRenderRoute re-render Router')
       event.preventDefault()
@@ -105,19 +105,20 @@ const listeners = [];
 export function Router({ startUrl, cfg }) {
   console.log(`Render Router, startUrl=${JSON.stringify(startUrl)}`)
   // renderRoute : route that needs to be rendered (default is the startURL)
-  const [renderRoute, setRenderRoute] = useState(pathToRoute(startUrl))
+
   const { ssrContext, serverInitialData } = useContext(RenderContext)
+  const [renderRoute, setRenderRoute] = useState({ firstRoute: ssrContext, ...pathToRoute(startUrl) })
 
 
 
   // Subscribe to <Link> & navTo events
   useEffect(() => {
-    if (ssrContext === "spa") {
-      //console.log('useRouter: useEffect - initialise listeners to call setRenderRoute on <Link> & navTo()')
-      listeners.push(newrouteRequested => setRenderRoute(newrouteRequested))
-      return () => listeners.pop()
-    }
-  }, [ssrContext])
+    //if (ssrContext === "spa") {
+    //console.log('useRouter: useEffect - initialise listeners to call setRenderRoute on <Link> & navTo()')
+    listeners.push(newrouteRequested => setRenderRoute(newrouteRequested))
+    return () => listeners.pop()
+    //}
+  }, [])
 
   // Subscribe to popstate events (browser back/forward buttons)
   useEffect(() => {
@@ -129,35 +130,33 @@ export function Router({ startUrl, cfg }) {
       })
     }
 
-    if (typeof window !== 'undefined' && ssrContext === "spa") {
+    if (typeof window !== 'undefined' /*&& ssrContext === "spa"*/) {
       //console.log ('useRouter: useEffect - initialise listeners to listen for popstate (browser back/forward)')
       window.addEventListener('popstate', chnRouteFn, false)
       return () => { window.removeEventListener('popstate', chnRouteFn, false) }
     }
-  }, [ssrContext])
+  }, [])
 
   // return child components
   const { component, componentFetch, routeProps = {}, requireAuth } = cfg[renderRoute.routekey] || {}
 
-  console.log(`Render useRouter,  ssrContext=${ssrContext} routekey=${renderRoute.routekey}`)
+  console.log(`Render useRouter,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
   if (!component) {
     console.error(`useRouter()  error, unknown route ${renderRoute.routekey}`)
     return `404 - error, unknown route ${renderRoute.routekey}`
   } else {
     let resource
     if (componentFetch) {
-      if (ssrContext === "server") {
-        // the data has been fetched on the server, so just wrap in a completed Promise
+      if (renderRoute.firstRoute && renderRoute.firstRoute === "server") {
+        // its the first route & the data has been fetched on the server, so just wrap in a completed Promise
         resource = _suspenseWrap(serverInitialData)
       } else {
 
         //console.log(`Start the data fetch for the route`)
-
         if (requireAuth) {
           // TODO - router does have access to session data
         }
         resource = _suspenseFetch('componentFetch' + renderRoute.routekey, renderRoute.urlid)
-
       }
       //console.log(`useRouter() wrapped suspense createElement`)
       return (

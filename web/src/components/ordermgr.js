@@ -6,15 +6,8 @@ import { Link } from './router.js'
 import { DetailsList, DetailsListLayoutMode, Stack, Text, Separator, MessageBar, MessageBarType, Label } from '@fluentui/react'
 
 
-function apply(array, event) {
-    const doc_id = event.metadata.doc_id
-    const existing_idx = doc_id ? array.findIndex(o => o.metadata.doc_id === doc_id) : -1
-    if (existing_idx >= 0) {
-        return [...array.slice(0, existing_idx), event, ...array.slice(existing_idx + 1)]
-    } else {
-        return array.concat(event)
-    }
-}
+// Replace array entry at index 'index' with 'val'
+function imm_splice(array, index, val) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
 
 function orderReducer(state, action) {
 
@@ -38,30 +31,57 @@ function orderReducer(state, action) {
             // };
             // status: OrderStatus | InventoryStatus
 
-            let ret_state = { ...state }
+            const { statechanges, sequence } = action.change
+            let ret_state = { ...state, sequence }
 
-            if (action.changes && action.changes.length > 0) {
+            for (let i = 0; i < statechanges.length; i++) {
+                const { kind, metadata, status } = statechanges[i]
+                const { doc_id, type } = metadata
 
-                for (let i = 0; i < action.changes.length; i++) {
-                    const event = action.changes[0]
-                    switch (event.kind) {
-                        case 'Order':
-                            ret_state.orders = apply(ret_state.orders, { metadata: event.metadata, status: event.status })
-                            break
-                        case 'Inventory':
-                            ret_state.inventory = apply(ret_state.inventory, { metadata: event.metadata, status: event.status })
-                            break
-                        default:
-                            console.warn(`Error, unknown kind ${event.kind}`)
-                    }
+                switch (kind) {
+                    case 'Order':
+
+                        if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
+                            const order_idx = ret_state.orders.findIndex(o => o.doc_id === doc_id)
+                            if (order_idx >= 0) {
+                                const existing_order = ret_state.orders[order_idx]
+                                ret_state.orders = imm_splice(ret_state.orders, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
+                            } else {
+                                console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
+                            }
+                        } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
+                            ret_state.orders = ret_state.orders.concat({ doc_id, status })
+                        }
+                        break
+                    case 'Inventory':
+                        const existing_idx = ret_state.inventory.findIndex(i => i.doc_id === doc_id)
+
+                        if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
+                            if (existing_idx < 0) {
+                                console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
+                            } else {
+                                // got new Onhand value (replace)
+                                ret_state.inventory = imm_splice(ret_state.inventory, existing_idx, { doc_id, status })
+                            }
+                        } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
+                            // got new Inventory onhand (additive)
+                            if (existing_idx < 0) {
+                                ret_state.inventory = ret_state.inventory.concat({ doc_id, status })
+                            } else {
+                                console.log(`got new inventory existing_idx=${existing_idx}`)
+                                ret_state.inventory = imm_splice(ret_state.inventory, existing_idx, { doc_id, status: { onhand: (ret_state.inventory[existing_idx].status.onhand + status.onhand) } })
+                            }
+                        }
+                        break
+                    default:
+                        console.warn(`Error, unknown kind ${kind}`)
                 }
-            } else {
-                console.warn('error, got no events')
             }
+
             return ret_state
         case 'closed':
             // socket closed, reset state
-            return { sequence: -1, inventory: [], orders: [] }
+            return { sequence: 0, inventory: [], orders: [] }
         default:
             throw new Error(`unknown action type ${action.type}`);
     }
@@ -109,7 +129,7 @@ export function OrderMgr({ resource }) {
                     console.log(`dispatching message from server ${e.data}`);
                     var msg = JSON.parse(e.data)
                     dispatchWorkitems(msg)
-                    console.log(msg)
+                    //console.log(msg)
                 }
             } catch (e) {
                 setMessage({ type: MessageBarType.severeWarning, msg: `Cannot Connect to Order Controller : ${e}` })
@@ -188,6 +208,7 @@ export function OrderMgr({ resource }) {
                     {[[2, "Processing"], [3, stage_txt[3]], [4, stage_txt[4]], [5, stage_txt[5]]].map(([stage_idx, desc], idx) => {
                         return (
                             <Stack
+                                key={stage_idx}
                                 tokens={{ childrenGap: 8, padding: 8 }}
                                 styles={{
                                     root: {
