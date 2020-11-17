@@ -26,7 +26,7 @@ class Processor extends Emitter {
                 return dispatch(0, null)
 
                 function dispatch(i, change: ChangeEvent) {
-                    if (context.eventfn && change && change.statechanges) {
+                    if (context.eventfn && change) {
                         context.eventfn(context, change)
                     }
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
@@ -237,20 +237,15 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
                             throw new Error(`Cannot find existing ${c.kind} with doc_id=${doc_id}`)
                         }
                         inventory_updates.set(doc_id, new_status)
-
                     } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
-
                         inventory_updates.set(doc_id, { onhand: existing_sku ? (existing_sku.onhand + new_status.onhand) : new_status.onhand })
                     }
-
-
                     newstate.inventory = new Map([...newstate.inventory, ...inventory_updates])
                     break
                 default:
                     throw new Error(`Unsupported kind ${c.kind} in local state`)
             }
         }
-
         return [newstate, { ...change, sequence: newstate.sequence }]
     }
     return [state, change]
@@ -264,9 +259,7 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
 
         case ActionType.NewInventory: {
             const { product, qty } = action.spec
-
             return apply_change_events(state, { trigger: { type: action.type, value: action.trigger }, nextaction: true, statechanges: [{ kind: "Inventory", metadata: { doc_id: product, type: ChangeEventType.CREATE }, status: { onhand: qty } }] })
-
         }
         case ActionType.NewOrUpdatedOrder: {
             const { spec } = action
@@ -278,14 +271,12 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
             } else {
                 new_order_status = { failed: true, stage: OrderStage.OrderQueued, message: "Invalid Order - No items" }
             }
-
             // Needs to be Idempotent
             // TODO: Check if its a new Order or if state already has the Order & what the change is & if we accept the change
             return apply_change_events(state, { trigger: { type: action.type, value: action.trigger }, nextaction: !new_order_status.failed, statechanges: [{ kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.CREATE }, status: new_order_status }] })
         }
         case ActionType.StatusUpdate: {
             const { spec, status } = action
-
             // Needs to be Idempotent
             // TODO: Check if state already has Order Number 
             return apply_change_events(state, { nextaction: true, statechanges: [{ kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE }, status: { failed: false, ...status } }] })
@@ -293,10 +284,6 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
         case ActionType.AllocateInventory: {
             // Check aviable Inventory, if any failed, fail the whole order
             const { spec } = action
-
-            const order_key_idx = spec._id ? state.orders.findIndex(o => o.doc_id === spec._id.toHexString()) : -1
-            const existing_order = state.orders[order_key_idx]
-
             let order_status_update: OrderStatus = { failed: false, stage: OrderStage.InventoryAllocated }
             const inventory_updates: Map<string, InventoryStatus> = new Map()
 
@@ -312,14 +299,12 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
                             break
                         } else {
                             inventory_updates.set(sku, { onhand: inv.onhand - i.qty })
-
                         }
                     } else {
                         order_status_update = { ...order_status_update, failed: true, message: `Inventory Allocation Failed, Failed, no Item on order line ${i + 1}` }
                         break
                     }
                 }
-
             } else {
                 order_status_update = { ...order_status_update, failed: true, message: `No lineitems on Order` }
             }
@@ -330,7 +315,6 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
                 inventory_statechanges = Array.from(inventory_updates).map(([sku, inv_obj]): StateChange => {
                     return { kind: "Inventory", metadata: { doc_id: sku, type: ChangeEventType.UPDATE }, status: { onhand: inv_obj.onhand } }
                 })
-
             }
             return apply_change_events(state, { nextaction: !order_status_update.failed, statechanges: [order_statechange].concat(inventory_statechanges) })
         }
@@ -372,10 +356,7 @@ function picking_control_loop() {
     // check orders in picking status for completion
     // progress & complete
 
-
     // look for waiting / new picking & start if capacity
-
-
     //
 }
 
@@ -416,17 +397,13 @@ function getBlobClient() {
     const containerClient = blobServiceClient.getContainerClient(process.env.STORAGE_CONTAINER)
 
     //const createContainerResponse = await containerClient.create();
-
     console.log(`Create container ${process.env.STORAGE_CONTAINER} successfully`);
-
     const blobClient = containerClient.getBlockBlobClient(process.env.STORAGE_CHECKPOINT_FILE);
     return blobClient
 }
-
 async function getLatestOrderingState_AzureBlob(ctx) {
 
     const blobClient = getBlobClient()
-
     try {
         let res1: Buffer = await blobClient.downloadToBuffer()
         ordering_state = JSON.parse(res1.toString())
@@ -474,7 +451,6 @@ async function getLatestOrderingState_Filesystem(ctx): Promise<OrderingState> {
             }
         }
     }
-
     if (latestfile.filename) {
         console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
         return await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
@@ -488,11 +464,9 @@ async function inflateState_Filesystem(ctx): Promise<OrderingState> {
 
     try {
         let ordering_state = await getLatestOrderingState_Filesystem(ctx)
-
         console.log(`reading order_events from database from seq#=${ordering_state.sequence}`)
 
         await ctx.db.collection("order_events").createIndex({ sequence: 1 })
-
         const inflate_events = await ctx.db.collection("order_events").aggregate(
             [
                 { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: ordering_state.sequence } }] } },
@@ -510,9 +484,7 @@ async function inflateState_Filesystem(ctx): Promise<OrderingState> {
                 ordering_state = new_state
             }
         }
-
         return ordering_state
-
     } catch (e) {
         if (e.statusCode === 403) {
             throw new Error('**** its wsl2 date issue dummy')
@@ -522,8 +494,6 @@ async function inflateState_Filesystem(ctx): Promise<OrderingState> {
     }
 
 }
-
-
 
 async function order_startup() {
     const murl = new URL(MongoURL)

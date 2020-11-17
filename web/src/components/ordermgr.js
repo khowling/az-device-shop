@@ -3,11 +3,11 @@ import React, { useEffect } from 'react'
 import { Link } from './router.js'
 //import { _fetchit,  _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 
-import { DetailsList, DetailsListLayoutMode, Stack, Text, Separator, MessageBar, MessageBarType, Label } from '@fluentui/react'
+import { SelectionMode, DetailsList, DetailsListLayoutMode, Stack, Text, Separator, MessageBar, MessageBarType, Label } from '@fluentui/react'
 
 
 // Replace array entry at index 'index' with 'val'
-function imm_splice(array, index, val) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
+function imm_splice(array, index, val) { return [val, ...array.slice(0, index), ...array.slice(index + 1)] }
 
 function orderReducer(state, action) {
 
@@ -95,7 +95,7 @@ export function OrderMgr({ resource }) {
     //const inventory = result.data
     const { products } = result.refstores
 
-    const [order_state, dispatchWorkitems] = React.useReducer(orderReducer, { sequence: -1, inventory: [], orders: [] })
+    const [order_state, dispatchWorkitems] = React.useReducer(orderReducer, { sequence: 0, inventory: [], orders: [] })
 
     const [message, setMessage] = React.useState({ type: MessageBarType.info, msg: "Not Connected to Order Controller" })
 
@@ -160,16 +160,15 @@ export function OrderMgr({ resource }) {
 
                 <Stack horizontal tokens={{ childrenGap: 3 }}>
                     <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }}>
-                        <Label >Spec:</Label>
 
-                        <Text variant="xSmall">Full details: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
+
+                        <Text variant="xSmall">Spec: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
 
                     </Stack>
                     <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }} >
-                        <Label>Status:</Label>
-                        <Text variant="xSmall">{stage_txt[o.status.stage]}</Text>
-                        <Text variant="xSmall">Wait Time : {o.status.waittime / 1000}</Text>
-                        <Text variant="xSmall">Progess (%) : {o.status.progress}</Text>
+
+                        <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
+
                     </Stack>
                 </Stack>
             </Stack>
@@ -186,9 +185,9 @@ export function OrderMgr({ resource }) {
 
                 <Stack horizontal tokens={{ childrenGap: 30, padding: 10 }} styles={{ root: { background: 'rgb(225, 228, 232)' } }}>
                     <Stack styles={{ root: { width: '100%' } }}>
-                        <h4>Picking Capacity</h4>
-                        <Text variant="superLarge" >0</Text>
-                        <Text >available 40 / busy 300</Text>
+                        <h4>Event Sequence #</h4>
+                        <Text variant="superLarge" >{order_state.sequence}</Text>
+                        <Text >tracked skus {order_state.inventory.length} / orders {order_state.orders.length}</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Waiting Orders</h4>
@@ -227,7 +226,7 @@ export function OrderMgr({ resource }) {
                 </Stack>
             </Stack>
 
-            <Separator></Separator>
+
             <h3>Stock ({order_state.inventory.length})</h3>
             <DetailsList
                 columns={[
@@ -245,7 +244,8 @@ export function OrderMgr({ resource }) {
                         onRender: (i) => <div>{i.status.onhand}</div>
                     }
                 ]}
-                compact={false}
+                compact={true}
+                selectionMode={SelectionMode.none}
                 items={order_state.inventory}
                 setKey="none"
                 layoutMode={DetailsListLayoutMode.justified}
