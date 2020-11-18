@@ -6,18 +6,22 @@ interface ProcessingState {
     last_order_trigger: any;
     order_processing: Map<string, ProcessorInfo>
 }
-var processor_state: ProcessingState
+var processor_state: ProcessingState = { last_order_trigger: null, last_inventory_trigger: null, order_processing: new Map() }
 
 function processor_state_apply(state: ProcessingState, val: ProcessorInfo): ProcessingState {
     const ret_state = { ...state, order_processing: new Map(state.order_processing) }
     if (val.processor === ProcessorType.ORDER) {
-        if (val.trigger_full) {
-            ret_state.last_order_trigger = val.trigger_full
-        }
+        const { trigger_doc_id, processor, ...rest } = val
+
         if (val.complete) {
-            ret_state.order_processing.delete(val.trigger_doc_id)
+            ret_state.order_processing.delete(trigger_doc_id)
         } else {
-            ret_state.order_processing.set(val.trigger_doc_id, val)
+            const current_val: ProcessorInfo = ret_state.order_processing.get(trigger_doc_id)
+            ret_state.order_processing.set(trigger_doc_id, { ...current_val, ...rest })
+
+            if (val.trigger_full) {
+                ret_state.last_order_trigger = val.trigger_full
+            }
         }
     } else if (val.processor === ProcessorType.INVENTORY) {
         ret_state.last_inventory_trigger = val.trigger_full
@@ -41,21 +45,35 @@ class Processor extends Emitter {
         this.middleware.push(fn);
         return this;
     }
-
+    /*
+        initiate_processor_state(state: ProcessingState) {
+            for (let [doc_id, processor] of state.order_processing) {
+                const handlereqfn = callback()
+                handlereqfn(proecessor.trigger_full)
+            }
+    
+        }
+    */
+    //  Initiate new processor workflow
     callback(inflate = false) {
 
         function compose(middleware) {
 
-            return function (context, next) {
+            return function (context, start_idx, next) {
 
+                console.log(`Processor: callback compose return function start_idx=${start_idx} next=${next}`)
                 // last called middleware #
                 let index = -1
-                return dispatch(0, null)
+                return dispatch(0, null, null)
 
-                function dispatch(i, change: ChangeEvent) {
+                function dispatch(i, change: ChangeEvent, opts: ProcessorOptions = null) {
 
+                    //  { sleep_until: { stage: OrderStage.PickingComplete } }
+
+                    console.log(`Processor: in composed lambda 'fnMiddleware', dispatch called i=${i}, index=${start_idx}, index=${index} (middleware.length=${middleware.length}) seq=${change && change.sequence} `)
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
 
+                    if (start_idx > i) i = start_idx
                     index = i
                     let fn = middleware[i]
                     if (i === middleware.length) fn = next
@@ -66,7 +84,8 @@ class Processor extends Emitter {
                             processor: ProcessorType.ORDER,
                             trigger_doc_id: context.trigger.documentKey._id.toHexString(),
                             function_idx: i,
-                            complete: (!change.nextaction) || !fn
+                            complete: (!change.nextaction) || !fn,
+                            options: opts
                         }
                         if (i === 1) { // just send full trigger info on completion of 1st middleware
                             processor.trigger_full = context.trigger
@@ -76,6 +95,9 @@ class Processor extends Emitter {
 
                         // write to event log
                         context.eventfn(context, { ...change, processor })
+
+                        // kill the current context
+                        if (processor.options && processor.options.sleep_until) return Promise.resolve()
                     }
 
                     if ((change && !change.nextaction) || !fn) return Promise.resolve()
@@ -88,27 +110,30 @@ class Processor extends Emitter {
             }
         }
 
+        console.log(`Processor: callback, composing fnMiddleware`)
+        // create function lanbda to process all the middlwares for this trigger
         const fn = compose(this.middleware);
 
-        const handleRequest = (doc) => {
+        const handleRequest = (doc, restart_idx) => {
             // doc._id == event document includes a resume token as the _id field
             // doc.clusterTime == 
             // doc.opertionType == "insert"
             // doc.ns.coll == "Collection"
             // doc.documentKey == A document that contains the _id of the document created or modified
-            console.log('Processor Triggered')
+            console.log(`Processor, callback, handleRequest(doc, restart_idx=${restart_idx}), create new ctx and call  Processor.handleRequest`)
             const ctx = this.createContext(doc)
-            return this.handleRequest(ctx, fn);
+            return this.handleRequest(ctx, fn, restart_idx);
         }
 
+        console.log(`Processor: callback, returning function handleRequest - that will be trigged on each new doc`)
         return handleRequest
     }
 
-    handleRequest(ctx, fnMiddleware) {
-        console.log('handlerequest')
+    handleRequest(ctx, fnMiddleware, restart_idx) {
+        console.log(`Processor.handlerequest(ctx, fnMiddleware, restart_idx=${restart_idx}),  return  fnMiddleware(ctx, restart_idx) `)
         const handleResponse = () => console.log(`done spec: ${JSON.stringify(ctx.status)}`)
         const onerror = err => console.error(`Any error in the pipeline ends here: ${err}`)
-        return fnMiddleware(ctx).then(handleResponse).catch(onerror)
+        return fnMiddleware(ctx, restart_idx).then(handleResponse).catch(onerror)
     }
 
     createContext(doc) {
@@ -142,7 +167,7 @@ interface OrderingState {
     sequence: number;
     inventory: Map<string, InventoryStatus>;
     orders: Array<OrderObject>;
-    picking_capacity: number;
+    picking_allocated: number;
     lastupdated: number;
 }
 
@@ -153,19 +178,25 @@ interface OrderObject {
 
 
 interface OrderStatus extends DocStatus {
-    stage: OrderStage;
+    stage?: OrderStage;
     order_number?: string;
     inventory?: any;
     picking?: {
+        status: PickingStage;
+        starttime: number;
         waittime: number;
         allocated_capacity: number;
         progress: number;
     }
 }
-enum OrderStage { OrderQueued, OrderNumberGenerated, InventoryAllocated, WaitingPicking, Picking, Shipping, Complete }
+enum OrderStage { OrderQueued, OrderNumberGenerated, InventoryAllocated, Picking, PickingComplete, Shipped, Complete }
+enum PickingStage { Waiting, Picking, Complete }
 
 interface InventoryStatus {
     onhand: number;
+}
+interface PickingStatus {
+    allocated_update: number;
 }
 
 interface DocStatus {
@@ -187,16 +218,20 @@ interface ProcessorInfo {
     function_idx?: number;
     trigger_full?: object;
     complete?: boolean;
+    options?: ProcessorOptions;
+}
+interface ProcessorOptions {
+    sleep_until: OrderStage;
 }
 enum ProcessorType { ORDER, INVENTORY }
 
 interface StateChange {
     kind: string;
     metadata: {
-        type?: ChangeEventType;
-        doc_id: string;
+        type: ChangeEventType;
+        doc_id?: string;
     };
-    status: OrderStatus | InventoryStatus;
+    status: OrderStatus | InventoryStatus | PickingStatus;
 }
 enum ChangeEventType {
     CREATE,
@@ -206,7 +241,6 @@ enum ChangeEventType {
 
 
 // Perform Action on ordering_state
-
 interface OrderingAction {
     // Order actions
     type: ActionType;
@@ -215,7 +249,7 @@ interface OrderingAction {
     status?: any; // used for StatusUpdate Actions
     //trigger?: object; // used for NewOrUpdatedOrder / NewInventory
 }
-enum ActionType { StatusUpdate, NewInventory, NewOrUpdatedOrder, AllocateInventory }
+enum ActionType { StatusUpdate, NewInventory, NewOrUpdatedOrder, AllocateInventory, ProcessPicking }
 
 // Store in "https://github.com/Level/level"
 // In Memory, volatile state
@@ -247,11 +281,12 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
             }
         }
         */
+        if (change.sequence && (change.sequence !== newstate.sequence)) {
+            throw new Error(`apply_change_events, Cannot re-apply change sequence ${change.sequence}, expecting ${newstate.sequence}`)
+        }
 
         for (let c of change.statechanges) {
-            if (change.sequence && (change.sequence !== newstate.sequence)) {
-                throw new Error(`Cannot re-apply change sequence ${change.sequence}, expecting ${newstate.sequence}`)
-            }
+
             const { doc_id, type } = c.metadata
             switch (c.kind) {
                 case "Order":
@@ -262,7 +297,7 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
                             const new_order = { ...existing_order, status: { ...existing_order.status, ...c.status } }
                             newstate.orders = imm_splice(newstate.orders, order_idx, new_order)
                         } else {
-                            throw new Error(`Cannot find existing ${c.kind} with doc_id=${doc_id}`)
+                            throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
                         }
                     } else if (type === ChangeEventType.CREATE) {
                         // using typescript "type assertion"
@@ -277,7 +312,7 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
 
                     if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
                         if (!existing_sku) {
-                            throw new Error(`Cannot find existing ${c.kind} with doc_id=${doc_id}`)
+                            throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
                         }
                         inventory_updates.set(doc_id, new_status)
                     } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
@@ -285,8 +320,16 @@ function apply_change_events(state: OrderingState, change: ChangeEvent): [Orderi
                     }
                     newstate.inventory = new Map([...newstate.inventory, ...inventory_updates])
                     break
+                case "Picking":
+                    if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
+                        const { allocated_update } = c.status as PickingStatus
+                        newstate.picking_allocated = newstate.picking_allocated + allocated_update
+                    } else {
+                        throw new Error(`apply_change_events, only support updates on ${c.kind}`)
+                    }
+                    break
                 default:
-                    throw new Error(`Unsupported kind ${c.kind} in local state`)
+                    throw new Error(`apply_change_events, Unsupported kind ${c.kind} in local state`)
             }
         }
         return [newstate, { ...change, sequence: newstate.sequence }]
@@ -361,6 +404,65 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
             }
             return apply_change_events(state, { nextaction: !order_status_update.failed, statechanges: [order_statechange].concat(inventory_statechanges) })
         }
+        case ActionType.ProcessPicking: {
+
+            // A simulation for picking,
+            // In a real implementation, this may be implemented in another process, with this process listenting for updates
+            const MAX_PICKING_CAPACITY = 5
+            const TIME_TO_PICK_A_ORDER = 30 * 1000 //30 seconds
+
+            let picking_allocated_update = 0// state.picking_allocated
+            const orders_in_picking: Array<OrderObject> = state.orders.filter(s => s.status.stage === OrderStage.Picking)
+            const now = Date.now()
+
+            const statechanges: Array<StateChange> = []
+
+            // check orders in picking status look for for completion to free up capacity
+            for (let ord of orders_in_picking.filter(o => o.status.picking.status === PickingStage.Picking)) {
+                // all orders in Picking status
+                const { doc_id, status } = ord
+                let order_status_update = {}
+
+                const timeleft = TIME_TO_PICK_A_ORDER - (now - status.picking.starttime)
+
+                if (timeleft > 0) { // not finished, just update progress
+                    order_status_update = { picking: { ...status.picking, progress: Math.floor(100 - ((timeleft / TIME_TO_PICK_A_ORDER) * 100.0)) } }
+                } else { // finished
+                    picking_allocated_update = picking_allocated_update - status.picking.allocated_capacity
+                    order_status_update = { picking: { ...status.picking, status: PickingStage.Complete, progress: 100, allocated_capacity: 0 }, stage: OrderStage.PickingComplete }
+                }
+                statechanges.push({ kind: "Order", metadata: { doc_id, type: ChangeEventType.UPDATE }, status: { failed: false, ...order_status_update } })
+            }
+
+            // check orders in picking status look for for completion to free up capacity
+            for (let ord of orders_in_picking.filter(o => o.status.picking.status === PickingStage.Waiting)) {
+                // all orders in Picking status
+                const { doc_id, status } = ord
+                let order_status_update = {}
+                const required_capacity = 1
+
+                if ((MAX_PICKING_CAPACITY - (state.picking_allocated + picking_allocated_update)) >= required_capacity) {
+                    // we have capacity, move to inprogress
+                    order_status_update = { picking: { ...status.picking, status: PickingStage.Picking, allocated_capacity: required_capacity, progress: 0, waittime: status.picking.starttime - now } }
+                    picking_allocated_update = picking_allocated_update + required_capacity
+                } else {
+                    // still need to wait
+                    order_status_update = {
+                        picking: { ...status.picking, waittime: status.picking.starttime - now }
+                    }
+
+                }
+                statechanges.push({ kind: "Order", metadata: { doc_id, type: ChangeEventType.UPDATE }, status: { failed: false, ...order_status_update } })
+            }
+
+            if (picking_allocated_update !== 0) {
+                statechanges.push({ kind: "Picking", metadata: { type: ChangeEventType.UPDATE }, status: { allocated_update: picking_allocated_update } })
+            }
+            if (statechanges.length > 0) {
+                return apply_change_events(state, { nextaction: null, statechanges: statechanges })
+            }
+            return [state, null]
+        }
         default:
             return [state, null]
     }
@@ -394,28 +496,20 @@ async function allocateInventry(ctx, next) {
 }
 
 
-function picking_control_loop() {
-
-    // check orders in picking status for completion
-    // progress & complete
-
-    // look for waiting / new picking & start if capacity
-    //
-}
 
 async function picking(ctx, next) {
-
     console.log(`picking forward, trigger: ${JSON.stringify(ctx.trigger)}`)
-    //Picking
-    ctx.eventfn(ctx, local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.WaitingPicking, picking: { waitingtime: 0 } } }))
 
-    await next()
+    await next(
+        local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Picking, picking: { starttime: Date.now(), status: PickingStage.Waiting, waittime: 0 } } }),
+        { sleep_until: { stage: OrderStage.PickingComplete } })
+
     console.log('picking back')
 }
 
 async function shipping(ctx, next) {
     console.log(`shipping forward, trigger: ${JSON.stringify(ctx.trigger)}`)
-    await next()
+    await next(local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Shipped } }))
     console.log(`shipping back`)
 }
 
@@ -425,6 +519,8 @@ const { MongoClient, ObjectID, ObjectId } = require('mongodb'),
     assert = require('assert').strict,
     MongoURL = process.env.MONGO_DB
 
+
+/* ////////////////////////////////////////////////////// AZURE STORAGE  //////////////
 import {
     BlobServiceClient,
     StorageSharedKeyCredential,
@@ -432,8 +528,6 @@ import {
 } from "@azure/storage-blob";
 import { callbackify } from "util"
 
-
-////////////////////////////////////////////////////// AZURE STORAGE  //////////////
 function getBlobClient() {
     console.log(`looking for saved starting point ${process.env.STORAGE_ACCOUNT}`)
     const sharedKeyCredential = new StorageSharedKeyCredential(process.env.STORAGE_ACCOUNT, process.env.STORAGE_MASTER_KEY)
@@ -465,7 +559,7 @@ async function orderCheckpoint_AzureBlob(ctx) {
     console.log(`Upload block blob successfully`, uploadBlobResponse.requestId);
 
 }
-//////////////////////////////////////////////////////////////////////////////////////////
+*/ //////////////////////////////////////////////////////////////////////////////////////////
 
 
 const chkdir = `${process.env.FILEPATH || '.'}/order_checkpoint`
@@ -508,7 +602,7 @@ async function getLatestOrderingState_Filesystem(ctx): Promise<[OrderingState, P
     } else {
         console.log(`No checkpoint found, start from 0`)
         return [
-            { sequence: 0, lastupdated: null, picking_capacity: 0, inventory: new Map(), orders: [] },
+            { sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), orders: [] },
             { last_order_trigger: null, last_inventory_trigger: null, order_processing: new Map() }
         ]
     }
@@ -517,7 +611,7 @@ async function getLatestOrderingState_Filesystem(ctx): Promise<[OrderingState, P
 async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingState]> {
 
     try {
-        let [ordering_state, processing_state] = await getLatestOrderingState_Filesystem(ctx)
+        let [ordering_state, required_processor_state] = await getLatestOrderingState_Filesystem(ctx)
         console.log(`reading order_events from database from seq#=${ordering_state.sequence}`)
 
         await ctx.db.collection("order_events").createIndex({ sequence: 1 })
@@ -537,12 +631,14 @@ async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingS
                 const [new_state] = apply_change_events(ordering_state, change)
                 ordering_state = new_state
                 if (!processor) {
-                    throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
+                    // its find to have a ordering state change that is not controlled by the processor (ie picking)
+                    //throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
+                } else {
+                    required_processor_state = processor_state_apply(required_processor_state, processor)
                 }
-                processing_state = processor_state_apply(processing_state, processor)
             }
         }
-        return [ordering_state, processing_state]
+        return [ordering_state, required_processor_state]
     } catch (e) {
         if (e.statusCode === 403) {
             throw new Error('**** its wsl2 date issue dummy')
@@ -553,9 +649,9 @@ async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingS
 
 }
 
-async function order_startup() {
+async function order_processor_startup() {
     const murl = new URL(MongoURL)
-    console.log(`connecting with ${murl.toString()}`)
+    console.log(`order_processor_startup (1):  connecting to: ${murl.toString()}`)
     const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
 
@@ -568,82 +664,117 @@ async function order_startup() {
     orderProcessor.use(shipping)
 
     const db = orderProcessor.context.db = client.db()
+    orderProcessor.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
+    console.log(`order_processor_startup (2):  got context tenent=${orderProcessor.context.tenent.email}`)
 
-    try {
+    // Setup action on next()
+    orderProcessor.context.eventfn = ws_server_emit
 
-        orderProcessor.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
-        console.log(`order_startup: starting context tenent=${orderProcessor.context.tenent.email}`)
+    // inflate ordering_state & get required_processor_state
+    const [inflated_ordering_state, required_processor_state] = await inflateState_Filesystem(orderProcessor.context)
+    ordering_state = inflated_ordering_state
 
-        // Setup action on next()
-        orderProcessor.context.eventfn = ws_server_emit
-
-        const [inflated_ordering_state, inflated_processor_state] = await inflateState_Filesystem(orderProcessor.context)
-
-        ordering_state = inflated_ordering_state
-        processor_state = inflated_processor_state
-
-        let lastcheckpoint_seq: number = ordering_state.sequence
-        console.log(`order_startup: inflated to seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}`)
-
-        const LOOP_MINS = 1, LOOP_CHANGES = 100
-        console.log(`order_startup: starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
-        // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
-        setInterval(async (ctx) => {
-            console.log(`Checkpointing check: seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}.  Processing size=${processor_state.order_processing.size}`)
-            if (ordering_state.sequence > lastcheckpoint_seq + LOOP_CHANGES) {
-                console.log(`do checkpoint`)
-                lastcheckpoint_seq = await orderCheckpoint_Filesystem(ctx, { ...ordering_state }, { ...processor_state })
+    // Restart required_processor_state
+    for (let [doc_id, p] of required_processor_state.order_processing) {
+        if (!p.complete) {
+            console.log(`order_processor_startup (3): re-creating processor for doc_id=${doc_id}, fnidx=${p.function_idx}, ${p.complete}, ${p.processor}`)
+            if (p.options && p.options.sleep_until) {
+                const order_state = ordering_state.orders.find(o => o.doc_id === p.trigger_doc_id)
+                if (!order_state) {
+                    throw new Error(`order_processor_startup: Got a processor state without the ordering state: doc_id=${doc_id}, fn=${p.function_idx}`)
+                } else {
+                    if (p.options.sleep_until !== order_state.status.stage) {
+                        continue
+                    }
+                }
             }
-        }, 1000 * 60 * LOOP_MINS, orderProcessor.context)
-
-
-        assert((ordering_state.orders.length === 0) === (!processor_state.last_order_trigger), 'Error, we we have inflated orders, we need a order continuation token')
-        console.log(`order_startup:  start watch for new "orders" (startAfter=${processor_state.last_order_trigger && processor_state.last_order_trigger._id})`)
-        db.collection(StoreDef["orders"].collection).watch(
-            [
-                { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["orders"].status.NewOrUpdatedOrder }] } }
-                , { $project: { "ns": 1, "documentKey": 1, "fullDocument.status": 1, "fullDocument.partition_key": 1 } }
-            ],
-            { fullDocument: "updateLookup", ...(processor_state.last_order_trigger && { startAfter: processor_state.last_order_trigger._id }) }
-            // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
-        ).on('change', orderProcessor.callback())
-
-
-
-        assert((ordering_state.inventory.size === 0) === (!processor_state.last_inventory_trigger), 'Error, we we have inflated inventry, we need a inventory continuation token')
-        console.log(`order_startup:  start watch for new "inventory" (startAfter=${processor_state.last_inventory_trigger && processor_state.last_inventory_trigger._id})`)
-        const inventoryAggregationPipeline = [
-            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Available" }] } },
-            { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
-        ]
-        var inventoryStreamWatcher = db.collection(StoreDef["inventory"].collection).watch(
-            inventoryAggregationPipeline,
-            { fullDocument: "updateLookup", ...(processor_state.last_inventory_trigger && { startAfter: processor_state.last_inventory_trigger._id }) }
-        )
-        inventoryStreamWatcher.on('change', data => {
-            //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
-            console.log(`inventoryStreamWatcher : ${JSON.stringify(data.fullDocument)}`)
-            // spec 
-            // _id
-            // qty
-            // status
-            // category
-            // product 
-            // warehouse
-
-            const change = local_state_op({ type: ActionType.NewInventory, spec: data.fullDocument })
-            const processor: ProcessorInfo = {
-                processor: ProcessorType.INVENTORY,
-                trigger_full: data
-            }
-
-            processor_state = processor_state_apply(processor_state, processor)
-            ws_server_emit(orderProcessor.context, { ...change, processor })
-        })
-    } catch (e) {
-        console.error(e)
-        process.exit(1)
+            orderProcessor.callback()(p.trigger_full, p.function_idx)
+        }
     }
+
+
+    let lastcheckpoint_seq: number = ordering_state.sequence
+    console.log(`order_processor_startup (4): inflated to seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}`)
+
+    const LOOP_MINS = 1, LOOP_CHANGES = 100
+    console.log(`order_processor_startup (5): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
+    // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
+    setInterval(async (ctx) => {
+        console.log(`Checkpointing check: seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}.  Processing size=${processor_state.order_processing.size}`)
+        if (ordering_state.sequence > lastcheckpoint_seq + LOOP_CHANGES) {
+            console.log(`do checkpoint`)
+            lastcheckpoint_seq = await orderCheckpoint_Filesystem(ctx, { ...ordering_state }, { ...processor_state })
+        }
+    }, 1000 * 60 * LOOP_MINS, orderProcessor.context)
+
+    console.log(`order_processor_startup (6): starting picking control loop (5 seconds)`)
+    setInterval(function (ctx) {
+        const change = local_state_op({ type: ActionType.ProcessPicking })
+        if (change) {
+            ws_server_emit(ctx, change)
+        }
+    }, 5000, orderProcessor.context)
+
+
+    /*
+    // Start processing control loop
+    setInterval(function (ctx) {
+        // This loop re-hydrates, or checks for restarts paused steps in the process.
+
+        // Get orderstate
+        for each ordering_state
+            - lookup processor state
+
+                - if no processor,
+                    what to do????
+        //
+    }, 5000, orderProcessor.context)
+    */
+    const cont_order_token = required_processor_state.last_order_trigger
+    assert((ordering_state.orders.length === 0) === (!cont_order_token), 'Error, we we have inflated orders, we need a order continuation token')
+    console.log(`order_processor_startup (7):  start watch for new "orders" (startAfter=${cont_order_token && cont_order_token._id})`)
+    db.collection(StoreDef["orders"].collection).watch(
+        [
+            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["orders"].status.NewOrUpdatedOrder }] } }
+            , { $project: { "ns": 1, "documentKey": 1, "fullDocument.status": 1, "fullDocument.partition_key": 1 } }
+        ],
+        { fullDocument: "updateLookup", ...(cont_order_token && { startAfter: cont_order_token._id }) }
+        // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
+    ).on('change', orderProcessor.callback())
+
+
+    const cont_inv_token = required_processor_state.last_inventory_trigger
+    assert((ordering_state.inventory.size === 0) === (!cont_inv_token), 'Error, we we have inflated inventry, we need a inventory continuation token')
+    console.log(`order_processor_startup (8):  start watch for new "inventory" (startAfter=${cont_inv_token && cont_inv_token._id})`)
+    const inventoryAggregationPipeline = [
+        { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Available" }] } },
+        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+    ]
+    var inventoryStreamWatcher = db.collection(StoreDef["inventory"].collection).watch(
+        inventoryAggregationPipeline,
+        { fullDocument: "updateLookup", ...(cont_inv_token && { startAfter: cont_inv_token._id }) }
+    )
+    inventoryStreamWatcher.on('change', data => {
+        //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
+        console.log(`inventoryStreamWatcher : ${JSON.stringify(data.fullDocument)}`)
+        // spec 
+        // _id
+        // qty
+        // status
+        // category
+        // product 
+        // warehouse
+
+        const change = local_state_op({ type: ActionType.NewInventory, spec: data.fullDocument })
+        const processor: ProcessorInfo = {
+            processor: ProcessorType.INVENTORY,
+            trigger_full: data
+        }
+
+        processor_state = processor_state_apply(processor_state, processor)
+        ws_server_emit(orderProcessor.context, { ...change, processor })
+    })
+
 }
 
 //  ---- Factory Monitoring Websocket & API
@@ -666,7 +797,10 @@ function ws_server_startup() {
 
     const WebSocket = require('ws'),
         http = require('http'),
-        port = process.env.PORT || 9090,
+        port = process.env.PORT || 9090
+
+    /* /////   If we want to expose a API for the frontend
+    const    
         Koa = require('koa'),
         Router = require('koa-router')
 
@@ -686,9 +820,11 @@ function ws_server_startup() {
         })
         .routes())
 
-
     const httpServer = http.createServer(app.callback()).listen(port)
-    console.log(`listening to port ${port}`)
+    */ ////////////////////////////////////////////
+
+    const httpServer = http.createServer().listen(port)
+    console.log(`ws_server_startup: listening to port ${port}`)
 
     // Web Socket Server
     const wss = new WebSocket.Server({
@@ -715,12 +851,21 @@ function ws_server_startup() {
             if (ws_server_clients.has(client_id)) {
                 // dont send any more messages
                 ws_server_clients.delete(client_id)
-                console.log(`disconnected ${client_id}`)
+                console.log(`ws_server_startup: disconnected ${client_id}`)
             }
         })
     })
 }
 
+async function init() {
+    try {
+        await order_processor_startup()
+        await ws_server_startup()
 
-ws_server_startup()
-order_startup()
+    } catch (e) {
+        console.error(e)
+        process.exit(1)
+    }
+}
+
+init()

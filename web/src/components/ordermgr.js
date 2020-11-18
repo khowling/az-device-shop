@@ -90,7 +90,7 @@ function orderReducer(state, action) {
 export function OrderMgr({ resource }) {
 
     const { status, result } = resource.read()
-    console.log(status)
+    console.log(`Render: OrderMgr status=${status}`)
 
     //const inventory = result.data
     const { products } = result.refstores
