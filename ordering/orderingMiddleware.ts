@@ -70,10 +70,15 @@ class Processor extends Emitter {
 
                     //  { sleep_until: { stage: OrderStage.PickingComplete } }
 
-                    console.log(`Processor: in composed lambda 'fnMiddleware', dispatch called i=${i}, index=${start_idx}, index=${index} (middleware.length=${middleware.length}) seq=${change && change.sequence} `)
+                    console.log(`Processor: dispatch called i=${i}, start_idx=${start_idx}, index=${index} (middleware.length=${middleware.length}) seq=${change && change.sequence} `)
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
 
-                    if (start_idx > i) i = start_idx
+                    if (start_idx > i) {
+                        console.log(`Processor: dispatch, got a start_idx, so running idx=0 (to inflate ctx), then, skipping to ${start_idx} fnMiddleware`)
+                        if (i > 0) {
+                            i = start_idx
+                        }
+                    }
                     index = i
                     let fn = middleware[i]
                     if (i === middleware.length) fn = next
@@ -87,7 +92,8 @@ class Processor extends Emitter {
                             complete: (!change.nextaction) || !fn,
                             options: opts
                         }
-                        if (i === 1) { // just send full trigger info on completion of 1st middleware
+                        if (!processor_state.order_processing.has(processor.trigger_doc_id)) {
+                            // send full trigger info on 1st processor for this doc_id
                             processor.trigger_full = context.trigger
                         }
 
@@ -221,7 +227,10 @@ interface ProcessorInfo {
     options?: ProcessorOptions;
 }
 interface ProcessorOptions {
-    sleep_until: OrderStage;
+    sleep_until: {
+        stage: OrderStage;
+        time: number;
+    }
 }
 enum ProcessorType { ORDER, INVENTORY }
 
@@ -443,12 +452,12 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
 
                 if ((MAX_PICKING_CAPACITY - (state.picking_allocated + picking_allocated_update)) >= required_capacity) {
                     // we have capacity, move to inprogress
-                    order_status_update = { picking: { ...status.picking, status: PickingStage.Picking, allocated_capacity: required_capacity, progress: 0, waittime: status.picking.starttime - now } }
+                    order_status_update = { picking: { ...status.picking, status: PickingStage.Picking, allocated_capacity: required_capacity, progress: 0, waittime: now - status.picking.starttime } }
                     picking_allocated_update = picking_allocated_update + required_capacity
                 } else {
                     // still need to wait
                     order_status_update = {
-                        picking: { ...status.picking, waittime: status.picking.starttime - now }
+                        picking: { ...status.picking, waittime: now - status.picking.starttime }
                     }
 
                 }
@@ -468,16 +477,20 @@ function ordering_operation(state: OrderingState, action: OrderingAction): [Orde
     }
 }
 
-async function newReadOrder(ctx, next) {
-    console.log(`newReadOrder forward, find order id=${ctx.trigger.documentKey._id.toHexString()}, continuation=${ctx.trigger._id}`)
-
+async function setOrderSpec(ctx, next) {
+    console.log(`setOrderSpec forward, find order id=${ctx.trigger.documentKey._id.toHexString()}, continuation=${ctx.trigger._id}`)
     const find_order = { _id: ctx.trigger.documentKey._id, partition_key: ctx.tenent.email }
-
     // ctx - 'caches' information in the 'session' that will be required for the middleware operations, but not required in the state
     ctx.spec = await ctx.db.collection(StoreDef["orders"].collection).findOne(find_order)
     // pass in the required data, and perform transational operation on the state
+    await next()
+    console.log('setOrderSpec back')
+}
+
+async function validateOrder(ctx, next) {
+    console.log(`validateOrder forward, find order id=${ctx.trigger.documentKey._id.toHexString()}, continuation=${ctx.trigger._id}`)
+    // pass in the required data, and perform transational operation on the state
     await next(local_state_op({ type: ActionType.NewOrUpdatedOrder, spec: ctx.spec }))
-    console.log('newReadOrder back')
 }
 
 
@@ -486,13 +499,11 @@ async function generateOrderNo(ctx, next) {
     const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
     const order_number = 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0')
     await next(local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.OrderNumberGenerated, order_number: order_number } }))
-    console.log('generateOrderNo back')
 }
 
 async function allocateInventry(ctx, next) {
     console.log(`allocateInventry forward, trigger: ${JSON.stringify(ctx.trigger)}`)
     await next(local_state_op({ type: ActionType.AllocateInventory, spec: ctx.spec }))
-    console.log('allocateInventry back')
 }
 
 
@@ -503,17 +514,18 @@ async function picking(ctx, next) {
     await next(
         local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Picking, picking: { starttime: Date.now(), status: PickingStage.Waiting, waittime: 0 } } }),
         { sleep_until: { stage: OrderStage.PickingComplete } })
-
-    console.log('picking back')
 }
 
 async function shipping(ctx, next) {
-    console.log(`shipping forward, trigger: ${JSON.stringify(ctx.trigger)}`)
-    await next(local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Shipped } }))
-    console.log(`shipping back`)
+    console.log(`shipping forward`)
+    await next(local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Shipped } }),
+        { sleep_until: { time: Date.now() + 1000 * 60 * 60 /* 1hr */ } })
 }
 
-
+async function complete(ctx, next) {
+    console.log(`complete forward`)
+    await next(local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Complete } }))
+}
 
 const { MongoClient, ObjectID, ObjectId } = require('mongodb'),
     assert = require('assert').strict,
@@ -657,7 +669,8 @@ async function order_processor_startup() {
 
     const orderProcessor = new Processor()
 
-    orderProcessor.use(newReadOrder)
+    orderProcessor.use(setOrderSpec)
+    orderProcessor.use(validateOrder)
     orderProcessor.use(generateOrderNo)
     orderProcessor.use(allocateInventry)
     orderProcessor.use(picking)
@@ -674,30 +687,49 @@ async function order_processor_startup() {
     const [inflated_ordering_state, required_processor_state] = await inflateState_Filesystem(orderProcessor.context)
     ordering_state = inflated_ordering_state
 
-    // Restart required_processor_state
-    for (let [doc_id, p] of required_processor_state.order_processing) {
-        if (!p.complete) {
-            console.log(`order_processor_startup (3): re-creating processor for doc_id=${doc_id}, fnidx=${p.function_idx}, ${p.complete}, ${p.processor}`)
-            if (p.options && p.options.sleep_until) {
-                const order_state = ordering_state.orders.find(o => o.doc_id === p.trigger_doc_id)
-                if (!order_state) {
-                    throw new Error(`order_processor_startup: Got a processor state without the ordering state: doc_id=${doc_id}, fn=${p.function_idx}`)
-                } else {
-                    if (p.options.sleep_until !== order_state.status.stage) {
-                        continue
+    console.log(`order_processor_startup (3): re-inflating processor state`)
+    restartProcessors(ordering_state, required_processor_state, true)
+
+    function restartProcessors(state: OrderingState, required: ProcessingState, init_boot: boolean) {
+        // Restart required_processor_state
+        for (let [doc_id, p] of required.order_processing) {
+            if (!p.complete) {
+
+                if (p.options && p.options.sleep_until) {
+
+                    if (p.options.sleep_until.stage) {
+                        const order_state = state.orders.find(o => o.doc_id === doc_id)
+                        if (!order_state) {
+                            throw new Error(`order_processor_startup: Got a processor state without the ordering state: doc_id=${doc_id}, fn=${p.function_idx}`)
+                        } else if (p.options.sleep_until.stage !== order_state.status.stage) continue /* dont restart */
+
+                    } else if (p.options.sleep_until.time) {
+                        if (p.options.sleep_until.time >= Date.now()) continue /* dont restart */
+                    } else {
+                        continue /* dont restart */
                     }
+
+                } else if (!init_boot) {
+                    continue /* dont restart */
                 }
+                console.log(`Re-inflating processor for doc_id=${doc_id}, fnidx=${p.function_idx}, sleep_unit=${JSON.stringify(p.options.sleep_until)}`)
+                orderProcessor.callback()(p.trigger_full, p.function_idx)
             }
-            orderProcessor.callback()(p.trigger_full, p.function_idx)
         }
     }
 
+    console.log(`order_processor_startup (4): loop to re-inflate 'sleep_until' processes`)
+    setInterval(() => {
+        // check to restart 'sleep_until' processes
+        restartProcessors(ordering_state, processor_state, false)
+    }, 1000 * 5 /* 5 seconds */)
+
 
     let lastcheckpoint_seq: number = ordering_state.sequence
-    console.log(`order_processor_startup (4): inflated to seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}`)
+    console.log(`order_processor_startup (5): inflated to seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}`)
 
     const LOOP_MINS = 1, LOOP_CHANGES = 100
-    console.log(`order_processor_startup (5): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
+    console.log(`order_processor_startup (6): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
     setInterval(async (ctx) => {
         console.log(`Checkpointing check: seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}.  Processing size=${processor_state.order_processing.size}`)
@@ -707,7 +739,7 @@ async function order_processor_startup() {
         }
     }, 1000 * 60 * LOOP_MINS, orderProcessor.context)
 
-    console.log(`order_processor_startup (6): starting picking control loop (5 seconds)`)
+    console.log(`order_processor_startup (7): starting picking control loop (5 seconds)`)
     setInterval(function (ctx) {
         const change = local_state_op({ type: ActionType.ProcessPicking })
         if (change) {
@@ -732,7 +764,7 @@ async function order_processor_startup() {
     */
     const cont_order_token = required_processor_state.last_order_trigger
     assert((ordering_state.orders.length === 0) === (!cont_order_token), 'Error, we we have inflated orders, we need a order continuation token')
-    console.log(`order_processor_startup (7):  start watch for new "orders" (startAfter=${cont_order_token && cont_order_token._id})`)
+    console.log(`order_processor_startup (8):  start watch for new "orders" (startAfter=${cont_order_token && cont_order_token._id})`)
     db.collection(StoreDef["orders"].collection).watch(
         [
             { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["orders"].status.NewOrUpdatedOrder }] } }
@@ -745,7 +777,7 @@ async function order_processor_startup() {
 
     const cont_inv_token = required_processor_state.last_inventory_trigger
     assert((ordering_state.inventory.size === 0) === (!cont_inv_token), 'Error, we we have inflated inventry, we need a inventory continuation token')
-    console.log(`order_processor_startup (8):  start watch for new "inventory" (startAfter=${cont_inv_token && cont_inv_token._id})`)
+    console.log(`order_processor_startup (9):  start watch for new "inventory" (startAfter=${cont_inv_token && cont_inv_token._id})`)
     const inventoryAggregationPipeline = [
         { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Available" }] } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }

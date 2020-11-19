@@ -24,6 +24,7 @@ export function Nav({ fallback, sessionResource }) {
     setPanel({ open: false })
   }
   /////////
+  const cartitems = (result ? result.cart_items : 0) + itemsInCart.count
 
   if (result && !result.tenent) {
     //return <Redirect route='/init' />
@@ -103,9 +104,10 @@ export function Nav({ fallback, sessionResource }) {
 
             <CommandBarButton
               onClick={() => openNewItem()}
+              disabled={cartitems === 0}
               iconProps={{ iconName: 'ShoppingCart' }}
-              text={`Cart (${(result ? result.cart_items : 0) + itemsInCart.count})`}
-              styles={{ root: { "vertical-align": "top", padding: "11px 12px 13px", border: "2px solid transparent", background: "transparent" }, label: { color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3" } }}
+              text={`cart ${cartitems > 0 ? '(' + cartitems + ')' : ''}`}
+              styles={{ root: { "vertical-align": "top", padding: "13px 14px 15px", background: "transparent", borderColor: "white" }, label: { color: "#0067b8", fontWeight: "600", fontSize: "15px", lineHeight: "1.3" } }}
             />
           </div>
         }

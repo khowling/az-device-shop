@@ -3,7 +3,7 @@ import React, { useEffect } from 'react'
 import { Link } from './router.js'
 //import { _fetchit,  _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 
-import { SelectionMode, DetailsList, DetailsListLayoutMode, Stack, Text, Separator, MessageBar, MessageBarType, Label } from '@fluentui/react'
+import { ProgressIndicator, SelectionMode, DetailsList, DetailsListLayoutMode, Stack, Text, Separator, MessageBar, MessageBarType, Label } from '@fluentui/react'
 
 
 // Replace array entry at index 'index' with 'val'
@@ -71,6 +71,14 @@ function orderReducer(state, action) {
                                 console.log(`got new inventory existing_idx=${existing_idx}`)
                                 ret_state.inventory = imm_splice(ret_state.inventory, existing_idx, { doc_id, status: { onhand: (ret_state.inventory[existing_idx].status.onhand + status.onhand) } })
                             }
+                        }
+                        break
+                    case "Picking":
+                        if (type === 1) { // // got new Onhand value (replace)
+                            const { allocated_update } = status
+                            ret_state.picking_allocated = ret_state.picking_allocated + allocated_update
+                        } else {
+                            throw new Error(`apply_change_events, only support updates on ${kind}`)
                         }
                         break
                     default:
@@ -143,12 +151,12 @@ export function OrderMgr({ resource }) {
         }
     }, [])
 
-    const stage_txt = ['NewRequiredOrder', 'InventoryAllocated', 'OrderNumberGenerated', 'Picking', 'Shipping', 'Complete']
+    const stage_txt = ['OrderQueued', 'OrderNumberGenerated', 'InventoryAllocated', 'Picking', 'PickingComplete', 'Shipped', 'Complete']
 
-    function OrderDisplay(o, idx) {
+    function OrderDisplay(o, index) {
 
         return (
-            <Stack key={idx} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
+            <Stack key={index} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
 
                 <Label variant="small">Order Number {o.status.order_number || "<TBC>"}</Label>
                 {
@@ -159,16 +167,25 @@ export function OrderMgr({ resource }) {
                 }
 
                 <Stack horizontal tokens={{ childrenGap: 3 }}>
-                    <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }}>
+                    <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "40%", backgroundColor: "rgb(255, 244, 206)" } }}>
 
 
                         <Text variant="xSmall">Spec: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
 
                     </Stack>
-                    <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "rgb(255, 244, 206)" } }} >
+                    <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >
 
-                        <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
-
+                        {index === 0 ?
+                            <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
+                            : index === 1 ?
+                                [
+                                    <Text variant="xSmall">Status: {["Waiting", "Picking", "Complete"][o.status.picking.status]}</Text>,
+                                    <Text variant="xSmall">Wait Time(s): {parseInt(o.status.picking.waittime / 1000, 10)}</Text>,
+                                    <ProgressIndicator label={`Progress (${o.status.picking.progress}%)`} percentComplete={o.status.picking.progress / 100} barHeight={5} styles={{ itemName: { lineHeight: "noraml", padding: 0, fontSize: "10px" } }} />
+                                ]
+                                :
+                                <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
+                        }
                     </Stack>
                 </Stack>
             </Stack>
@@ -190,9 +207,9 @@ export function OrderMgr({ resource }) {
                         <Text >tracked skus {order_state.inventory.length} / orders {order_state.orders.length}</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
-                        <h4>Waiting Orders</h4>
-                        <Text variant="superLarge" >0</Text>
-                        <Text >available 40 / busy 300</Text>
+                        <h4>Picking Capacity</h4>
+                        <Text variant="superLarge" >{order_state.picking_allocated}</Text>
+                        <Text >used {order_state.picking_allocated} / available 5</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Order Throughput</h4>
@@ -204,10 +221,10 @@ export function OrderMgr({ resource }) {
 
                 <Stack horizontal tokens={{ childrenGap: 5, padding: 0 }}>
 
-                    {[[2, "Processing"], [3, stage_txt[3]], [4, stage_txt[4]], [5, stage_txt[5]]].map(([stage_idx, desc], idx) => {
+                    {[[[0, 1, 2], "Processing"], [[3, 4], "Picking"], [[5], "Shipping"], [[6], "Complete"]].map(([stages, desc], idx) => {
                         return (
                             <Stack
-                                key={stage_idx}
+                                key={idx}
                                 tokens={{ childrenGap: 8, padding: 8 }}
                                 styles={{
                                     root: {
@@ -216,7 +233,7 @@ export function OrderMgr({ resource }) {
                                     }
                                 }} >
                                 <h4>{desc}</h4>
-                                {order_state.orders && order_state.orders.filter(i => i.status.stage === stage_idx || (idx === 0 && i.status.stage < stage_idx)).map(OrderDisplay)}
+                                {order_state.orders && order_state.orders.filter(i => stages.includes(i.status.stage)).map((o) => OrderDisplay(o, idx))}
                             </Stack>
                         )
 
