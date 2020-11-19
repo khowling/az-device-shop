@@ -8,5 +8,9 @@
   },
   "types": [
     "node"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.mock.ts"
   ]
 }
