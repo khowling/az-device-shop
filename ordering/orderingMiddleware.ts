@@ -2,40 +2,65 @@ const Emitter = require('events')
 
 
 interface ProcessingState {
-    last_inventory_trigger: any;
-    last_order_trigger: any;
-    order_processing: Map<string, ProcessorInfo>
-}
-var processor_state: ProcessingState = { last_order_trigger: null, last_inventory_trigger: null, order_processing: new Map() }
-
-function processor_state_apply(state: ProcessingState, val: ProcessorInfo): ProcessingState {
-    const ret_state = { ...state, order_processing: new Map(state.order_processing) }
-    if (val.processor === ProcessorType.ORDER) {
-        const { trigger_doc_id, processor, ...rest } = val
-
-        if (val.complete) {
-            ret_state.order_processing.delete(trigger_doc_id)
-        } else {
-            const current_val: ProcessorInfo = ret_state.order_processing.get(trigger_doc_id)
-            ret_state.order_processing.set(trigger_doc_id, { ...current_val, ...rest })
-
-            if (val.trigger_full) {
-                ret_state.last_order_trigger = val.trigger_full
-            }
-        }
-    } else if (val.processor === ProcessorType.INVENTORY) {
-        ret_state.last_inventory_trigger = val.trigger_full
-    }
-    return ret_state
+    //last_inventory_trigger: any;
+    last_trigger: any;
+    proc_map: Map<string, ProcessorInfo>
 }
 
 
 class Processor extends Emitter {
 
-    constructor(options = {}) {
+    constructor(opts: any = {}) {
         super();
-        this.context = {};
+        this._name = opts.name || "defaultProcessor"
+        this._state = { last_trigger: null, /* last_inventory_trigger: null, */proc_map: new Map() }
+        this.context = { processor: this._name }
         this.middleware = [];
+    }
+
+    get state() {
+        return this._state;
+    }
+
+    set state(newstate: ProcessingState) {
+        this._state = newstate
+    }
+
+    get name() {
+        return this._name;
+    }
+
+    get serializeState() {
+        return { ...this._state, proc_map: [...this._state.proc_map] }
+    }
+
+    static deserializeState(newstate?): ProcessingState {
+        if (newstate) {
+            return { ...newstate, proc_map: new Map(newstate.proc_map) }
+        } else {
+            return { last_trigger: null, /* last_inventory_trigger: null, */proc_map: new Map() }
+        }
+    }
+
+    static processor_state_apply(state: ProcessingState, val: ProcessorInfo): ProcessingState {
+        const ret_state = { ...state, proc_map: new Map(state.proc_map) }
+        //if (val.processor === ProcessorType.ORDER) {
+        const { trigger_doc_id, /* processor, */ ...rest } = val
+
+        if (val.complete) {
+            ret_state.proc_map.delete(trigger_doc_id)
+        } else {
+            const current_val: ProcessorInfo = ret_state.proc_map.get(trigger_doc_id)
+            ret_state.proc_map.set(trigger_doc_id, { ...current_val, ...rest })
+
+            if (val.trigger_full) {
+                ret_state.last_trigger = val.trigger_full
+            }
+        }
+        //} else if (val.processor === ProcessorType.INVENTORY) {
+        //    ret_state.last_inventory_trigger = val.trigger_full
+        //}
+        return ret_state
     }
 
     use(fn) {
@@ -45,19 +70,11 @@ class Processor extends Emitter {
         this.middleware.push(fn);
         return this;
     }
-    /*
-        initiate_processor_state(state: ProcessingState) {
-            for (let [doc_id, processor] of state.order_processing) {
-                const handlereqfn = callback()
-                handlereqfn(proecessor.trigger_full)
-            }
-    
-        }
-    */
-    //  Initiate new processor workflow
-    callback(inflate = false) {
 
-        function compose(middleware) {
+    //  Initiate new processor workflow
+    callback() {
+
+        function compose(that, middleware) {
 
             return function (context, start_idx, next) {
 
@@ -66,9 +83,7 @@ class Processor extends Emitter {
                 let index = -1
                 return dispatch(0, null, null)
 
-                function dispatch(i, change: ChangeEvent, opts: ProcessorOptions = null) {
-
-                    //  { sleep_until: { stage: OrderStage.PickingComplete } }
+                function dispatch(i: number, change: ChangeEvent, opts: ProcessorOptions = null) {
 
                     console.log(`Processor: dispatch called i=${i}, start_idx=${start_idx}, index=${index} (middleware.length=${middleware.length}) seq=${change && change.sequence} `)
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
@@ -85,25 +100,25 @@ class Processor extends Emitter {
 
                     // Add processor details for processor hydration & call 'eventfn' to store in log
                     if (context.eventfn && change) {
-                        const processor: ProcessorInfo = {
-                            processor: ProcessorType.ORDER,
+                        const p: ProcessorInfo = {
+                            //processor: ProcessorType.ORDER,
                             trigger_doc_id: context.trigger.documentKey._id.toHexString(),
                             function_idx: i,
                             complete: (!change.nextaction) || !fn,
                             options: opts
                         }
-                        if (!processor_state.order_processing.has(processor.trigger_doc_id)) {
+                        if (!that.state.proc_map.has(p.trigger_doc_id)) {
                             // send full trigger info on 1st processor for this doc_id
-                            processor.trigger_full = context.trigger
+                            p.trigger_full = context.trigger
                         }
 
-                        processor_state = processor_state_apply(processor_state, processor)
+                        that.state = Processor.processor_state_apply(that.state, p)
 
                         // write to event log
-                        context.eventfn(context, { ...change, processor })
+                        context.eventfn(context, { ...change, processor: { [that.name]: p } })
 
                         // kill the current context
-                        if (processor.options && processor.options.sleep_until) return Promise.resolve()
+                        if (p.options && p.options.sleep_until) return Promise.resolve()
                     }
 
                     if ((change && !change.nextaction) || !fn) return Promise.resolve()
@@ -118,7 +133,7 @@ class Processor extends Emitter {
 
         console.log(`Processor: callback, composing fnMiddleware`)
         // create function lanbda to process all the middlwares for this trigger
-        const fn = compose(this.middleware);
+        const fn = compose(this, this.middleware);
 
         const handleRequest = (doc, restart_idx) => {
             // doc._id == event document includes a resume token as the _id field
@@ -215,11 +230,13 @@ interface ChangeEvent {
     statechanges: Array<StateChange>; // Required transational changes to state
     nextaction: boolean; // end of lifecycle?
     sequence?: number; // Set when statechanges are applied to state
-    processor?: ProcessorInfo; // Set by processor before applied to log for processor state re-hydration
+    processor?: any; // {
+    //    [processor name]: ProcessorInfo | Custom
+    // }
 
 }
 interface ProcessorInfo {
-    processor: ProcessorType;
+    //processor: ProcessorType;
     trigger_doc_id?: string;
     function_idx?: number;
     trigger_full?: object;
@@ -232,7 +249,7 @@ interface ProcessorOptions {
         time: number;
     }
 }
-enum ProcessorType { ORDER, INVENTORY }
+//enum ProcessorType { ORDER, INVENTORY }
 
 interface StateChange {
     kind: string;
@@ -512,7 +529,7 @@ async function picking(ctx, next) {
     console.log(`picking forward, trigger: ${JSON.stringify(ctx.trigger)}`)
 
     await next(
-        local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Picking, picking: { starttime: Date.now(), status: PickingStage.Waiting, waittime: 0 } } }),
+        local_state_op({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Picking, picking: { starttime: Date.now(), status: PickingStage.Waiting, waittime: 0, progress: 0 } } }),
         { sleep_until: { stage: OrderStage.PickingComplete } })
 }
 
@@ -576,19 +593,24 @@ async function orderCheckpoint_AzureBlob(ctx) {
 
 const chkdir = `${process.env.FILEPATH || '.'}/order_checkpoint`
 const fs = require('fs')
+// last inventory item processed
+var last_inventory_trigger
 
-async function orderCheckpoint_Filesystem(ctx, state_snapshot: OrderingState, processor_snapshop: ProcessingState): Promise<number> {
+async function orderCheckpoint_Filesystem(ctx, state_snapshot: OrderingState, processor_snapshop: any): Promise<number> {
     const now = new Date()
     const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${state_snapshot.sequence}.json`
     console.log(`writing movement ${filename}`)
     await fs.promises.writeFile(filename, JSON.stringify({
         state_snapshot: { ...state_snapshot, inventory: [...state_snapshot.inventory] },
-        processor_snapshop: { ...processor_snapshop, order_processing: [...processor_snapshop.order_processing] }
+        processor_snapshop: {
+            [ctx.processor]: processor_snapshop,
+            inventory: last_inventory_trigger
+        }
     }))
     return state_snapshot.sequence
 }
 
-async function getLatestOrderingState_Filesystem(ctx): Promise<[OrderingState, ProcessingState]> {
+async function getLatestOrderingState_Filesystem(ctx): Promise<[OrderingState, any]> {
     const dir = `${chkdir}/${ctx.tenent.email}`
     await fs.promises.mkdir(dir, { recursive: true })
     let latestfile = { fileseq: null, filedate: null, filename: null }
@@ -609,22 +631,22 @@ async function getLatestOrderingState_Filesystem(ctx): Promise<[OrderingState, P
         const { state_snapshot, processor_snapshop } = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
         return [
             { ...state_snapshot, inventory: new Map(state_snapshot.inventory) },
-            { ...processor_snapshop, processing: new Map(processor_snapshop.processing) }
+            { [ctx.processor]: Processor.deserializeState(processor_snapshop[ctx.processor]), inventory: processor_snapshop.inventory }
         ]
     } else {
         console.log(`No checkpoint found, start from 0`)
         return [
             { sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), orders: [] },
-            { last_order_trigger: null, last_inventory_trigger: null, order_processing: new Map() }
+            { [ctx.processor]: Processor.deserializeState(), inventory: null }
         ]
     }
 }
 
-async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingState]> {
+async function inflateState_Filesystem(ctx): Promise<[OrderingState, any]> {
 
     try {
         let [ordering_state, required_processor_state] = await getLatestOrderingState_Filesystem(ctx)
-        console.log(`reading order_events from database from seq#=${ordering_state.sequence}`)
+        console.log(`inflateState_Filesystem: reading order_events from database from seq#=${ordering_state.sequence}`)
 
         await ctx.db.collection("order_events").createIndex({ sequence: 1 })
         const inflate_events = await ctx.db.collection("order_events").aggregate(
@@ -635,7 +657,7 @@ async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingS
         ).toArray()
 
         if (inflate_events && inflate_events.length > 0) {
-            console.log(`replaying from seq#=${inflate_events[0].sequence}, to seq#=${inflate_events[inflate_events.length - 1].sequence}  to state`)
+            console.log(`inflateState_Filesystem: replaying from seq#=${inflate_events[0].sequence}, to seq#=${inflate_events[inflate_events.length - 1].sequence}  to state`)
 
             // HOW??? TODO
             for (let i = 0; i < inflate_events.length; i++) {
@@ -646,7 +668,13 @@ async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingS
                     // its find to have a ordering state change that is not controlled by the processor (ie picking)
                     //throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
                 } else {
-                    required_processor_state = processor_state_apply(required_processor_state, processor)
+                    if (processor[ctx.processor]) {
+                        required_processor_state[ctx.processor] = Processor.processor_state_apply(required_processor_state[ctx.processor], processor[ctx.processor])
+                    }
+                    if (processor.inventory) {
+                        required_processor_state["inventory"] = processor.inventory
+                    }
+
                 }
             }
         }
@@ -663,11 +691,12 @@ async function inflateState_Filesystem(ctx): Promise<[OrderingState, ProcessingS
 
 async function order_processor_startup() {
     const murl = new URL(MongoURL)
+
     console.log(`order_processor_startup (1):  connecting to: ${murl.toString()}`)
     const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
 
-    const orderProcessor = new Processor()
+    const orderProcessor = new Processor({ name: "ordProcv1" })
 
     orderProcessor.use(setOrderSpec)
     orderProcessor.use(validateOrder)
@@ -688,11 +717,11 @@ async function order_processor_startup() {
     ordering_state = inflated_ordering_state
 
     console.log(`order_processor_startup (3): re-inflating processor state`)
-    restartProcessors(ordering_state, required_processor_state, true)
+    restartProcessors(ordering_state, required_processor_state[orderProcessor.name], true)
 
     function restartProcessors(state: OrderingState, required: ProcessingState, init_boot: boolean) {
         // Restart required_processor_state
-        for (let [doc_id, p] of required.order_processing) {
+        for (let [doc_id, p] of required.proc_map) {
             if (!p.complete) {
 
                 if (p.options && p.options.sleep_until) {
@@ -721,7 +750,7 @@ async function order_processor_startup() {
     console.log(`order_processor_startup (4): loop to re-inflate 'sleep_until' processes`)
     setInterval(() => {
         // check to restart 'sleep_until' processes
-        restartProcessors(ordering_state, processor_state, false)
+        restartProcessors(ordering_state, orderProcessor.state, false)
     }, 1000 * 5 /* 5 seconds */)
 
 
@@ -732,10 +761,10 @@ async function order_processor_startup() {
     console.log(`order_processor_startup (6): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
     setInterval(async (ctx) => {
-        console.log(`Checkpointing check: seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}.  Processing size=${processor_state.order_processing.size}`)
+        console.log(`Checkpointing check: seq=${ordering_state.sequence}, #orders=${ordering_state.orders.length}, #inv=${ordering_state.inventory.size}.  Processing size=${orderProcessor.state.proc_map.size}`)
         if (ordering_state.sequence > lastcheckpoint_seq + LOOP_CHANGES) {
             console.log(`do checkpoint`)
-            lastcheckpoint_seq = await orderCheckpoint_Filesystem(ctx, { ...ordering_state }, { ...processor_state })
+            lastcheckpoint_seq = await orderCheckpoint_Filesystem(ctx, { ...ordering_state }, orderProcessor.serializeState())
         }
     }, 1000 * 60 * LOOP_MINS, orderProcessor.context)
 
@@ -762,7 +791,7 @@ async function order_processor_startup() {
         //
     }, 5000, orderProcessor.context)
     */
-    const cont_order_token = required_processor_state.last_order_trigger
+    const cont_order_token = required_processor_state[orderProcessor.name].last_trigger
     assert((ordering_state.orders.length === 0) === (!cont_order_token), 'Error, we we have inflated orders, we need a order continuation token')
     console.log(`order_processor_startup (8):  start watch for new "orders" (startAfter=${cont_order_token && cont_order_token._id})`)
     db.collection(StoreDef["orders"].collection).watch(
@@ -775,7 +804,7 @@ async function order_processor_startup() {
     ).on('change', orderProcessor.callback())
 
 
-    const cont_inv_token = required_processor_state.last_inventory_trigger
+    const cont_inv_token = required_processor_state["inventory"]
     assert((ordering_state.inventory.size === 0) === (!cont_inv_token), 'Error, we we have inflated inventry, we need a inventory continuation token')
     console.log(`order_processor_startup (9):  start watch for new "inventory" (startAfter=${cont_inv_token && cont_inv_token._id})`)
     const inventoryAggregationPipeline = [
@@ -798,13 +827,14 @@ async function order_processor_startup() {
         // warehouse
 
         const change = local_state_op({ type: ActionType.NewInventory, spec: data.fullDocument })
-        const processor: ProcessorInfo = {
-            processor: ProcessorType.INVENTORY,
-            trigger_full: data
-        }
+        //const processor: ProcessorInfo = {
+        //    processor: ProcessorType.INVENTORY,
+        //    trigger_full: data
+        //}
 
-        processor_state = processor_state_apply(processor_state, processor)
-        ws_server_emit(orderProcessor.context, { ...change, processor })
+        //processor_state = processor_state_apply(processor_state, processor)
+        last_inventory_trigger = data
+        ws_server_emit(orderProcessor.context, { ...change, processor: { "inventory": data } })
     })
 
 }
