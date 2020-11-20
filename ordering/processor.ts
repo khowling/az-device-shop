@@ -1,7 +1,7 @@
 const Emitter = require('events')
 
 
-interface ProcessingState {
+export interface ProcessingState {
     last_trigger: any;
     proc_map: Map<string, ProcessorInfo>
 }
@@ -15,7 +15,7 @@ interface ProcessorInfo {
 }
 
 export interface ProcessorOptions {
-    nextaction: boolean;
+    endworkflow: boolean;
     sleep_until?: {
         stage?: number; //OrderStage;
         time?: number;
@@ -104,7 +104,7 @@ export class Processor extends Emitter {
     use(fn) {
         if (typeof fn !== 'function') throw new TypeError('middleware must be a function!');
 
-        console.log('use %s', fn._name || fn.name || '-');
+        //console.log('use %s', fn._name || fn.name || '-');
         this.middleware.push(fn);
         return this;
     }
@@ -114,14 +114,14 @@ export class Processor extends Emitter {
 
         function compose(that, middleware) {
 
-            return function (context, start_idx, next) {
+            return function (context, start_idx: number, next) {
 
                 console.log(`Processor: callback compose return function start_idx=${start_idx} next=${next}`)
                 // last called middleware #
                 let index = -1
                 return dispatch(0, null, null)
 
-                function dispatch(i: number, change: any, opts: ProcessorOptions = null) {
+                function dispatch(i: number, change: any, options: ProcessorOptions) {
 
                     console.log(`Processor: dispatch called i=${i}, start_idx=${start_idx}, index=${index} (middleware.length=${middleware.length}) seq=${change && change.sequence} `)
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
@@ -141,8 +141,8 @@ export class Processor extends Emitter {
                         const p: ProcessorInfo = {
                             trigger_doc_id: context.trigger.documentKey._id.toHexString(),
                             function_idx: i,
-                            complete: (!opts.nextaction) || !fn,
-                            options: opts
+                            complete: (options && options.endworkflow) || !fn,
+                            options
                         }
                         if (!that.state.proc_map.has(p.trigger_doc_id)) {
                             // send full trigger info on 1st processor for this doc_id
@@ -155,10 +155,10 @@ export class Processor extends Emitter {
                         context.eventfn(context, { ...change, processor: { [that.name]: p } })
 
                         // kill the current context
-                        if (p.options && p.options.sleep_until) return Promise.resolve()
+                        if (options && options.sleep_until) return Promise.resolve()
                     }
 
-                    if ((opts && !opts.nextaction) || !fn) return Promise.resolve()
+                    if ((options && options.endworkflow) || !fn) return Promise.resolve()
                     try {
                         return Promise.resolve(fn(context, dispatch.bind(null, i + 1)));
                     } catch (err) {
@@ -168,7 +168,7 @@ export class Processor extends Emitter {
             }
         }
 
-        console.log(`Processor: callback, composing fnMiddleware`)
+        //console.log(`Processor: callback, composing fnMiddleware`)
         // create function lanbda to process all the middlwares for this trigger
         const fn = compose(this, this.middleware);
 
@@ -183,7 +183,7 @@ export class Processor extends Emitter {
             return this.handleRequest(ctx, fn, restart_idx);
         }
 
-        console.log(`Processor: callback, returning function handleRequest - that will be trigged on each new doc`)
+        //console.log(`Processor: callback, returning function handleRequest - that will be trigged on each new doc`)
         return handleRequest
     }
 

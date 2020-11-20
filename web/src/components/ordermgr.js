@@ -153,10 +153,9 @@ export function OrderMgr({ resource }) {
 
     const stage_txt = ['OrderQueued', 'OrderNumberGenerated', 'InventoryAllocated', 'Picking', 'PickingComplete', 'Shipped', 'Complete']
 
-    function OrderDisplay(o, index) {
-
+    function OrderDisplay(o, i, idx) {
         return (
-            <Stack key={index} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
+            <Stack key={`${i}-${idx}`} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
 
                 <Label variant="small">Order Number {o.status.order_number || "<TBC>"}</Label>
                 {
@@ -175,9 +174,9 @@ export function OrderMgr({ resource }) {
                     </Stack>
                     <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >
 
-                        {index === 0 ?
+                        {idx === 0 ?
                             <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
-                            : index === 1 ?
+                            : idx === 1 ?
                                 [
                                     <Text variant="xSmall">Status: {["Waiting", "Picking", "Complete"][o.status.picking.status]}</Text>,
                                     <Text variant="xSmall">Wait Time(s): {parseInt(o.status.picking.waittime / 1000, 10)}</Text>,
@@ -222,6 +221,7 @@ export function OrderMgr({ resource }) {
                 <Stack horizontal tokens={{ childrenGap: 5, padding: 0 }}>
 
                     {[[[0, 1, 2], "Processing"], [[3, 4], "Picking"], [[5], "Shipping"], [[6], "Complete"]].map(([stages, desc], idx) => {
+
                         return (
                             <Stack
                                 key={idx}
@@ -233,7 +233,7 @@ export function OrderMgr({ resource }) {
                                     }
                                 }} >
                                 <h4>{desc}</h4>
-                                {order_state.orders && order_state.orders.filter(i => stages.includes(i.status.stage)).map((o) => OrderDisplay(o, idx))}
+                                { order_state.orders && order_state.orders.filter(i => stages.includes(i.status.stage)).map((o, i) => OrderDisplay(o, i, idx))}
                             </Stack>
                         )
 

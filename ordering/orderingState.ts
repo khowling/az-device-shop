@@ -1,4 +1,5 @@
-import { Processor } from './processor'
+const fs = require('fs')
+
 
 export interface OrderingState {
     sequence: number;
@@ -69,71 +70,168 @@ export enum ChangeEventType {
     DELETE
 }
 
-// Replace array entry at index 'index' with 'val'
-function imm_splice(array: Array<any>, index: number, val: any) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
 
-export function apply_change_events(state: OrderingState, change: ChangeEvent): [OrderingState, ChangeEvent] {
+export class OrderStateManager {
 
-    if (change.statechanges && change.statechanges.length > 0) {
+    _state = { sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), orders: [] }
 
-        let newstate: OrderingState = { ...state, sequence: state.sequence + 1, lastupdated: Date.now() }
+    constructor(opts: any = {}) {
+    }
 
-        if (change.sequence && (change.sequence !== newstate.sequence)) {
-            throw new Error(`apply_change_events, Cannot re-apply change sequence ${change.sequence}, expecting ${newstate.sequence}`)
-        }
+    get state() {
+        return this._state;
+    }
 
-        for (let c of change.statechanges) {
+    set state(newstate: OrderingState) {
+        this._state = newstate
+    }
 
-            const { doc_id, type } = c.metadata
-            switch (c.kind) {
-                case "Order":
-                    if (type === ChangeEventType.UPDATE) {
-                        const order_idx = doc_id ? newstate.orders.findIndex(o => o.doc_id === doc_id) : -1
-                        if (order_idx >= 0) {
-                            const existing_order = newstate.orders[order_idx]
-                            const new_order = { ...existing_order, status: { ...existing_order.status, ...c.status } }
-                            newstate.orders = imm_splice(newstate.orders, order_idx, new_order)
+    get serializeState() {
+        return { ...this._state, inventory: [...this._state.inventory] }
+    }
+
+    static deserializeState(newstate): OrderingState {
+        return { ...newstate, inventory: new Map(newstate.inventory) }
+    }
+
+    // Replace array entry at index 'index' with 'val'
+    static imm_splice(array: Array<any>, index: number, val: any) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
+
+    apply_change_events(/*state: OrderingState,*/ change: ChangeEvent): ChangeEvent/*[OrderingState, ChangeEvent]*/ {
+
+        if (change.statechanges && change.statechanges.length > 0) {
+
+            let newstate: OrderingState = { ...this.state, sequence: this.state.sequence + 1, lastupdated: Date.now() }
+
+            if (change.sequence && (change.sequence !== newstate.sequence)) {
+                throw new Error(`apply_change_events, Cannot re-apply change sequence ${change.sequence}, expecting ${newstate.sequence}`)
+            }
+
+            for (let c of change.statechanges) {
+
+                const { doc_id, type } = c.metadata
+                switch (c.kind) {
+                    case "Order":
+                        if (type === ChangeEventType.UPDATE) {
+                            const order_idx = doc_id ? newstate.orders.findIndex(o => o.doc_id === doc_id) : -1
+                            if (order_idx >= 0) {
+                                const existing_order = newstate.orders[order_idx]
+                                const new_order = { ...existing_order, status: { ...existing_order.status, ...c.status } }
+                                newstate.orders = OrderStateManager.imm_splice(newstate.orders, order_idx, new_order)
+                            } else {
+                                throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
+                            }
+                        } else if (type === ChangeEventType.CREATE) {
+                            // using typescript "type assertion"
+                            // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
+                            newstate.orders = newstate.orders.concat([{ doc_id, status: c.status as OrderStatus }])
+                        }
+                        break
+                    case "Inventory":
+                        const inventory_updates: Map<string, InventoryStatus> = new Map()
+                        const new_status = c.status as InventoryStatus
+                        const existing_sku: InventoryStatus = newstate.inventory.get(doc_id)
+
+                        if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
+                            if (!existing_sku) {
+                                throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
+                            }
+                            inventory_updates.set(doc_id, new_status)
+                        } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
+                            inventory_updates.set(doc_id, { onhand: existing_sku ? (existing_sku.onhand + new_status.onhand) : new_status.onhand })
+                        }
+                        newstate.inventory = new Map([...newstate.inventory, ...inventory_updates])
+                        break
+                    case "Picking":
+                        if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
+                            const { allocated_update } = c.status as PickingStatus
+                            newstate.picking_allocated = newstate.picking_allocated + allocated_update
                         } else {
-                            throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
+                            throw new Error(`apply_change_events, only support updates on ${c.kind}`)
                         }
-                    } else if (type === ChangeEventType.CREATE) {
-                        // using typescript "type assertion"
-                        // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
-                        newstate.orders = newstate.orders.concat([{ doc_id, status: c.status as OrderStatus }])
-                    }
-                    break
-                case "Inventory":
-                    const inventory_updates: Map<string, InventoryStatus> = new Map()
-                    const new_status = c.status as InventoryStatus
-                    const existing_sku: InventoryStatus = newstate.inventory.get(doc_id)
+                        break
+                    default:
+                        throw new Error(`apply_change_events, Unsupported kind ${c.kind} in local state`)
+                }
+            }
+            this._state = newstate
+            return { ...change, sequence: newstate.sequence }
+        }
+        return change
+    }
 
-                    if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
-                        if (!existing_sku) {
-                            throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
-                        }
-                        inventory_updates.set(doc_id, new_status)
-                    } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
-                        inventory_updates.set(doc_id, { onhand: existing_sku ? (existing_sku.onhand + new_status.onhand) : new_status.onhand })
-                    }
-                    newstate.inventory = new Map([...newstate.inventory, ...inventory_updates])
-                    break
-                case "Picking":
-                    if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
-                        const { allocated_update } = c.status as PickingStatus
-                        newstate.picking_allocated = newstate.picking_allocated + allocated_update
-                    } else {
-                        throw new Error(`apply_change_events, only support updates on ${c.kind}`)
-                    }
-                    break
-                default:
-                    throw new Error(`apply_change_events, Unsupported kind ${c.kind} in local state`)
+    async applyStateFromSnapshot(ctx, chkdir: string): Promise<any> {
+        const dir = `${chkdir}/${ctx.tenent.email}`
+        await fs.promises.mkdir(dir, { recursive: true })
+        let latestfile = { fileseq: null, filedate: null, filename: null }
+        const checkpoints = await fs.promises.readdir(dir)
+        const filename_re = new RegExp(`^(\\d{4})-(\\d{2})-(\\d{2})_(\\d{2})-(\\d{2})-(\\d{2})-(\\d).json`)
+        for (let dir_entry of checkpoints) {
+            const entry_match = dir_entry.match(filename_re)
+            if (entry_match) {
+                const [filename, year, month, day, hour, minute, second, fileseq] = entry_match
+
+                if (latestfile.fileseq === null || latestfile.fileseq < fileseq) {
+                    latestfile = { fileseq, filedate: new Date(year, month - 1, day, hour, minute, second), filename }
+                }
             }
         }
-        return [newstate, { ...change, sequence: newstate.sequence }]
-    }
-    return [state, change]
-}
+        if (latestfile.filename) {
+            console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
+            const { state_snapshot, /*processor_snapshop*/...rest } = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
 
+            this.state = OrderStateManager.deserializeState(state_snapshot)
+            return rest
+        } else {
+            console.log(`No checkpoint found, start from 0`)
+            return {}
+
+        }
+    }
+
+    async rollForwardState(ctx): Promise<Array<any>> {
+
+        console.log(`rollForwardState: reading 'order_events' from database from seq#=${this.state.sequence}`)
+
+        await ctx.db.collection("order_events").createIndex({ sequence: 1 })
+        const inflate_events = await ctx.db.collection("order_events").aggregate(
+            [
+                { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: this.state.sequence } }] } },
+                { $sort: { "sequence": 1 } }
+            ]
+        ).toArray()
+
+        if (inflate_events && inflate_events.length > 0) {
+            console.log(`rollForwardState: replaying from seq#=${inflate_events[0].sequence}, to seq#=${inflate_events[inflate_events.length - 1].sequence}  to state`)
+            const ret_processor = []
+            // HOW??? TODO
+            for (let i = 0; i < inflate_events.length; i++) {
+                const { _id, partition_key, processor, ...change } = inflate_events[i]
+                this.apply_change_events(change)
+
+                if (processor) {
+                    ret_processor.push(processor)
+                } else {
+                    // its find to have a ordering state change that is not controlled by the processor (ie picking)
+                    //throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
+                }
+            }
+            return ret_processor
+        }
+        return null
+    }
+
+    async snapshotState(ctx, chkdir, processor_snapshop: any): Promise<number> {
+        const now = new Date()
+        const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${this.state.sequence}.json`
+        console.log(`writing movement ${filename}`)
+        await fs.promises.writeFile(filename, JSON.stringify({
+            state_snapshot: this.serializeState,
+            processor_snapshop: processor_snapshop
+        }))
+        return this.state.sequence
+    }
+}
 
 /* ////////////////////////////////////////////////////// AZURE STORAGE  //////////////
 import {
@@ -177,101 +275,7 @@ async function orderCheckpoint_AzureBlob(ctx) {
 */ //////////////////////////////////////////////////////////////////////////////////////////
 
 
-const chkdir = `${process.env.FILEPATH || '.'}/order_checkpoint`
-const fs = require('fs')
-// last inventory item processed
 
 
-export async function orderCheckpoint_Filesystem(ctx, state_snapshot: OrderingState, processor_snapshop: any, last_inventory_trigger: any): Promise<number> {
-    const now = new Date()
-    const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${state_snapshot.sequence}.json`
-    console.log(`writing movement ${filename}`)
-    await fs.promises.writeFile(filename, JSON.stringify({
-        state_snapshot: { ...state_snapshot, inventory: [...state_snapshot.inventory] },
-        processor_snapshop: {
-            [ctx.processor]: processor_snapshop,
-            inventory: last_inventory_trigger
-        }
-    }))
-    return state_snapshot.sequence
-}
 
-async function getLatestOrderingState_Filesystem(ctx): Promise<[OrderingState, any]> {
-    const dir = `${chkdir}/${ctx.tenent.email}`
-    await fs.promises.mkdir(dir, { recursive: true })
-    let latestfile = { fileseq: null, filedate: null, filename: null }
-    const checkpoints = await fs.promises.readdir(dir)
-    const filename_re = new RegExp(`^(\\d{4})-(\\d{2})-(\\d{2})_(\\d{2})-(\\d{2})-(\\d{2})-(\\d).json`)
-    for (let dir_entry of checkpoints) {
-        const entry_match = dir_entry.match(filename_re)
-        if (entry_match) {
-            const [filename, year, month, day, hour, minute, second, fileseq] = entry_match
-
-            if (latestfile.fileseq === null || latestfile.fileseq < fileseq) {
-                latestfile = { fileseq, filedate: new Date(year, month - 1, day, hour, minute, second), filename }
-            }
-        }
-    }
-    if (latestfile.filename) {
-        console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
-        const { state_snapshot, processor_snapshop } = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
-        return [
-            { ...state_snapshot, inventory: new Map(state_snapshot.inventory) },
-            { [ctx.processor]: Processor.deserializeState(processor_snapshop[ctx.processor]), inventory: processor_snapshop.inventory }
-        ]
-    } else {
-        console.log(`No checkpoint found, start from 0`)
-        return [
-            { sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), orders: [] },
-            { [ctx.processor]: Processor.deserializeState(), inventory: null }
-        ]
-    }
-}
-
-export async function inflateState_Filesystem(ctx): Promise<[OrderingState, any]> {
-
-    try {
-        let [ordering_state, required_processor_state] = await getLatestOrderingState_Filesystem(ctx)
-        console.log(`inflateState_Filesystem: reading order_events from database from seq#=${ordering_state.sequence}`)
-
-        await ctx.db.collection("order_events").createIndex({ sequence: 1 })
-        const inflate_events = await ctx.db.collection("order_events").aggregate(
-            [
-                { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: ordering_state.sequence } }] } },
-                { $sort: { "sequence": 1 } }
-            ]
-        ).toArray()
-
-        if (inflate_events && inflate_events.length > 0) {
-            console.log(`inflateState_Filesystem: replaying from seq#=${inflate_events[0].sequence}, to seq#=${inflate_events[inflate_events.length - 1].sequence}  to state`)
-
-            // HOW??? TODO
-            for (let i = 0; i < inflate_events.length; i++) {
-                const { _id, partition_key, processor, ...change } = inflate_events[i]
-                const [new_state] = apply_change_events(ordering_state, change)
-                ordering_state = new_state
-                if (!processor) {
-                    // its find to have a ordering state change that is not controlled by the processor (ie picking)
-                    //throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
-                } else {
-                    if (processor[ctx.processor]) {
-                        required_processor_state[ctx.processor] = Processor.processor_state_apply(required_processor_state[ctx.processor], processor[ctx.processor])
-                    }
-                    if (processor.inventory) {
-                        required_processor_state["inventory"] = processor.inventory
-                    }
-
-                }
-            }
-        }
-        return [ordering_state, required_processor_state]
-    } catch (e) {
-        if (e.statusCode === 403) {
-            throw new Error('**** its wsl2 date issue dummy')
-        } else {
-            throw new Error(`Failed to re-hydrate ${e}`)
-        }
-    }
-
-}
 
