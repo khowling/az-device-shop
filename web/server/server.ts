@@ -21,7 +21,7 @@ const client_id = process.env.B2C_CLIENT_ID
 const b2c_tenant = process.env.B2C_TENANT
 const signin_policy = process.env.B2C_SIGNIN_POLICY
 const passwd_reset_policy = process.env.B2C_RESETPWD_POLICY
-const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET)
+const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string)
 
 
 // Mongo require
@@ -118,7 +118,7 @@ const StoreProjections = Object.keys(StoreDef).reduce((ac, c) => ({ ...ac, [c]: 
 
 // Operations
 const FetchOperation = {
-    "mycart": async function (ctx) {
+    "mycart": async function (ctx): Promise<any> {
         if (!ctx.tenent) throw `Requires init`
         const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { projection: StoreProjections["orders"] })
         if (cart && cart.items) {
@@ -128,7 +128,7 @@ const FetchOperation = {
         }
         return cart || {}
     },
-    "get": async function (ctx, store, query, proj) {
+    "get": async function (ctx, store, query?: any, proj?: any): Promise<any> {
         if (!ctx.tenent) throw `Requires init`
         const s = StoreDef[store]
         if (!s) throw `unknown ${store}`
@@ -156,7 +156,7 @@ const FetchOperation = {
             return await cursor.toArray()
         }
     },
-    "getOne": async function (ctx, store, query, proj) {
+    "getOne": async function (ctx, store, query, proj?: any): Promise<any> {
         if (!ctx.tenent) throw new Error(`Requires init`)
         const s = StoreDef[store]
         if (!s) throw new Error(`unknown ${store}`)
@@ -172,9 +172,9 @@ const FetchOperation = {
     // -------------------------------
     // componentFetch is my GraphQL :)
     // -------------------------------
-    "componentFetch": async function (ctx, componentFetch, urlid) {
+    "componentFetch": async function (ctx, componentFetch, urlid): Promise<any> {
         if (!ctx.tenent) throw new Error(`Requires init`)
-        let result = {}
+        let result: any = {}
 
         if (componentFetch) {
 
@@ -194,7 +194,7 @@ const FetchOperation = {
             //console.log (`ssr componentFetch (${componentFetch.operation}): ${JSON.stringify(oppArgs)}`)]
             result.data = await FetchOperation[componentFetch.operation](ctx, componentFetch.store, query)
             if (componentFetch.refstores && componentFetch.refstores.length > 0) {
-                let fetch_promises = []
+                let fetch_promises: Array<Promise<any>> = []
                 for (let refstore of componentFetch.refstores) {
                     console.log(`componentFetch: get refstore : ${JSON.stringify(refstore)}`)
                     if (!refstore.lookup_field) {
@@ -213,7 +213,7 @@ const FetchOperation = {
 
 async function dbInit() {
     // ensure url encoded
-    const murl = new URL(MongoURL)
+    const murl = new URL(MongoURL as string)
     console.log(`connecting with ${murl.toString()}`)
     const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
@@ -253,7 +253,7 @@ const PUBLIC_PATH = "/static"
 const BUILD_PATH = "./build"
 async function serve_static(ctx, next) {
 
-    const filePath = path.join(__dirname, BUILD_PATH, ctx.request.url)
+    const filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.request.url)
     console.log(`serve_static: request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
 
     if (fs.existsSync(filePath)) {
@@ -265,9 +265,14 @@ async function serve_static(ctx, next) {
 }
 
 
+
+
 // Init Web
 const app = new Koa();
 app.use(bodyParser())
+
+import { OrderStateManager } from '../../ordering/orderingState'
+import { order_state_startup } from './server_status'
 
 async function init() {
     // Init DB
@@ -298,12 +303,14 @@ async function init() {
     // This is useful for adding properties or methods to ctx to be used across your entire app
     // Init Auth
     app.context.openid_configuration = await fetch(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/${signin_policy}/v2.0/.well-known/openid-configuration`)
-    const signing_keys = await fetch(app.context.openid_configuration.jwks_uri)
+    const signing_keys: any = await fetch(app.context.openid_configuration.jwks_uri)
     app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
 
     // Init Settings (currently single tenent)
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectId("singleton001"), partition_key: "root" })
 
+    // Init order status
+    app.context.orderState = await order_state_startup(app.context)
 
     // Init Routes
     app.use(new Router()
@@ -338,18 +345,18 @@ async function getSession(ctx) {
 // ----------------------------------------------------------- Server SSR
 const stringReplaceStream = require('string-replace-stream')
 const { Readable } = require('stream')
-const fetch = require('./server_fetch')
-const { AzBlobWritable, createServiceSAS } = require('./AzBlobWritable')
+import fetch from './server_fetch'
+import { AzBlobWritable, createServiceSAS } from './AzBlobWritable'
 
 // all requires after this will use babel transpile, using 'babel.config.json'
 require("@babel/register")()
-const server_ssr = require('./src/ssr_server')
+const server_ssr = require('../../../../src/ssr_server')
 
 // ssr middleware (ensure this this the LAST middleware to be used)
 async function ssr(ctx, next) {
     if (!ctx._matchedRoute) {
         //console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.auth && ctx.session.auth.given_name}`)
-        var filePath = path.join(__dirname, BUILD_PATH, 'index.html')
+        var filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, 'index.html')
 
         // Get Iniitial Data
         const urlsplit = ctx.request.url.split('?', 2),
@@ -362,7 +369,7 @@ async function ssr(ctx, next) {
         } else if (requireAuth && !ctx.session.auth) {
             ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
         } else {
-            const renderContext = { ssrContext: "server" }
+            const renderContext: any = { ssrContext: "server" }
 
             if (componentFetch) {
                 let initfetchfn = FetchOperation.componentFetch(ctx, componentFetch, urlid)
@@ -501,7 +508,7 @@ async function corsForStorage(ctx, next) {
 }
 */
 
-async function store(ctx, storename, doc, update_opts = {}) {
+async function store(ctx, storename, doc, update_opts: any = {}) {
     const { _id, partition_key, ...body } = doc
     const store = StoreDef[storename]
 
@@ -565,7 +572,7 @@ const api = new Router({ prefix: '/api' })
     })
     .get('/mycart', async function (ctx, next) {
         try {
-            ctx.body = await FetchOperation.mycart(ctx, ctx.session)
+            ctx.body = await FetchOperation.mycart(ctx)
             await next()
         } catch (e) {
             ctx.throw(400, `cannot retreive mycart: ${e}`)
@@ -613,6 +620,10 @@ const api = new Router({ prefix: '/api' })
         } catch (e) {
             ctx.throw(400, `cannot find ${ctx.params.store + ':' + ctx.params.id}: ${e}`)
         }
+    })
+    .get('/onhand/:sku', async function (ctx, next) {
+        ctx.body = ctx.orderState.state.inventory.get(ctx.params.sku) || { onhand: 0 }
+        await next()
     })
     // curl -XPOST "http://localhost:3000/products" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'
     .post('/store/:store', async function (ctx, next) {
@@ -665,7 +676,7 @@ const api = new Router({ prefix: '/api' })
          */
 
         const imagesb64 = {}
-        for (c of [...products.Category, ...products.Product]) {
+        for (const c of [...products.Category, ...products.Product]) {
 
             if (c.image && c.image.container_url) {
                 const pathname = c.image.pathname || c.image.filename || c.image.blobname
@@ -696,9 +707,9 @@ const api = new Router({ prefix: '/api' })
                 const { images, products } = await fetch('https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json')
                 const { Product, Category } = products
 
-                async function writeimages(images) {
+                async function writeimages(images: any) {
                     let imagemap = new Map()
-                    for (pathname of Object.keys(images)) {
+                    for (const pathname of Object.keys(images)) {
 
                         const b64 = Buffer.from(images[pathname], 'base64'),
                             bstr = b64.toString('utf-8'),
@@ -716,7 +727,7 @@ const api = new Router({ prefix: '/api' })
                                 blob_writeable.on('finish', () => {
                                     console.log(`/import 'blob_writeable finish'`)
                                     if (!error) {
-                                        resolve()
+                                        resolve("")
                                     } else {
                                         reject(`error importing blob : ${error}`)
                                     }

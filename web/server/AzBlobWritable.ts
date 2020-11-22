@@ -1,7 +1,7 @@
 const crypto = require('crypto')
 const fetch = require('./server_fetch')
 
-function createServiceSAS(key, storageacc, container, minutes, file) {
+export function createServiceSAS(key, storageacc, container, minutes, file?) {
 
     // first construct the string-to-sign from the fields comprising the request,
     // then encode the string as UTF-8 and compute the signature using the HMAC-SHA256 algorithm
@@ -71,7 +71,7 @@ function createServiceSAS(key, storageacc, container, minutes, file) {
 const { Writable } = require('stream'),
     BLOCK_SIZE = 4 * 1024 * 1024 // 4MB blocks
 
-class AzBlobWritable extends Writable {
+export class AzBlobWritable extends Writable {
 
     constructor({ pathname, container_url, sas, extension }, options = {}) {
         super(options)
@@ -203,6 +203,3 @@ class AzBlobWritable extends Writable {
         }
     }
 }
-
-exports.AzBlobWritable = AzBlobWritable
-exports.createServiceSAS = createServiceSAS

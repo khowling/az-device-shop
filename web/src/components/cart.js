@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react'
+import React, { useState, useContext, useEffect } from 'react'
 import { Alert, MyImage } from '../utils/common'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
@@ -259,6 +259,7 @@ export function AddToCart({ resource }) {
 
   const [optColor, setOptColor] = useState()
   const [state, setState] = useState({ state: "enterdetails" })
+  const [inventory, setInventory] = useState({ message: "Please wait...", state: MessageBarType.info, allow: false })
 
   const { status, result } = resource.read()
   const product = result.data
@@ -279,6 +280,15 @@ export function AddToCart({ resource }) {
       setState({ state: "error", description: err })
     })
   }
+
+  useEffect(() => {
+    _fetchit(`/api/onhand/${product._id}`).then(succ => {
+      console.log(`success : ${JSON.stringify(succ)}`)
+      setInventory({ allow: succ.onhand > 0, message: succ.onhand > 0 ? `Stock: ${succ.onhand}` : "Sorry, no stock at the moment", state: succ.onhand > 5 ? MessageBarType.success : (succ.onhand > 0 ? MessageBarType.warning : MessageBarType.SevereWarning) })
+    }, err => {
+      setInventory({ message: `Error retreiving stock: ${err}, please try later`, state: MessageBarType.error, allow: false })
+    })
+  }, [])
 
   if (status === 'error')
     return <Alert txt={result} />
@@ -331,7 +341,9 @@ export function AddToCart({ resource }) {
           <label className="c-label"></label>
           {state.state === 'enterdetails' ?
             <div className="c-group f-wrap-items" role="group" aria-labelledby="single-select-foo">
-              <button className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Add to Cart</button>
+
+              <MessageBar messageBarType={inventory.state}>{inventory.message}</MessageBar>
+              <button disabled={!inventory.allow} className="c-select-button" name="example" role="checkbox" aria-checked="true" data-js-selected-text="choice one has been selected" onClick={addorder}>Add to Cart</button>
             </div>
             : state.state === 'adding' ?
               <div className="c-progress f-indeterminate-local f-progress-small" role="progressbar" aria-valuetext="Loading..." tabIndex="0" aria-label="indeterminate local small progress bar">

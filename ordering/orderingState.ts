@@ -178,7 +178,7 @@ export class OrderStateManager {
         }
         if (latestfile.filename) {
             console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
-            const { state_snapshot, /*processor_snapshop*/...rest } = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
+            const { state_snapshot, ...rest } = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
 
             this.state = OrderStateManager.deserializeState(state_snapshot)
             return rest
@@ -221,13 +221,13 @@ export class OrderStateManager {
         return null
     }
 
-    async snapshotState(ctx, chkdir, processor_snapshop: any): Promise<number> {
+    async snapshotState(ctx, chkdir: string, processor_snapshot: any): Promise<number> {
         const now = new Date()
         const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${this.state.sequence}.json`
         console.log(`writing movement ${filename}`)
         await fs.promises.writeFile(filename, JSON.stringify({
             state_snapshot: this.serializeState,
-            processor_snapshop: processor_snapshop
+            processor_snapshot: processor_snapshot
         }))
         return this.state.sequence
     }

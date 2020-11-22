@@ -1,9 +1,9 @@
 const https = require('https')
 const http = require('http')
 
-module.exports = function (url, method = 'GET', headers = {}, body) {
+export default function (url: string, method = 'GET', headers = {}, body?): Promise<any> {
 
-    let opts = { method }, req_body
+    let opts: any = { method }, req_body
     if (body) {
         if (typeof body === 'object' && !headers['x-ms-blob-content-type']) {
             req_body = JSON.stringify(body)
@@ -43,14 +43,14 @@ module.exports = function (url, method = 'GET', headers = {}, body) {
                 }
 
                 // collect the data chunks
-                var strings = []
-                res.on('data', function (chunk) {
+                var strings: Array<string> = []
+                res.on('data', function (chunk: any) {
                     strings.push(chunk)
                 })
                 res.on('end', () => {
 
                     if (strings.length === 0) {
-                        resolve()
+                        resolve("")
                     } else {
 
                         let body = strings.join('')
@@ -58,7 +58,7 @@ module.exports = function (url, method = 'GET', headers = {}, body) {
 
                             try {
                                 const parsedData = JSON.parse(body)
-                                resolve(parsedData)
+                                return resolve(parsedData)
                             } catch (e) {
                                 console.error(`server_fetch: ${e}`)
                                 reject(e)
@@ -66,9 +66,9 @@ module.exports = function (url, method = 'GET', headers = {}, body) {
                         } else if (/^application\/xml/.test(contentType)) {
                             return resolve(body)
                         } else if (/^image/.test(contentType)) {
-                            resolve(Buffer.from(body, 'binary').toString('base64'))
+                            return resolve(Buffer.from(body, 'binary').toString('base64'))
                         } else {
-                            reject(`Unknown content-type : ${contentType}`)
+                            return reject(`Unknown content-type : ${contentType}`)
                         }
                     }
                 })
