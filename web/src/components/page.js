@@ -1,4 +1,5 @@
-import React, { useState, useContext, Suspense } from 'react'
+import React, { useContext, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, navTo /*, Redirect */ } from './router'
 import { Alert, MyImage } from '../utils/common'
 import { AddedCartCount } from '../GlobalContexts'
@@ -7,24 +8,36 @@ import { MyCart } from './cart'
 
 import { CommandBarButton, Text, Panel, PanelType } from '@fluentui/react'
 
+const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
+
+function ModelPanel(props) {
+  const { children, ...panelprops } = props
+  return createPortal(
+    <Panel {...panelprops}>
+      {children}
+    </Panel>,
+    modalRoot)
+
+}
+
 export function Nav({ fallback, sessionResource }) {
 
   const { status, result } = sessionResource ? sessionResource.read() : {}
-  const [itemsInCart] = useContext(AddedCartCount)
+  const [itemsInCart, setItemsInCart] = useContext(AddedCartCount)
 
-  console.log(`Render Nav, status: ${status}, fallback: ${fallback},  itemsInCart: ${itemsInCart.count}`)
-
-  ////// MyCart Panel
-  const [panel, setPanel] = useState({ open: false })
+  console.log(`Render Nav, status: ${status}, fallback: ${fallback},  itemsInCart: ${JSON.stringify(itemsInCart)}`)
 
   function openNewItem() {
-    setPanel({ open: true, resource: _suspenseFetch('componentFetch/mycart') })
+    setItemsInCart({ ...itemsInCart, open: true })
   }
   function dismissPanel() {
-    setPanel({ open: false })
+    setItemsInCart({ ...itemsInCart, open: false })
   }
-  /////////
+
   const cartitems = (result ? result.cart_items : 0) + itemsInCart.count
+  if (itemsInCart.open && cartitems === 0) {
+    dismissPanel()
+  }
 
   if (result && !result.tenent) {
     //return <Redirect route='/init' />
@@ -113,17 +126,17 @@ export function Nav({ fallback, sessionResource }) {
         }
       </div>
       <Suspense fallback={<span />}>
-        <Panel
+        <ModelPanel
           headerText="Shopping Cart"
-          isOpen={panel.open}
+          isOpen={itemsInCart.open}
           onDismiss={dismissPanel}
           type={PanelType.medium}
 
           closeButtonAriaLabel="Close">
-          {panel.open &&
-            <MyCart dismissPanel={dismissPanel} resource={panel.resource} panel={true} />
+          {itemsInCart.open &&
+            <MyCart dismissPanel={dismissPanel} resource={_suspenseFetch('componentFetch/mycart')} panel={true} />
           }
-        </Panel>
+        </ModelPanel>
       </Suspense>
 
     </nav>
