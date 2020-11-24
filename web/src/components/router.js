@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext /*, Suspense */ } from 'react'
 import { _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { RenderContext } from '../GlobalContexts'
+import { RenderContext, GlobalsContext } from '../GlobalContexts'
 
 import { Spinner, SpinnerSize } from '@fluentui/react';
 
@@ -105,11 +105,9 @@ const listeners = [];
 export function Router({ startUrl, cfg }) {
   console.log(`Render Router, startUrl=${JSON.stringify(startUrl)}`)
   // renderRoute : route that needs to be rendered (default is the startURL)
-
   const { ssrContext, serverInitialData } = useContext(RenderContext)
+  const [itemsInCart] = useContext(GlobalsContext)
   const [renderRoute, setRenderRoute] = useState({ firstRoute: ssrContext, ...pathToRoute(startUrl) })
-
-
 
   // Subscribe to <Link> & navTo events
   useEffect(() => {
@@ -137,10 +135,29 @@ export function Router({ startUrl, cfg }) {
     }
   }, [])
 
-  // return child components
-  const { component, componentFetch, routeProps = {}, requireAuth } = cfg[renderRoute.routekey] || {}
+  const routecfg = cfg[renderRoute.routekey] || {}
 
+  // Check Autth!!
+  if (routecfg.requireAuth) {
+    if (!(itemsInCart.session && itemsInCart.session.auth)) {
+      if (typeof window !== 'undefined') {
+        if (!window.location.search.includes("login=ok")) { // stop a loop! because this will render BEFORE we get the results from getsession useEffect
+          window.location.replace((process.env.REACT_APP_SERVER_URL || '') + `/connect/microsoft?surl=${encodeURIComponent(window.location.href)}`)
+        }
+      }
+    }
+  }
   console.log(`Render useRouter,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
+  return <RouterRender renderRoute={renderRoute} routecfg={routecfg} serverInitialData={serverInitialData} />
+}
+
+// MEMO - prevents rerender when the session gets updated - we only want the nav to get updated!
+const RouterRender = React.memo(({ routecfg, renderRoute, serverInitialData }) => {
+  console.log(`RouterRender : renderRoute=${renderRoute.routekey}`)
+
+  const { component, componentFetch, routeProps = {} } = routecfg
+
+  console.log(`Render RouterRender,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
   if (!component) {
     console.error(`useRouter()  error, unknown route ${renderRoute.routekey}`)
     return `404 - error, unknown route ${renderRoute.routekey}`
@@ -148,26 +165,16 @@ export function Router({ startUrl, cfg }) {
     let resource
     if (componentFetch) {
       if (renderRoute.firstRoute && renderRoute.firstRoute === "server") {
-        // its the first route & the data has been fetched on the server, so just wrap in a completed Promise
         resource = _suspenseWrap(serverInitialData)
       } else {
-
-        //console.log(`Start the data fetch for the route`)
-        if (requireAuth) {
-          // TODO - router does have access to session data
-        }
         resource = _suspenseFetch('componentFetch' + renderRoute.routekey, renderRoute.urlid)
       }
-      //console.log(`useRouter() wrapped suspense createElement`)
-      return (
-        <React.Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
-          { React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
-        </React.Suspense>
-      )
-    } else {
-      //console.log(`useRouter() no componentFetch, createElement`)
-      return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
     }
-
+    if (resource) return (
+      <React.Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
+        { React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
+      </React.Suspense>
+    )
+    else return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
   }
-}
+})

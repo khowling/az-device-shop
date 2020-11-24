@@ -95,12 +95,29 @@ const StoreDef = {
         },
         collection: "orders",
         schema: Joi.object({
-            //partition_key: Joi.string().trim().required()
+            'checkout_date': Joi.number(),
+            'status': Joi.number().required(),
+            'status_reason': Joi.string(),
+            'owner': Joi.object().required(),
+            'owner_type': Joi.string().valid('user', 'session'),
+            'shipping': Joi.string().valid('A', 'B'),
+            'items': Joi.array().items(Joi.object({})).required(),
+            'items_count': Joi.number()
         }),
         indexes: [
             { status: 1 },
             { owner: { _id: 1 } }
         ]
+    },
+    "order_line": {
+        schema: Joi.object({
+            'options': Joi.object(),
+            'qty': Joi.number().required(),
+            'recorded_item_price': Joi.number().required(),
+            'item': Joi.object({
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+            }).required()
+        })
     },
     "session": {
         collection: session_collection_name,
@@ -127,6 +144,18 @@ const FetchOperation = {
             cart.items = cart.items.map(i => Object.assign(i, { item: ref_products_map[String(i.item._id)] || { _id: i.item._id, _error: 'missing item' } }))
         }
         return cart || {}
+    },
+    "myorders": async function (ctx): Promise<any> {
+        if (!ctx.tenent) throw `Requires init`
+        if (!ctx.session.auth) throw 'Requires logged in'
+        const orders = await ctx.db.collection(StoreDef["orders"].collection).find({ owner: { _id: ctx.session.auth.sub }, status: { $gte: 30 }, partition_key: ctx.tenent.email }, { projection: StoreProjections["orders"] }).toArray()
+        for (let o of orders) {
+            const ostate = ctx.orderState.state.orders.find(os => os.doc_id === o._id.toHexString())
+            if (ostate) {
+                o.orderState = ostate.status
+            }
+        }
+        return orders || []
     },
     "get": async function (ctx, store, query?: any, proj?: any): Promise<any> {
         if (!ctx.tenent) throw `Requires init`
@@ -367,7 +396,7 @@ async function ssr(ctx, next) {
         if (!ctx.tenent && routekey != '/init') {
             ctx.redirect('/init')
         } else if (requireAuth && !ctx.session.auth) {
-            ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
+            ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.href)}`)
         } else {
             const renderContext: any = { ssrContext: "server" }
 
@@ -457,8 +486,13 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
                     }
 
                 }
-
-                ctx.redirect(ctx.query.state || "/")
+                let ret_url = "/?login=ok"
+                if (ctx.query.state) {
+                    const newu = new URL(ctx.query.state)
+                    newu.searchParams.set('login', 'ok')
+                    ret_url = newu.href
+                }
+                ctx.redirect(ret_url)
 
             } catch (e) {
                 console.error(e)
@@ -534,11 +568,13 @@ const api = new Router({ prefix: '/api' })
     })
     .post('/cartadd', async function (ctx, next) {
         console.log(`add product to cart ${ctx.session && JSON.stringify(ctx.session)}`)
-        const { value, error } = StoreDef["orders"].schema.validate(ctx.request.body, { allowUnknown: true })
+        const { value, error } = StoreDef["order_line"].schema.validate(ctx.request.body, { allowUnknown: true })
         if (!error) {
-            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: ObjectID(value.itemid) }, { projection: { "price": 1, "active": 1 } })
+            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: ObjectId(value.item._id) }, { projection: { "price": 1, "active": 1 } })
+            ctx.assert(ref_product, 400, "Cannot find product")
+            ctx.assert(ref_product.price === value.recorded_item_price, 400, "Incorrect Price, please refresh your page")
             const line_total = ref_product.price * 1
-            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $inc: { items_count: 1 }, $push: { items: { _id: ObjectID(), item: { _id: ObjectID(value.itemid) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
+            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $inc: { items_count: 1 }, $push: { items: { _id: ObjectID(), item: { _id: ObjectID(value.item._id) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
 
             ctx.assert(res.ok === 1, 500, `error`)
             ctx.body = { items_count: res.value.items_count }
@@ -562,8 +598,10 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(401, 'please login')
         } else {
             try {
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub } } })
-                ctx.body = order
+                const { value, error } = Joi.object({ 'shipping': Joi.string().valid('A', 'B').required() }).validate(ctx.request.body, { allowUnknown: true })
+
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub }, checkout_date: Date.now(), shipping: value } })
+                ctx.body = { _id: order.value._id }
                 await next()
             } catch (e) {
                 ctx.throw(400, `cannot retreive mycart: ${e}`)

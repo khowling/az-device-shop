@@ -27,34 +27,26 @@ export function ManageOrders({ resource }) {
                             <th scope="col" colSpan="1">Order Date</th>
                             <th scope="col" colSpan="1">Status</th>
                             <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
-                                <button aria-label="Sort by Length">Product</button>
+                                <button aria-label="Sort by Length">Shipping</button>
                             </th>
-                            <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
-                                <button aria-label="Sort by Width">Qty</button>
-                            </th>
-                            <th scope="col" className="f-sortable f-numerical" colSpan="1" aria-sort="none">
-                                <button aria-label="Sort by Price">Price</button>
-                            </th>
+
                         </tr>
                     </thead>
                     <tbody>
-                        {status === 'success' && result.data && result.data.map((o, idx) =>
-                            <tr>
-                                <td><Link route="/o" urlid={o._id}>{o.order_number}</Link></td>
-                                <td>{Date(o._ts).substr(0, 24)}</td>
-                                <td>{o.status && <strong className="c-badge f-small f-highlight">{o.status}</strong>}
-                                </td>
-                                <td className="f-numerical f-sub-categorical">{o.heading}</td>
-                                <td className="f-numerical f-sub-categorical">{o.qty}</td>
-                                <td className="f-numerical">
-                                    <div className="c-price" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
-                                        <meta itemProp="priceCurrency" content="GBP" />
-                                        <span>£</span>
-                                        <span itemProp="price">{o.price}</span>
-                                        <link itemProp="availability" href="https://schema.org/InStock" />
-                                    </div>
-                                </td>
-                            </tr>
+                        {status === 'success' && result.data && result.data.map((o, idx) => {
+                            const odate = o.checkout_date && new Date(o.checkout_date)
+                            return (
+                                <tr key={idx}>
+                                    <td><Link route="/o" urlid={o._id}>{o.orderState ? o.orderState.order_number : '<processing>'}</Link></td>
+                                    <td>{odate ? odate.toGMTString() : ''}</td>
+                                    <td>{o.status && <strong className="c-badge f-small f-highlight">{o.orderState ? ['OrderQueued', 'OrderNumberGenerated', 'InventoryAllocated', 'Picking', 'PickingComplete', 'Shipped', 'Complete'][o.orderState.stage] : 'Waiting'}</strong>}
+                                    </td>
+                                    <td className="f-numerical f-sub-categorical">{o.shipping ? o.shipping.shipping : "default"}</td>
+                                    <td className="f-numerical f-sub-categorical">{o.qty}</td>
+
+                                </tr>
+                            )
+                        }
                         )}
                     </tbody>
                 </table>

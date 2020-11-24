@@ -17,4 +17,4 @@ import React from 'react'
 //    }
 
 export const RenderContext = React.createContext({})
-export const AddedCartCount = React.createContext([{ count: 0 }, () => { }])
+export const GlobalsContext = React.createContext([{ count: 0 }, () => { }])

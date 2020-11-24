@@ -1,4 +1,4 @@
-import React, { useState, useContext, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Router } from './components/router'
 import { Nav } from './components/page'
 import { Panes, Panes3x } from './components/store'
@@ -10,8 +10,8 @@ import { Inventory } from './components/factorymgr'
 import { OrderMgr } from './components/ordermgr'
 
 
-import { RenderContext, AddedCartCount } from './GlobalContexts'
-import { _suspenseFetch, _suspenseWrap } from './utils/fetch'
+import { GlobalsContext } from './GlobalContexts'
+import { _fetchit } from './utils/fetch'
 
 //import './App.css';
 import { initializeIcons } from '@uifabric/icons';
@@ -69,10 +69,9 @@ export const AppRouteCfg = {
   },
   "/myorders": {
     component: ManageOrders,
+    requireAuth: true,
     componentFetch: {
-      operation: "get",
-      store: "orders",
-      query: { status: { $gte: 30 } },
+      operation: "myorders"
     }
   },
   "/o": {
@@ -120,41 +119,35 @@ export const AppRouteCfg = {
 }
 
 
-// Expose Global State, allowing items deep in the Router component tree to comunicate with the header!
-export const CartProvider = ({ children }) => {
+// Expose Global State, allowing items deep in the Router component tree to modify Nav!
+export const GlobalsProviderWrapper = ({ children }) => {
   const [itemsInCart, setItemsInCart] = useState({ count: 0, open: false })
 
+  useEffect(() => {
+    async function fetchData() {
+      const session = await _fetchit('/api/session_status')
+      setItemsInCart(i => { return { ...i, session } })
+    }
+    fetchData()
+  }, [])
+
   return (
-    <AddedCartCount.Provider value={[itemsInCart, setItemsInCart]}>
+    <GlobalsContext.Provider value={[itemsInCart, setItemsInCart]}>
       {children}
-    </AddedCartCount.Provider>
+    </GlobalsContext.Provider>
   );
 };
 
 export function App({ startUrl }) {
   console.warn(`**Render App startUrl=${startUrl.pathname}`)
 
-  // consume the value of a context! (=== <RenderContext.Consumer >)
-  // Provider is either
-  //  index.js (ssrContext == "spa")  // for development server
-  //  ssr_server.js (ssrContext: "server", serverInitialData (as request by AppRouteCfg) & session) // 1st phase of sse, dom rendered from server
-  //  ssr_hydrate.js (ssrContext: "server", serverInitialData (as request by AppRouteCfg) & session) // 2nd phase of ssr, hydrate from window.__HYDRATE__DATA__ (copy of 1st phase)
-  const { ssrContext, session } = useContext(RenderContext)
-  // return pending resource
-  const [sessionResource] = useState(() => {
-    console.log('App: getting sessionResource')
-    return ssrContext === "spa" ? _suspenseFetch('session_status') : _suspenseWrap(session)
-  })
-
   return (
     <Fabric>
       <main id="mainContent" data-grid="container">
-        <CartProvider>
-          <Suspense fallback={<Nav fallback={true} key="nav" />}>
-            <Nav sessionResource={sessionResource} />
-          </Suspense>
+        <GlobalsProviderWrapper>
+          <Nav />
           <Router startUrl={startUrl} cfg={AppRouteCfg} />
-        </CartProvider>
+        </GlobalsProviderWrapper>
       </main>
     </Fabric>
   )

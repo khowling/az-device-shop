@@ -3,7 +3,7 @@ import { Alert, MyImage } from '../utils/common'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link, navTo } from './router.js'
-import { AddedCartCount } from '../GlobalContexts'
+import { GlobalsContext } from '../GlobalContexts'
 
 import { DefaultButton, Breadcrumb, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
 
@@ -61,7 +61,7 @@ function Summary({ cart, checkout, dismissPanel }) {
   const [state, setState] = useState({ state: "ready" })
   const [shipping, setShipping] = useState('A')
 
-  const [itemsInCart, setItemsInCart] = useContext(AddedCartCount)
+  const [itemsInCart, setItemsInCart] = useContext(GlobalsContext)
 
 
 
@@ -69,10 +69,10 @@ function Summary({ cart, checkout, dismissPanel }) {
   function _checkout() {
     setState({ state: "wait" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('/api/checkout', 'PUT').then(succ => {
+    _fetchit('/api/checkout', 'PUT', {}, { shipping }).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
       setState({ state: "created-success", response: succ })
-      setItemsInCart({ ...itemsInCart, count: itemsInCart.count + 1 })
+      setItemsInCart({ ...itemsInCart, count: 0 })
       // Poll for status
 
       //navTo("ManageOrders")
@@ -166,7 +166,7 @@ export function MyCart({ dismissPanel, panel, resource, checkout }) {
   console.log(`Render MyCart (${status})`)
   const [cart, setCart] = useState(result.data)
 
-  const [cartItemsAdded, setCartItemsAdded] = useContext(AddedCartCount)
+  const [cartItemsAdded, setCartItemsAdded] = useContext(GlobalsContext)
 
   async function _removeitem(cartline) {
     console.log(cartline)
@@ -255,12 +255,12 @@ export function AddToCart({ resource }) {
   const product = result.data
   const category = result.refstores.products.Category[0]
 
-  const [itemsInCart, setItemsInCart] = useContext(AddedCartCount)
+  const [itemsInCart, setItemsInCart] = useContext(GlobalsContext)
 
   function addorder() {
     setState({ state: "adding" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('/api/cartadd', 'POST', {}, { itemid: product._id, options: { "Colour": optColor } }).then(succ => {
+    _fetchit('/api/cartadd', 'POST', {}, { item: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${itemsInCart.count}`)
       setItemsInCart({ ...itemsInCart, count: itemsInCart.count + 1 })
       setState({ state: "added", response: succ })
