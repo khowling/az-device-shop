@@ -32,7 +32,7 @@ interface OrderingAction {
     status?: any; // used for StatusUpdate Actions
     //trigger?: object; // used for NewOrUpdatedOrder / NewInventory
 }
-enum ActionType { StatusUpdate, NewInventory, NewOrUpdatedOrder, AllocateInventory, ProcessPicking }
+enum ActionType { NewInventory, NewOrUpdatedOrder, AllocateInventory, AllocateOrderNumber, StatusUpdate, ProcessPicking }
 
 // Store in "https://github.com/Level/level"
 // In Memory, volatile state
@@ -62,6 +62,15 @@ function ordering_operation({ stateManager }, action: OrderingAction): ChangeEve
             // Needs to be Idempotent
             // TODO: Check if its a new Order or if state already has the Order & what the change is & if we accept the change
             return stateManager.apply_change_events({ nextaction: !new_order_status.failed, statechanges: [{ kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.CREATE }, status: new_order_status }] })
+        }
+        case ActionType.AllocateOrderNumber: {
+            const { spec } = action
+            return stateManager.apply_change_events({
+                nextaction: true, statechanges: [
+                    { kind: "Order", metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE }, status: { stage: OrderStage.OrderNumberGenerated, order_number: 'ORD' + String(stateManager.state.order_sequence + 1).padStart(5, '0') } },
+                    { kind: "OrderingUpdate", metadata: { type: ChangeEventType.INC }, status: { sequence_update: 1 } }
+                ]
+            })
         }
         case ActionType.StatusUpdate: {
             const { spec, status } = action
@@ -158,7 +167,7 @@ function ordering_operation({ stateManager }, action: OrderingAction): ChangeEve
             }
 
             if (picking_allocated_update !== 0) {
-                statechanges.push({ kind: "Picking", metadata: { type: ChangeEventType.UPDATE }, status: { allocated_update: picking_allocated_update } })
+                statechanges.push({ kind: "OrderingUpdate", metadata: { type: ChangeEventType.UPDATE }, status: { allocated_update: picking_allocated_update } })
             }
             if (statechanges.length > 0) {
                 return stateManager.apply_change_events({ nextaction: null, statechanges: statechanges })
@@ -190,9 +199,9 @@ async function validateOrder(ctx, next) {
 
 async function generateOrderNo(ctx, next) {
     console.log(`generateOrderNo forward, spec: ${JSON.stringify(ctx.trigger)}`)
-    const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
-    const order_number = 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0')
-    const change = ordering_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.OrderNumberGenerated, order_number: order_number } })
+    //const order_seq = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ _id: "order-sequence-stage1", partition_key: ctx.tenent.email }, { $inc: { sequence_value: 1 } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
+    //const order_number = 'ORD' + String(order_seq.value.sequence_value).padStart(5, '0')
+    const change = ordering_operation(ctx, { type: ActionType.AllocateOrderNumber, spec: ctx.spec })
     await next(change, { endworkflow: !change.nextaction } as ProcessorOptions)
 }
 
@@ -221,7 +230,9 @@ async function complete(ctx, next) {
     await next(ordering_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: OrderStage.Complete } }))
 }
 
-const { MongoClient, ObjectID, ObjectId } = require('mongodb'),
+// ---------------------------------------------------------------------------------------
+
+const { MongoClient, ObjectID } = require('mongodb'),
     assert = require('assert').strict,
     MongoURL = process.env.MONGO_DB
 
@@ -244,10 +255,10 @@ function applyProcessorEvents(processor_name, order_state: ProcessingState, inv_
     return [ret_order_state, ret_inv_state]
 }
 
-async function order_processor_startup() {
+async function orderprocessing_startup() {
     const murl = new URL(MongoURL)
 
-    console.log(`order_processor_startup (1):  connecting to: ${murl.toString()}`)
+    console.log(`orderprocessing_startup (1):  connecting to: ${murl.toString()}`)
     const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
 
@@ -263,7 +274,7 @@ async function order_processor_startup() {
 
     const db = orderProcessor.context.db = client.db()
     orderProcessor.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
-    console.log(`order_processor_startup (2):  got context tenent=${orderProcessor.context.tenent.email}`)
+    console.log(`orderprocessing_startup (2):  got context tenent=${orderProcessor.context.tenent.email}`)
 
     // Setup action on next()
     orderProcessor.context.eventfn = ws_server_emit
@@ -283,23 +294,23 @@ async function order_processor_startup() {
     var last_inventory_trigger = inv_process_state
 
 
-    console.log(`order_processor_startup (3): restore 'ordering state', seq=${orderState.state.sequence}, #orders=${orderState.state.orders.length}, #inv=${orderState.state.inventory.size}`)
+    console.log(`orderprocessing_startup (3): restore 'ordering state', seq=${orderState.state.sequence}, #orders=${orderState.state.orders.length}, #inv=${orderState.state.inventory.size}`)
 
     function checkRestartStage(doc_id, stage) {
-        const order_state = orderState.state.orders.find(o => o.doc_id === doc_id)
-        if (!order_state) {
-            throw new Error(`order_processor_startup: Got a processor state without the ordering state: doc_id=${doc_id}`)
-        } else if (stage !== order_state.status.stage) {
+        const state = orderState.state.orders.find(o => o.doc_id === doc_id)
+        if (!state) {
+            throw new Error(`orderprocessing_startup: Got a processor state without the state: doc_id=${doc_id}`)
+        } else if (stage !== state.status.stage) {
             return true
         }
         return false
     }
 
     //const processorState: ProcessingState = required_processor_state[orderProcessor.name]
-    console.log(`order_processor_startup (4): re-applying active processor state, order#=${order_process_state.proc_map.size}`)
+    console.log(`orderprocessing_startup (4): re-applying active processor state, order#=${order_process_state.proc_map.size}`)
     orderProcessor.restartProcessors(checkRestartStage, order_process_state)
 
-    console.log(`order_processor_startup (5): loop to re-inflate 'sleep_until' processes..`)
+    console.log(`orderprocessing_startup (5): loop to re-inflate 'sleep_until' processes..`)
     setInterval(() => {
         // check to restart 'sleep_until' processes
         orderProcessor.restartProcessors(checkRestartStage)//, orderProcessor.state, false)
@@ -309,7 +320,7 @@ async function order_processor_startup() {
     let lastcheckpoint_seq: number = orderState.state.sequence
 
     const LOOP_MINS = 1, LOOP_CHANGES = 100
-    console.log(`order_processor_startup (6): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
+    console.log(`orderprocessing_startup (6): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
     setInterval(async (ctx, chkdir) => {
         console.log(`Checkpointing check: seq=${orderState.state.sequence}, #orders=${orderState.state.orders.length}, #inv=${orderState.state.inventory.size}.  Processing size=${orderProcessor.state.proc_map.size}`)
@@ -323,7 +334,7 @@ async function order_processor_startup() {
     }, 1000 * 60 * LOOP_MINS, orderProcessor.context, chkdir)
 
 
-    console.log(`order_processor_startup (7): starting picking control loop (5 seconds)`)
+    console.log(`orderprocessing_startup (7): starting picking control loop (5 seconds)`)
     setInterval(function (ctx) {
         const change = ordering_operation(ctx, { type: ActionType.ProcessPicking })
         if (change) {
@@ -333,7 +344,7 @@ async function order_processor_startup() {
 
     const cont_order_token = order_process_state.last_trigger
     assert((orderState.state.orders.length === 0) === (!cont_order_token), 'Error, we we have inflated orders, we need a order continuation token')
-    console.log(`order_processor_startup (8):  start watch for new "orders" (startAfter=${cont_order_token && cont_order_token._id})`)
+    console.log(`orderprocessing_startup (8):  start watch for new "orders" (startAfter=${cont_order_token && cont_order_token._id})`)
     db.collection(StoreDef["orders"].collection).watch(
         [
             { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["orders"].status.NewOrUpdatedOrder }] } }
@@ -346,7 +357,7 @@ async function order_processor_startup() {
 
     const cont_inv_token = inv_process_state
     assert((orderState.state.inventory.size === 0) === (!cont_inv_token), 'Error, we we have inflated inventry, we need a inventory continuation token')
-    console.log(`order_processor_startup (9):  start watch for new "inventory" (startAfter=${cont_inv_token && cont_inv_token._id})`)
+    console.log(`orderprocessing_startup (9):  start watch for new "inventory" (startAfter=${cont_inv_token && cont_inv_token._id})`)
     const inventoryAggregationPipeline = [
         { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": "Available" }] } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
@@ -440,7 +451,10 @@ function ws_server_startup({ stateManager }) {
         ws_server_clients.set(client_id, ws)
 
         ws.send(JSON.stringify({
-            type: "snapshot", state: {
+            type: "snapshot",
+            metadata: {
+                stage_txt: ['OrderQueued', 'OrderNumberGenerated', 'InventoryAllocated', 'Picking', 'PickingComplete', 'Shipped', 'Complete']
+            }, state: {
                 ...stateManager.state,
                 // convert Inventry Map into Array of objects
                 inventory: Array.from(stateManager.state.inventory).map(([sku, val]) => {
@@ -461,8 +475,8 @@ function ws_server_startup({ stateManager }) {
 
 async function init() {
     //try {
-    const ctx = await order_processor_startup()
-    await ws_server_startup(ctx)
+    const ctx = await orderprocessing_startup()
+    ws_server_startup(ctx)
 
     //} catch (e) {
     //    console.error(e)

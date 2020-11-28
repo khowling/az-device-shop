@@ -1,41 +1,36 @@
 const fs = require('fs')
 
 
-export interface OrderingState {
+export interface FactoryState {
     sequence: number;
-    inventory: Map<string, InventoryStatus>;
-    orders: Array<OrderObject>;
-    order_sequence: number;
-    picking_allocated: number;
+    workitems: Array<WorkItemObject>;
+    workitem_sequence: number;
+    capacity_allocated: number;
     lastupdated: number;
 }
 
-export interface OrderObject {
+export interface WorkItemObject {
     doc_id: string;
-    status: OrderStatus;
+    //spec: any;
+    status: WorkItemStatus;
 }
 
 
-export interface OrderStatus extends DocStatus {
-    stage?: OrderStage;
-    order_number?: string;
-    inventory?: any;
-    picking?: {
-        status: PickingStage;
-        starttime: number;
-        waittime: number;
-        allocated_capacity: number;
-        progress: number;
+export interface WorkItemStatus extends DocStatus {
+    stage?: WorkItemStage;
+    workitem_number?: string;
+    factory_status?: {
+        stage: FactoryStage;
+        starttime?: number;
+        waittime?: number;
+        allocated_capacity?: number;
+        progress?: number;
     }
 }
-export enum OrderStage { OrderQueued, OrderNumberGenerated, InventoryAllocated, Picking, PickingComplete, Shipped, Complete }
-export enum PickingStage { Waiting, Picking, Complete }
+export enum WorkItemStage { Draft, WIValidated, WINumberGenerated, InFactory, FactoryComplete, MoveToWarehouse, Complete }
+export enum FactoryStage { Waiting, Building, Complete }
 
-export interface InventoryStatus {
-    onhand: number;
-}
-
-export interface OrderingUpdate {
+export interface FactoryUpdate {
     allocated_update?: number;
     sequence_update?: number;
 }
@@ -45,9 +40,6 @@ interface DocStatus {
     message?: string;
 }
 
-
-////
-// Change Events
 export interface ChangeEvent {
     statechanges: Array<StateChange>; // Required transational changes to state
     nextaction: boolean; // end of lifecycle?
@@ -64,7 +56,7 @@ export interface StateChange {
         type: ChangeEventType;
         doc_id?: string;
     };
-    status: OrderStatus | InventoryStatus | OrderingUpdate;
+    status: WorkItemStatus | FactoryUpdate;
 }
 export enum ChangeEventType {
     CREATE,
@@ -73,10 +65,33 @@ export enum ChangeEventType {
     INC
 }
 
+/*
+interface FactoryUpdate {
+    workitem_updates: Array<WorkItemEvent>;
+    capacity_allocated: number;
+    lastupdated: number;
+}
 
-export class OrderStateManager {
 
-    _state = { sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), order_sequence: 0, orders: [] }
+interface WorkItemEvent {
+    type: WorkItemEventType;
+    workitem: WorkItem;
+}
+enum WorkItemEventType { New, Complete, ProgressUpdate }
+
+
+enum ActionType { Add, CheckInProgress, CheckWaiting, StatusUpdate, Sync }
+interface FactoryAction {
+    type: ActionType;
+    inventory_spec?: any;
+    workitem_idx?: number;
+}
+*/
+
+
+export class FactoryStateManager {
+
+    _state = { sequence: 0, lastupdated: null, capacity_allocated: 0, workitem_sequence: 0, workitems: [] } as FactoryState
 
     constructor(opts: any = {}) {
     }
@@ -85,16 +100,16 @@ export class OrderStateManager {
         return this._state;
     }
 
-    set state(newstate: OrderingState) {
+    set state(newstate: FactoryState) {
         this._state = newstate
     }
 
     get serializeState() {
-        return { ...this._state, inventory: [...this._state.inventory] }
+        return this._state // { ...this._state, inventory: [...this._state.inventory] }
     }
 
-    static deserializeState(newstate): OrderingState {
-        return { ...newstate, inventory: new Map(newstate.inventory) }
+    static deserializeState(newstate): FactoryState {
+        return newstate._state // { ...newstate, inventory: new Map(newstate.inventory) }
     }
 
     // Replace array entry at index 'index' with 'val'
@@ -104,7 +119,7 @@ export class OrderStateManager {
 
         if (change.statechanges && change.statechanges.length > 0) {
 
-            let newstate: OrderingState = { ...this.state, sequence: this.state.sequence + 1, lastupdated: Date.now() }
+            let newstate: FactoryState = { ...this.state, sequence: this.state.sequence + 1, lastupdated: Date.now() }
 
             if (change.sequence && (change.sequence !== newstate.sequence)) {
                 throw new Error(`apply_change_events, Cannot re-apply change sequence ${change.sequence}, expecting ${newstate.sequence}`)
@@ -113,51 +128,34 @@ export class OrderStateManager {
             for (let c of change.statechanges) {
 
                 switch (c.kind) {
-                    case "Order": {
+                    case "Workitem": {
                         const { doc_id, type } = c.metadata
-                        const new_ord_status = c.status as OrderStatus
+                        const new_status = c.status as WorkItemStatus
                         if (type === ChangeEventType.UPDATE) {
-                            const order_idx = doc_id ? newstate.orders.findIndex(o => o.doc_id === doc_id) : -1
-                            if (order_idx >= 0) {
-                                const existing_order = newstate.orders[order_idx]
-                                const new_order = { ...existing_order, status: { ...existing_order.status, ...new_ord_status } }
-                                newstate.orders = OrderStateManager.imm_splice(newstate.orders, order_idx, new_order)
+                            const wi_idx = doc_id ? newstate.workitems.findIndex(o => o.doc_id === doc_id) : -1
+                            if (wi_idx >= 0) {
+                                const existing_wi = newstate.workitems[wi_idx]
+                                const new_wi = { ...existing_wi, status: { ...existing_wi.status, ...new_status } }
+                                newstate.workitems = FactoryStateManager.imm_splice(newstate.workitems, wi_idx, new_wi)
                             } else {
                                 throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
                             }
                         } else if (type === ChangeEventType.CREATE) {
                             // using typescript "type assertion"
                             // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
-                            newstate.orders = newstate.orders.concat([{ doc_id, status: new_ord_status }])
+                            newstate.workitems = newstate.workitems.concat([{ doc_id, status: new_status }])
                         }
                         break
                     }
-                    case "Inventory": {
-                        const { doc_id, type } = c.metadata
-                        const new_inv_status = c.status as InventoryStatus
-                        const inventory_updates: Map<string, InventoryStatus> = new Map()
-                        const existing_sku: InventoryStatus = newstate.inventory.get(doc_id)
-
-                        if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
-                            if (!existing_sku) {
-                                throw new Error(`apply_change_events, Cannot find existing ${c.kind} with doc_id=${doc_id}`)
-                            }
-                            inventory_updates.set(doc_id, new_inv_status)
-                        } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
-                            inventory_updates.set(doc_id, { onhand: existing_sku ? (existing_sku.onhand + new_inv_status.onhand) : new_inv_status.onhand })
-                        }
-                        newstate.inventory = new Map([...newstate.inventory, ...inventory_updates])
-                        break
-                    }
-                    case "OrderingUpdate": {
+                    case "FactoryUpdate": {
                         const { type } = c.metadata
-                        const status = c.status as OrderingUpdate
+                        const status = c.status as FactoryUpdate
                         if (status.sequence_update && type === ChangeEventType.INC) {
-                            newstate.order_sequence = newstate.order_sequence + status.sequence_update
+                            newstate.workitem_sequence = newstate.workitem_sequence + status.sequence_update
                         } else if (status.allocated_update && type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
-                            newstate.picking_allocated = newstate.picking_allocated + status.allocated_update
+                            newstate.capacity_allocated = newstate.capacity_allocated + status.allocated_update
                         } else {
-                            throw new Error(`apply_change_events, Unsupported OrderingUpdate`)
+                            throw new Error(`apply_change_events, only support updates on ${c.kind}`)
                         }
                         break
                     }
@@ -191,7 +189,7 @@ export class OrderStateManager {
             console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
             const { state_snapshot, ...rest } = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
 
-            this.state = OrderStateManager.deserializeState(state_snapshot)
+            this.state = FactoryStateManager.deserializeState(state_snapshot)
             return rest
         } else {
             console.log(`No checkpoint found, start from 0`)
@@ -202,10 +200,10 @@ export class OrderStateManager {
 
     async rollForwardState(ctx): Promise<Array<any>> {
 
-        console.log(`rollForwardState: reading 'order_events' from database from seq#=${this.state.sequence}`)
+        console.log(`rollForwardState: reading 'factory_events' from database from seq#=${this.state.sequence}`)
 
-        await ctx.db.collection("order_events").createIndex({ sequence: 1 })
-        const inflate_events = await ctx.db.collection("order_events").aggregate(
+        await ctx.db.collection("factory_events").createIndex({ sequence: 1 })
+        const inflate_events = await ctx.db.collection("factory_events").aggregate(
             [
                 { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: this.state.sequence } }] } },
                 { $sort: { "sequence": 1 } }
@@ -223,7 +221,7 @@ export class OrderStateManager {
                 if (processor) {
                     ret_processor.push(processor)
                 } else {
-                    // its find to have a ordering state change that is not controlled by the processor (ie picking)
+                    // its find to have a workitem state change that is not controlled by the processor (ie picking)
                     //throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
                 }
             }
@@ -243,50 +241,3 @@ export class OrderStateManager {
         return this.state.sequence
     }
 }
-
-/* ////////////////////////////////////////////////////// AZURE STORAGE  //////////////
-import {
-    BlobServiceClient,
-    StorageSharedKeyCredential,
-    BlobDownloadResponseModel
-} from "@azure/storage-blob";
-import { callbackify } from "util"
-
-function getBlobClient() {
-    console.log(`looking for saved starting point ${process.env.STORAGE_ACCOUNT}`)
-    const sharedKeyCredential = new StorageSharedKeyCredential(process.env.STORAGE_ACCOUNT, process.env.STORAGE_MASTER_KEY)
-    const blobServiceClient = new BlobServiceClient(`https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net`, sharedKeyCredential)
-    const containerClient = blobServiceClient.getContainerClient(process.env.STORAGE_CONTAINER)
-
-    //const createContainerResponse = await containerClient.create();
-    console.log(`Create container ${process.env.STORAGE_CONTAINER} successfully`);
-    const blobClient = containerClient.getBlockBlobClient(process.env.STORAGE_CHECKPOINT_FILE);
-    return blobClient
-}
-async function getLatestOrderingState_AzureBlob(ctx) {
-
-    const blobClient = getBlobClient()
-    try {
-        let res1: Buffer = await blobClient.downloadToBuffer()
-        ordering_state = JSON.parse(res1.toString())
-    } catch (e) {
-        console.error(e)
-    }
-}
-
-async function orderCheckpoint_AzureBlob(ctx) {
-    // Create a blob
-    const blobClient = getBlobClient()
-
-    const content = "hello";
-    const uploadBlobResponse = await blobClient.upload(content, Buffer.byteLength(content));
-    console.log(`Upload block blob successfully`, uploadBlobResponse.requestId);
-
-}
-*/ //////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-

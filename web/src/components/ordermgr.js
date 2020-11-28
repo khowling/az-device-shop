@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react'
-
 import { Link } from './router.js'
 //import { _fetchit,  _suspenseFetch, _suspenseWrap } from '../utils/fetch'
 
@@ -9,7 +8,7 @@ import { ProgressIndicator, SelectionMode, DetailsList, DetailsListLayoutMode, S
 // Replace array entry at index 'index' with 'val'
 function imm_splice(array, index, val) { return [val, ...array.slice(0, index), ...array.slice(index + 1)] }
 
-function orderReducer(state, action) {
+function stateReducer(current, action) {
 
     switch (action.type) {
         case 'snapshot':
@@ -20,7 +19,7 @@ function orderReducer(state, action) {
             //  picking_capacity: number;
             //  lastupdated: number;
 
-            return action.state;
+            return { state: action.state, metadata: action.metadata }
         case 'events':
             // array of changes:
             // kind: string;
@@ -32,15 +31,15 @@ function orderReducer(state, action) {
             // status: OrderStatus | InventoryStatus
 
             const { statechanges, sequence } = action.change
-            let ret_state = { ...state, sequence }
+            let ret_state = { ...current.state, sequence }
 
             for (let i = 0; i < statechanges.length; i++) {
                 const { kind, metadata, status } = statechanges[i]
-                const { doc_id, type } = metadata
+
 
                 switch (kind) {
-                    case 'Order':
-
+                    case 'Order': {
+                        const { doc_id, type } = metadata
                         if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
                             const order_idx = ret_state.orders.findIndex(o => o.doc_id === doc_id)
                             if (order_idx >= 0) {
@@ -53,7 +52,9 @@ function orderReducer(state, action) {
                             ret_state.orders = ret_state.orders.concat({ doc_id, status })
                         }
                         break
-                    case 'Inventory':
+                    }
+                    case 'Inventory': {
+                        const { doc_id, type } = metadata
                         const existing_idx = ret_state.inventory.findIndex(i => i.doc_id === doc_id)
 
                         if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
@@ -73,12 +74,16 @@ function orderReducer(state, action) {
                             }
                         }
                         break
-                    case "Picking":
-                        if (type === 1) { // // got new Onhand value (replace)
-                            const { allocated_update } = status
-                            ret_state.picking_allocated = ret_state.picking_allocated + allocated_update
+                    }
+                    case "OrderingUpdate":
+                        const { type } = metadata
+
+                        if (status.sequence_update && type === 3 /*ChangeEventType.INC*/) {
+                            ret_state.order_sequence = ret_state.order_sequence + status.sequence_update
+                        } else if (status.allocated_update && type === 1 /*ChangeEventType.UPDATE*/) { // // got new Onhand value (replace)
+                            ret_state.picking_allocated = ret_state.picking_allocated + status.allocated_update
                         } else {
-                            throw new Error(`apply_change_events, only support updates on ${kind}`)
+                            throw new Error(`apply_change_events, Unsupported OrderingUpdate`)
                         }
                         break
                     default:
@@ -86,10 +91,10 @@ function orderReducer(state, action) {
                 }
             }
 
-            return ret_state
+            return { state: ret_state, metadata: current.metadata }
         case 'closed':
             // socket closed, reset state
-            return { sequence: 0, inventory: [], orders: [] }
+            return { state: { sequence: 0, inventory: [], picking_allocated: 0, orders: [] }, metadata: {} }
         default:
             throw new Error(`unknown action type ${action.type}`);
     }
@@ -103,7 +108,7 @@ export function OrderMgr({ resource }) {
     //const inventory = result.data
     const { products } = result.refstores
 
-    const [order_state, dispatchWorkitems] = React.useReducer(orderReducer, { sequence: 0, inventory: [], orders: [] })
+    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: { sequence: 0, inventory: [], orders: [] }, metadata: {} })
 
     const [message, setMessage] = React.useState({ type: MessageBarType.info, msg: "Not Connected to Order Controller" })
 
@@ -151,9 +156,8 @@ export function OrderMgr({ resource }) {
         }
     }, [])
 
-    const stage_txt = ['OrderQueued', 'OrderNumberGenerated', 'InventoryAllocated', 'Picking', 'PickingComplete', 'Shipped', 'Complete']
 
-    function OrderDisplay(o, i, idx) {
+    function ItemDisplay({ o, i, idx, metadata }) {
         return (
             <Stack key={`${i}-${idx}`} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
 
@@ -167,23 +171,18 @@ export function OrderMgr({ resource }) {
 
                 <Stack horizontal tokens={{ childrenGap: 3 }}>
                     <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "40%", backgroundColor: "rgb(255, 244, 206)" } }}>
-
-
                         <Text variant="xSmall">Spec: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
-
                     </Stack>
                     <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >
 
-                        {idx === 0 ?
-                            <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
-                            : idx === 1 ?
-                                [
-                                    <Text variant="xSmall">Status: {["Waiting", "Picking", "Complete"][o.status.picking.status]}</Text>,
-                                    <Text variant="xSmall">Wait Time(s): {parseInt(o.status.picking.waittime / 1000, 10)}</Text>,
-                                    <ProgressIndicator label={`Progress (${o.status.picking.progress}%)`} percentComplete={o.status.picking.progress / 100} barHeight={5} styles={{ itemName: { lineHeight: "noraml", padding: 0, fontSize: "10px" } }} />
-                                ]
-                                :
-                                <Text variant="xSmall">Stage: {stage_txt[o.status.stage]}</Text>
+                        {idx !== 1 ?
+                            <Text variant="xSmall">Stage: {metadata.stage_txt[o.status.stage]}</Text>
+                            :
+                            [
+                                <Text variant="xSmall">Status: {["Waiting", "Picking", "Complete"][o.status.picking.status]}</Text>,
+                                <Text variant="xSmall">Wait Time(s): {parseInt(o.status.picking.waittime / 1000, 10)}</Text>,
+                                <ProgressIndicator label={`Progress (${o.status.picking.progress}%)`} percentComplete={o.status.picking.progress / 100} barHeight={5} styles={{ itemName: { lineHeight: "noraml", padding: 0, fontSize: "10px" } }} />
+                            ]
                         }
                     </Stack>
                 </Stack>
@@ -202,13 +201,13 @@ export function OrderMgr({ resource }) {
                 <Stack horizontal tokens={{ childrenGap: 30, padding: 10 }} styles={{ root: { background: 'rgb(225, 228, 232)' } }}>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Event Sequence #</h4>
-                        <Text variant="superLarge" >{order_state.sequence}</Text>
-                        <Text >tracked skus {order_state.inventory.length} / orders {order_state.orders.length}</Text>
+                        <Text variant="superLarge" >{state.sequence}</Text>
+                        <Text >tracked skus {state.inventory.length} / orders {state.orders.length}</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Picking Capacity</h4>
-                        <Text variant="superLarge" >{order_state.picking_allocated}</Text>
-                        <Text >used {order_state.picking_allocated} / available 5</Text>
+                        <Text variant="superLarge" >{state.picking_allocated}</Text>
+                        <Text >used {state.picking_allocated} / available 5</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Order Throughput</h4>
@@ -233,7 +232,7 @@ export function OrderMgr({ resource }) {
                                     }
                                 }} >
                                 <h4>{desc}</h4>
-                                { order_state.orders && order_state.orders.filter(i => stages.includes(i.status.stage)).map((o, i) => OrderDisplay(o, i, idx))}
+                                { state.orders && state.orders.filter(i => stages.includes(i.status.stage)).map((o, i) => <ItemDisplay o={o} i={i} idx={idx} metadata={metadata} />)}
                             </Stack>
                         )
 
@@ -244,7 +243,7 @@ export function OrderMgr({ resource }) {
             </Stack>
 
 
-            <h3>Stock ({order_state.inventory.length})</h3>
+            <h3>Stock ({state.inventory.length})</h3>
             <DetailsList
                 columns={[
                     {
@@ -263,7 +262,7 @@ export function OrderMgr({ resource }) {
                 ]}
                 compact={true}
                 selectionMode={SelectionMode.none}
-                items={order_state.inventory}
+                items={state.inventory}
                 setKey="none"
                 layoutMode={DetailsListLayoutMode.justified}
                 isHeaderVisible={true}

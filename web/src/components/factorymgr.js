@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from './router.js'
 
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-
-import { DefaultPalette } from '@uifabric/styling'
-import { PrimaryButton, DefaultButton, Separator, MessageBar, MessageBarType, Panel, PanelType, Slider, Dropdown, Stack, Text } from '@fluentui/react'
-import { Card } from '@uifabric/react-cards'
-
-import update from 'immutability-helper';
+import { /*DetailsListLayoutMode, SelectionMode, DetailsList,*/ ProgressIndicator, Label, PrimaryButton, DefaultButton, Separator, MessageBar, MessageBarType, Panel, PanelType, Slider, Dropdown, Stack, Text } from '@fluentui/react'
 
 function WorkItem({ resource, dismissPanel, refstores }) {
     const { status, result } = resource.read()
@@ -80,35 +76,67 @@ function WorkItem({ resource, dismissPanel, refstores }) {
     )
 }
 
-function workitemReducer(state, action) {
+// Replace array entry at index 'index' with 'val'
+function imm_splice(array, index, val) { return [val, ...array.slice(0, index), ...array.slice(index + 1)] }
+
+
+function stateReducer(current, action) {
 
     switch (action.type) {
         case 'snapshot':
-            return action.factory_state.workitems;
-        case 'update':
-            let newstate = state
-            for (let wi_update of action.factory_update.workitem_updates) {
-                console.log(`processing update : ${wi_update.type}`)
-                switch (wi_update.type) {
-                    case 0: // New
-                        newstate = update(newstate, { $push: [wi_update.workitem] })
-                        break
-                    case 1: // Complete
-                    case 2: // ProgressUpdate4
-                        let existing_idx = state.findIndex((e) => e.spec._id === wi_update.workitem.spec._id)
-                        if (existing_idx >= 0) {
-                            // remove '1' item starting at 'existing_idx', and add
-                            newstate = update(newstate, { $splice: [[existing_idx, 1, wi_update.workitem]] })
-                        } else {
-                            throw new Error(`Cannot find existing workitem ${wi_update.workitem.spec._id}`)
+            return { state: action.state, metadata: action.metadata }
+        case 'events':
+            // array of changes:
+            // kind: string;
+            // metadata: {
+            //     sequence: number
+            //     type?: ChangeEventType;
+            //     doc_id: string;
+            // };
+            // status: OrderStatus | InventoryStatus
+
+            const { statechanges, sequence } = action.change
+            let ret_state = { ...current.state, sequence }
+
+            for (let i = 0; i < statechanges.length; i++) {
+                const { kind, metadata, status } = statechanges[i]
+
+                switch (kind) {
+                    case 'Workitem': {
+                        const { doc_id, type } = metadata
+                        if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
+                            const order_idx = ret_state.workitems.findIndex(o => o.doc_id === doc_id)
+                            if (order_idx >= 0) {
+                                const existing_order = ret_state.workitems[order_idx]
+                                ret_state.workitems = imm_splice(ret_state.workitems, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
+                            } else {
+                                console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
+                            }
+                        } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
+                            ret_state.workitems = ret_state.workitems.concat({ doc_id, status })
                         }
                         break
+                    }
+                    case "FactoryUpdate": {
+                        const { type } = metadata
+                        if (status.sequence_update && type === 3 /*ChangeEventType.INC*/) {
+                            ret_state.workitem_sequence = ret_state.workitem_sequence + status.sequence_update
+                        } else if (status.allocated_update && type === 1 /*ChangeEventType.UPDATE*/) { // // got new Onhand value (replace)
+                            ret_state.capacity_allocated = ret_state.capacity_allocated + status.allocated_update
+                        } else {
+                            throw new Error(`apply_change_events, only support updates on ${kind}`)
+                        }
+                        break
+                    }
                     default:
-                        throw new Error(`Unknown type ${wi_update.type}`)
+                        console.warn(`Error, unknown kind ${kind}`)
                 }
-                return newstate
             }
-            break
+
+            return { state: ret_state, metadata: current.metadata }
+        case 'closed':
+            // socket closed, reset state
+            return { state: { sequence: 0, capacity_allocated: 0, workitems: [] }, metadata: {} }
         default:
             throw new Error(`unknown action type ${action.type}`);
     }
@@ -128,7 +156,8 @@ export function Inventory({ resource }) {
             Product: products.Product.map(c => { return { key: c._id, text: c.heading, category: c.category } })
         }
 
-    const [workitems, dispatchWorkitems] = React.useReducer(workitemReducer, [])
+    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: { sequence: 0, capacity_allocated: 0, workitems: [] }, metadata: {} })
+
     const [panel, setPanel] = React.useState({ open: false })
     const [message, setMessage] = React.useState({ type: MessageBarType.info, msg: "Not Connected to Factory Controller" })
 
@@ -137,17 +166,6 @@ export function Inventory({ resource }) {
     }
     function dismissPanel() {
         setPanel({ open: false })
-    }
-
-
-    const capacityStyle = {
-        alignItems: 'center',
-        background: DefaultPalette.themePrimary,
-        color: DefaultPalette.white,
-        display: 'flex',
-        height: 50,
-        justifyContent: 'center',
-        width: 50,
     }
 
 
@@ -170,6 +188,7 @@ export function Inventory({ resource }) {
                 }
                 ws.onclose = () => {
                     if (!recordederror) {
+                        dispatchWorkitems({ type: "closed" })
                         setMessage({ type: MessageBarType.warning, msg: `Not Connected` })
                         setTimeout(ws_connect, 5000)
                     }
@@ -193,6 +212,38 @@ export function Inventory({ resource }) {
     }, [])
 
 
+    function ItemDisplay({ o, i, idx, metadata }) {
+        return (
+            <Stack tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
+
+                <Label variant="small">Workitem Number {o.status.workitem_number || "<TBC>"}</Label>
+                {
+                    o.status.failed &&
+                    <MessageBar messageBarType={MessageBarType.severeWarning}>
+                        <Text variant="xSmall">{o.status.message}</Text>
+                    </MessageBar>
+                }
+
+                <Stack horizontal tokens={{ childrenGap: 3 }}>
+                    <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "40%", backgroundColor: "rgb(255, 244, 206)" } }}>
+                        <Text variant="xSmall">Spec: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
+                    </Stack>
+                    <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >
+
+                        {idx !== 1 ?
+                            <Text variant="xSmall">Stage: {metadata.stage_txt[o.status.stage]}</Text>
+                            :
+                            [
+                                <Text variant="xSmall">Status: {metadata.factory_txt[o.status.factory_status.stage]}</Text>,
+                                <Text variant="xSmall">Wait Time(s): {parseInt(o.status.factory_status.waittime / 1000, 10)}</Text>,
+                                <ProgressIndicator label={`Progress (${o.status.factory_status.progress}%)`} percentComplete={o.status.factory_status.progress / 100} barHeight={5} styles={{ itemName: { lineHeight: "noraml", padding: 0, fontSize: "10px" } }} />
+                            ]
+                        }
+                    </Stack>
+                </Stack>
+            </Stack>
+        )
+    }
 
 
     return (
@@ -212,190 +263,55 @@ export function Inventory({ resource }) {
             </Panel>
 
 
+            <Separator></Separator>
             <h3>Factory Operator</h3>
-            <Stack tokens={{ childrenGap: 5, padding: 10 }}>
+            <Stack tokens={{ childrenGap: 5 /*, padding: 10*/ }}>
                 <MessageBar messageBarType={message.type}>{message.msg}</MessageBar>
 
                 <Stack horizontal tokens={{ childrenGap: 30, padding: 10 }} styles={{ root: { background: 'rgb(225, 228, 232)' } }}>
                     <Stack styles={{ root: { width: '100%' } }}>
+                        <h4>Event Sequence #</h4>
+                        <Text variant="superLarge" >{state.sequence}</Text>
+                        <Text >workitems {state.workitems.length}</Text>
+                    </Stack>
+                    <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Capacity</h4>
-                        <Text variant="superLarge" >0</Text>
-                        <Text >available 40 / busy 300</Text>
+                        <Text variant="superLarge" >{state.capacity_allocated}</Text>
+                        <Text >used {state.capacity_allocated} / available 5</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
-                        <h4>Waiting Factory Orders</h4>
-                        <Text variant="superLarge" >0</Text>
-                        <Text >available 40 / busy 300</Text>
-                    </Stack>
-                    <Stack styles={{ root: { width: '100%' } }}>
-                        <h4>Factory Throughput</h4>
+                        <h4>Workitem Throughput</h4>
                         <Text variant="superLarge" >0</Text>
                         <Text >available 40 / busy 300</Text>
                     </Stack>
 
                 </Stack>
-
 
                 <Stack horizontal tokens={{ childrenGap: 5, padding: 0 }}>
 
-                    <Stack
-                        tokens={{ childrenGap: 8, padding: 8 }}
-                        styles={{
-                            root: {
-                                background: 'rgb(225, 228, 232)',
-                                width: '100%',
-                            }
-                        }} >
-                        <h4>Planned</h4>
-                        {workitems && workitems.filter(i => i.status.stage <= 1).map((i, idx) =>
+                    {[[[0, 1, 2], "Processing"], [[3, 4], "In Factory"], [[5], metadata.stage_txt && metadata.stage_txt[5]], [[6], metadata.stage_txt && metadata.stage_txt[6]]].map(([stages, desc], idx) => {
 
-                            <Card tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
-                                <Card.Item>
-                                    <Text variant="small">Factory</Text>
-                                </Card.Item>
-                                <Card.Section horizontal tokens={{ childrenGap: 3 }}>
-                                    <Card.Section tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#CCCC00" } }}>
-                                        <button style={{ border: "none", padding: "0!important" }} onClick={() => openWorkItem(i.spec._id)}><Text variant="small">Inventory Spec:</Text></button>
-                                        <Text variant="xSmall">Product: {products.Product.find(p => p._id === i.spec.product).heading}</Text>
-                                        <Text variant="xSmall">Qty: {i.spec.qty}</Text>
-                                        <Text variant="xSmall">Status: {i.spec.status}</Text>
-                                    </Card.Section>
-                                    <Card.Section tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#DDDD00" } }}>
-                                        <Text variant="small">Inventory Build Status</Text>
-                                        <Text variant="xSmall">Stage: {i.status.stage === 0 ? 'Draft' : 'Waiting'}</Text>
-                                        <Text variant="xSmall">Wait Time (Seconds) : {i.status.waittime / 1000}</Text>
-                                        <Text variant="xSmall">Progess (%) : {i.status.progress}</Text>
-                                    </Card.Section>
-                                </Card.Section>
-                            </Card>
+                        return (
+                            <Stack
+                                key={idx}
+                                tokens={{ childrenGap: 8, padding: 8 }}
+                                styles={{
+                                    root: {
+                                        background: 'rgb(225, 228, 232)',
+                                        width: '100%',
+                                    }
+                                }} >
+                                <h4>{desc}</h4>
+                                { state.workitems && state.workitems.filter(i => stages.includes(i.status.stage)).map((o, i) => <ItemDisplay key={`${i}-${idx}`} o={o} i={i} idx={idx} metadata={metadata} />)}
+                            </Stack>
+                        )
 
-                        )}
-
-
-                    </Stack>
-
-
-                    <Stack
-                        tokens={{ childrenGap: 8, padding: 8 }}
-                        styles={{
-                            root: {
-                                background: 'rgb(225, 228, 232)',
-                                width: '100%',
-                            }
-                        }} >
-                        <h4>In Progress</h4>
-                        {workitems && workitems.filter(i => i.status.stage === 2).map((i, idx) =>
-                            <Card tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
-                                <Card.Item>
-                                    <Text variant="small">Factory</Text>
-                                </Card.Item>
-                                <Card.Section horizontal tokens={{ childrenGap: 3 }}>
-                                    <Card.Section tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#CCCC00" } }}>
-                                        <Text variant="small">Inventory Spec:</Text>
-                                        <Text variant="xSmall">Product: {products.Product.find(p => p._id === i.spec.product).heading}</Text>
-                                        <Text variant="xSmall">Qty: {i.spec.qty}</Text>
-                                        <Text variant="xSmall">Status: {i.spec.status}</Text>
-                                    </Card.Section>
-                                    <Card.Section tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#DDDD00" } }}>
-                                        <Text variant="small">Inventory Build Status</Text>
-                                        <Text variant="xSmall">Stage: {i.status.stage === 0 ? 'Draft' : 'Waiting'}</Text>
-                                        <Text variant="xSmall">Wait Time (Seconds) : {i.status.waittime / 1000}</Text>
-                                        <Text variant="xSmall">Progess (%) : {i.status.progress}</Text>
-                                    </Card.Section>
-                                </Card.Section>
-                            </Card>
-                        )}
-                    </Stack>
-
-                    <Stack
-                        tokens={{ childrenGap: 8, padding: 8 }}
-                        styles={{
-                            root: {
-                                background: 'rgb(225, 228, 232)',
-                                width: '100%',
-                            }
-                        }} >
-                        <h4>Complete</h4>
-                        {workitems && workitems.filter(i => i.status.stage === 3).map((i, idx) =>
-                            <Card tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
-                                <Card.Item>
-                                    <Text variant="small">Factory</Text>
-                                </Card.Item>
-                                <Card.Section horizontal tokens={{ childrenGap: 3 }}>
-                                    <Card.Section tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#CCCC00" } }}>
-                                        <Text variant="small">Inventory Spec:</Text>
-                                        <Text variant="xSmall">Product: {products.Product.find(p => p._id === i.spec.product).heading}</Text>
-                                        <Text variant="xSmall">Qty: {i.spec.qty}</Text>
-                                        <Text variant="xSmall">Status: {i.spec.status}</Text>
-                                    </Card.Section>
-                                    <Card.Section tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "49%", backgroundColor: "#DDDD00" } }}>
-                                        <Text variant="small">Inventory Build Status</Text>
-                                        <Text variant="xSmall">Stage: {i.status.stage === 0 ? 'Draft' : 'Waiting'}</Text>
-                                        <Text variant="xSmall">Wait Time (Seconds) : {i.status.waittime / 1000}</Text>
-                                        <Text variant="xSmall">Progess (%) : {i.status.progress}</Text>
-                                    </Card.Section>
-                                </Card.Section>
-                            </Card>
-                        )}
-                    </Stack>
-
+                    })
+                    }
 
                 </Stack>
-                <DefaultButton iconProps={{ iconName: 'Add' }} text="Create Intentory" styles={{ root: { width: 180 } }} onClick={openWorkItem} />
             </Stack>
-
-
-            <Separator></Separator>
-
-            <h3>Warehouses</h3>
-            <Stack tokens={{ childrenGap: 5, padding: 10 }}>
-                <Stack horizontal tokens={{ childrenGap: 30, padding: 0 }}>
-                    <Stack styles={{ root: { width: '100%' } }} >
-
-                        <Separator ><Text variant="xLarge">EMEA</Text></Separator>
-
-                        <h4>Inventory</h4>
-
-
-                        <div style={{ width: "100%", height: "300px", backgroundColor: "white", border: "1px dotted black" }}>
-                            {inventory && inventory.filter(i => i.status === "Available").map((i, idx) =>
-                                <div style={{ height: "20px", backgroundColor: "lightGrey" }}>{refstores.Product.find(p => p.key === i.product).text} ({i.qty} {i.status})</div>
-                            )}
-                        </div>
-
-                        <Stack horizontal >
-                            <span style={capacityStyle}>1</span>
-                            <span style={capacityStyle}>2</span>
-                            <span style={capacityStyle}>3</span>
-                        </Stack>
-                        <Text>Capacity (cores)</Text>
-                    </Stack>
-
-                    <Stack styles={{ root: { width: '100%' } }}>
-                        <Separator><Text variant="xLarge">Americas</Text></Separator>
-                        <Text>DC Space (m2)</Text>
-                        <Stack horizontal >
-                            <span style={capacityStyle}>1</span>
-                        </Stack>
-                        <Text>Capacity (cores)</Text>
-                    </Stack>
-
-                    <Stack styles={{ root: { width: '100%' } }}>
-                        <Separator><Text variant="xLarge">Asia</Text></Separator>
-                        <Text>DC Space (m2)</Text>
-                        <Stack >
-                            <span style={capacityStyle}>1</span>
-                        </Stack>
-                        <Text>Capacity (cores)</Text>
-                    </Stack>
-
-                </Stack>
-
-                <h5>Key</h5>
-                <DefaultButton iconProps={{ iconName: 'Add' }} text="Purchase Space" styles={{ root: { width: 200 } }} />
-            </Stack>
-            <Separator></Separator>
-
+            <DefaultButton iconProps={{ iconName: 'Add' }} text="Create Intentory" styles={{ root: { width: 180 } }} onClick={openWorkItem} />
 
         </Stack>
     )

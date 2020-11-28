@@ -68,7 +68,7 @@ async function watch(db: any, collection: string, fn: (doc: any) => void) {
 
 interface FactoryState {
     workitems: Array<WorkItem>;
-    allocated_capacity: number;
+    capacity_allocated: number;
     lastupdated: number;
 }
 
@@ -89,7 +89,7 @@ interface WorkItem_status {
 
     last_update?: number;
     waittime?: number;
-    allocated_capacity?: number;
+    capacity_allocated?: number;
     progress?: number;
 }
 enum WorkItem_Stage { Draft, Waiting, InProgress, Complete }
@@ -98,7 +98,7 @@ enum WorkItem_Stage { Draft, Waiting, InProgress, Complete }
 
 interface FactoryUpdate {
     workitem_updates: Array<WorkItemEvent>;
-    allocated_capacity: number;
+    capacity_allocated: number;
     lastupdated: number;
 }
 
@@ -131,7 +131,7 @@ interface FactoryAction {
                 stage: 
                 starttime: 
                 waittime:
-                allocated_capacity: 
+                capacity_allocated: 
             }
         }]
     Types: 
@@ -142,7 +142,7 @@ interface FactoryAction {
 
 const FACTORY_CAPACITY = 10000
 
-var factory_state = { lastupdated: Date.now(), allocated_capacity: 0, workitems: [] }
+var factory_state = { lastupdated: Date.now(), capacity_allocated: 0, workitems: [] }
 
 function factory_op(action: FactoryAction): Array<WorkItemEvent> {
     const [new_state, changes] = factory_operation(factory_state, action)
@@ -159,9 +159,9 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
 
         case ActionType.Add:
 
-            const new_wi = { status: { stage: action.inventory_spec.status === 'Draft' ? WorkItem_Stage.Draft : WorkItem_Stage.Waiting, allocated_capacity: 0, waittime: 0 }, metadata: { created_time: Date.now() }, spec: action.inventory_spec }
+            const new_wi = { status: { stage: action.inventory_spec.status === 'Draft' ? WorkItem_Stage.Draft : WorkItem_Stage.Waiting, capacity_allocated: 0, waittime: 0 }, metadata: { created_time: Date.now() }, spec: action.inventory_spec }
             return [
-                { lastupdated: nownow, allocated_capacity: state.allocated_capacity, workitems: state.workitems.concat(new_wi) },
+                { lastupdated: nownow, capacity_allocated: state.capacity_allocated, workitems: state.workitems.concat(new_wi) },
                 [{ type: WorkItemEventType.New, workitem: new_wi }]
             ]
 
@@ -169,7 +169,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
 
             const update_wi = { ...state.workitems[action.workitem_idx].status, ...action.inventory_spec }
             return [
-                { lastupdated: nownow, allocated_capacity: state.allocated_capacity, workitems: [...state.workitems.slice(0, action.workitem_idx), update_wi, ...state.workitems.slice(action.workitem_idx + 1, state.workitems.length)] },
+                { lastupdated: nownow, capacity_allocated: state.capacity_allocated, workitems: [...state.workitems.slice(0, action.workitem_idx), update_wi, ...state.workitems.slice(action.workitem_idx + 1, state.workitems.length)] },
                 [{ type: WorkItemEventType.ProgressUpdate, workitem: update_wi }]
             ]
 
@@ -185,13 +185,13 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                         console.log(`${MSEC_TO_COMPLETE_ALL} / 100.0) * ${timeleft}`)
                         const progress = Math.floor(100 - ((timeleft / MSEC_TO_COMPLETE_ALL) * 100.0))
                         // in progress
-                        new_capacity += status.allocated_capacity
+                        new_capacity += status.capacity_allocated
                         update_wi = { status: { ...status, last_update: nownow, progress }, spec, metadata }
 
                         factory_update.push({ type: WorkItemEventType.ProgressUpdate, workitem: update_wi })
                     } else {
                         // finished
-                        update_wi = { status: { ...status, last_update: nownow, progress: 100, stage: WorkItem_Stage.Complete, allocated_capacity: 0 }, spec, metadata }
+                        update_wi = { status: { ...status, last_update: nownow, progress: 100, stage: WorkItem_Stage.Complete, capacity_allocated: 0 }, spec, metadata }
                         factory_update.push({ type: WorkItemEventType.Complete, workitem: update_wi })
                     }
                     return update_wi
@@ -202,7 +202,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
             })
 
             return [
-                { lastupdated: nownow, allocated_capacity: new_capacity, workitems: update_complete },
+                { lastupdated: nownow, capacity_allocated: new_capacity, workitems: update_complete },
                 factory_update
             ]
 
@@ -214,10 +214,10 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                 if (status.stage === WorkItem_Stage.Waiting) {
                     let update_wi: WorkItem
                     const required_wi_capacity = wi.spec.qty
-                    if ((FACTORY_CAPACITY - state.allocated_capacity) + new_capacity >= required_wi_capacity) {
+                    if ((FACTORY_CAPACITY - state.capacity_allocated) + new_capacity >= required_wi_capacity) {
                         // we have capacity, move to inprogress
                         new_capacity += required_wi_capacity
-                        update_wi = { status: { ...status, last_update: nownow, waittime: nownow - wi.status.starttime, progress: 0, starttime: nownow, stage: WorkItem_Stage.InProgress, allocated_capacity: required_wi_capacity }, spec, metadata }
+                        update_wi = { status: { ...status, last_update: nownow, waittime: nownow - wi.status.starttime, progress: 0, starttime: nownow, stage: WorkItem_Stage.InProgress, capacity_allocated: required_wi_capacity }, spec, metadata }
                     } else {
                         // still need to wait
                         update_wi = { status: { ...status, last_update: nownow, waittime: nownow - wi.status.starttime }, spec, metadata }
@@ -229,7 +229,7 @@ function factory_operation(state: FactoryState, action: FactoryAction): [Factory
                 }
             })
             return [
-                { lastupdated: nownow, allocated_capacity: (state.allocated_capacity + new_capacity), workitems: update_waiting },
+                { lastupdated: nownow, capacity_allocated: (state.capacity_allocated + new_capacity), workitems: update_waiting },
                 factory_update
             ]
 
@@ -305,7 +305,7 @@ async function factory_startup() {
             console.log(`Found new required Inventory`)
             const workitem_updates = factory_op({ type: ActionType.Add, inventory_spec: doc })
             if (workitem_updates.length > 0) {
-                ws_server_emit({ lastupdated: factory_state.lastupdated, allocated_capacity: factory_state.allocated_capacity, workitem_updates })
+                ws_server_emit({ lastupdated: factory_state.lastupdated, capacity_allocated: factory_state.capacity_allocated, workitem_updates })
 
             }
         }
@@ -365,7 +365,7 @@ async function factory_startup() {
             workitem_updates = workitem_updates.concat(factory_op({ type: ActionType.Sync, inventory_spec: inventory_record }))
         }
         if (workitem_updates.length > 0) {
-            ws_server_emit({ lastupdated: factory_state.lastupdated, allocated_capacity: factory_state.allocated_capacity, workitem_updates })
+            ws_server_emit({ lastupdated: factory_state.lastupdated, capacity_allocated: factory_state.capacity_allocated, workitem_updates })
 
         }
     }
