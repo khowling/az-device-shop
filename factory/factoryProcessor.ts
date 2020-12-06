@@ -1,54 +1,14 @@
-import { Processor, ProcessorOptions, ProcessingState } from '../ordering/processor'
+import { Processor, ProcessorOptions, ProcessingState } from '../util/processor'
 import {
-    ChangeEvent, StateChange, ChangeEventType,
+    StateChange, ChangeEventType,
     FactoryStateManager,
     FactoryStage, WorkItemStage, WorkItemObject, WorkItemStatus
 } from './factoryState'
 
-
-const StoreDef = {
-    "inventory": {
-        collection: "inventory",
-        status: {
-            Draft: "Draft",
-            Required: "Required",
-            Complete: "Complete"
-        }
-    },
-    "business": { collection: "business" }
-}
-
-
-
-
-/*
-    Update Factory State
-    State is NOT in a database, its a real-time ?streaming? structure, maintained by this process.
-    Pure function with immutable state - no hidden state mutation
-    State:
-        lastupdated: date
-        capacity: factory capacity
-        workitems: [{
-            metadata: used to identify the workitem
-            spec:  desired/required inventory specification 
-            status:  current factory status {
-                stage: 
-                starttime: 
-                waittime:
-                capacity_allocated: 
-            }
-        }]
-    Types: 
-        NewOrUpdatedInventoryRequest (add new inventory requirement from 'wi' to factory)
-        StatusUpdate (update 'workitem_idx' workitem status with wi )
-        Sync
-*/
-
-const FACTORY_CAPACITY = 10000
+export enum OperationLabel { NEWINV = "NEWINV" }
 
 // Perform Action on state
 interface WorkItemAction {
-    // wi actions
     type: ActionType;
     spec?: any;
     doc_id?: string;
@@ -56,35 +16,30 @@ interface WorkItemAction {
 }
 enum ActionType { NewOrUpdatedInventoryRequest, AllocateWINumber, StatusUpdate, CheckFactoryProgress, CheckWaiting, Sync }
 
-
-function factory_operation({ stateManager }, action: WorkItemAction): ChangeEvent {
+function factory_operation({ stateManager }, action: WorkItemAction): [boolean, Array<StateChange>] {
 
     const kind = "Workitem"
+    const next_sequence = stateManager.state.factory_sequence + 1
     switch (action.type) {
 
         case ActionType.NewOrUpdatedInventoryRequest: {
             const { spec } = action
             const new_wi_status: WorkItemStatus = { failed: false, stage: action.spec.status === 'Draft' ? WorkItemStage.Draft : WorkItemStage.WIValidated }
 
-
-            return stateManager.apply_change_events({
-                nextaction: true, statechanges: [{ kind, metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.CREATE }, status: new_wi_status }]
-            })
+            return stateManager.apply_change_events([{ kind, metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.CREATE, next_sequence }, status: new_wi_status }])
         }
         case ActionType.AllocateWINumber: {
             const { spec } = action
-            return stateManager.apply_change_events({
-                nextaction: true, statechanges: [
-                    { kind, metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE }, status: { stage: WorkItemStage.WINumberGenerated, workitem_number: 'WI' + String(stateManager.state.workitem_sequence + 1).padStart(5, '0') } },
-                    { kind: "FactoryUpdate", metadata: { type: ChangeEventType.INC }, status: { sequence_update: 1 } }
-                ]
-            })
+            return stateManager.apply_change_events([
+                { kind, metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE, next_sequence }, status: { stage: WorkItemStage.WINumberGenerated, workitem_number: 'WI' + String(stateManager.state.workitem_sequence + 1).padStart(5, '0') } },
+                { kind: "FactoryUpdate", metadata: { type: ChangeEventType.INC, next_sequence }, status: { sequence_update: 1 } }
+            ])
         }
         case ActionType.StatusUpdate: {
             const { spec, status } = action
             // Needs to be Idempotent
             // TODO: Check if state already has  Number 
-            return stateManager.apply_change_events({ nextaction: true, statechanges: [{ kind, metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE }, status: { failed: false, ...status } }] })
+            return stateManager.apply_change_events([{ kind, metadata: { doc_id: spec._id.toHexString(), type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...status } }])
         }
         case ActionType.CheckFactoryProgress: {
 
@@ -113,7 +68,7 @@ function factory_operation({ stateManager }, action: WorkItemAction): ChangeEven
                     capacity_allocated_update = capacity_allocated_update - status.factory_status.allocated_capacity
                     factory_status_update = { factory_status: { ...status.factory_status, stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 }, stage: WorkItemStage.FactoryComplete }
                 }
-                statechanges.push({ kind, metadata: { doc_id, type: ChangeEventType.UPDATE }, status: { failed: false, ...factory_status_update } })
+                statechanges.push({ kind, metadata: { doc_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
             }
 
             // check wi in factory_status status look for for completion to free up capacity
@@ -134,16 +89,16 @@ function factory_operation({ stateManager }, action: WorkItemAction): ChangeEven
                     }
 
                 }
-                statechanges.push({ kind, metadata: { doc_id, type: ChangeEventType.UPDATE }, status: { failed: false, ...factory_status_update } })
+                statechanges.push({ kind, metadata: { doc_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
             }
 
             if (capacity_allocated_update !== 0) {
-                statechanges.push({ kind: "FactoryUpdate", metadata: { type: ChangeEventType.UPDATE }, status: { allocated_update: capacity_allocated_update } })
+                statechanges.push({ kind: "FactoryUpdate", metadata: { type: ChangeEventType.UPDATE, next_sequence }, status: { allocated_update: capacity_allocated_update } })
             }
             if (statechanges.length > 0) {
-                return stateManager.apply_change_events({ nextaction: null, statechanges: statechanges })
+                return stateManager.apply_change_events(statechanges)
             }
-            return null
+            return [false, null]
         }
 
         /*
@@ -193,61 +148,52 @@ function factory_operation({ stateManager }, action: WorkItemAction): ChangeEven
                     return [state, factory_update]
         */
         default:
-            return null
+            return [false, null]
     }
 }
 
-
-async function lookupSpec(ctx, next) {
-    console.log(`lookupSpec forward, find id=${ctx.trigger.documentKey._id.toHexString()}, continuation=${ctx.trigger._id}`)
-    const find_inv = { _id: ctx.trigger.documentKey._id, partition_key: ctx.tenent.email }
-    // ctx - 'caches' information in the 'session' that will be required for the middleware operations, but not required in the state
-    ctx.spec = await ctx.db.collection(StoreDef["inventory"].collection).findOne(find_inv)
-    // pass in the required data, and perform transational operation on the state
-    await next()
-
-}
-
 async function validateRequest(ctx, next) {
-    console.log(`validateRequest forward, find id=${ctx.trigger.documentKey._id.toHexString()}, continuation=${ctx.trigger._id}`)
+    console.log(`validateRequest forward, find id=${ctx.trigger.documentKey._id.toHexString()}`)
+    const spec = await ctx.db.collection("inventory_spec").findOne({ _id: ctx.trigger.documentKey._id, partition_key: ctx.tenent.email })
     // pass in the required data, and perform transational operation on the state
-    const change = factory_operation(ctx, { type: ActionType.NewOrUpdatedInventoryRequest, spec: ctx.spec })
-    await next(change, { endworkflow: !change.nextaction } as ProcessorOptions)
+    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.NewOrUpdatedInventoryRequest, spec })
+    await next(changes, { endworkflow: containsfailed, update_ctx: { spec } } as ProcessorOptions)
 }
 
 async function generateWINo(ctx, next) {
-    console.log(`generateWINo forward, spec: ${JSON.stringify(ctx.trigger)}`)
-
-    const change = factory_operation(ctx, { type: ActionType.AllocateWINumber, spec: ctx.spec })
-    await next(change, { endworkflow: !change.nextaction } as ProcessorOptions)
+    console.log(`generateWINo forward, spec: ${JSON.stringify(ctx.spec)}`)
+    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.AllocateWINumber, spec: ctx.spec })
+    await next(changes, { endworkflow: containsfailed } as ProcessorOptions)
 }
 
 async function inFactory(ctx, next) {
     console.log(`inFactory forward, trigger: ${JSON.stringify(ctx.trigger)}`)
-    await next(
-        factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.InFactory, factory_status: { starttime: Date.now(), stage: FactoryStage.Waiting, waittime: 0, progress: 0 } } }),
-        { sleep_until: { stage: WorkItemStage.FactoryComplete } } as ProcessorOptions)
+    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.InFactory, factory_status: { starttime: Date.now(), stage: FactoryStage.Waiting, waittime: 0, progress: 0 } } })
+    await next(changes, { endworkflow: containsfailed, sleep_until: { stage: WorkItemStage.FactoryComplete } } as ProcessorOptions)
 }
 
 async function moveToWarehouse(ctx, next) {
-    console.log(`complete forward`)
-    await next(factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }),
-        { sleep_until: { time: Date.now() + 1000 * 60 * 1 /* 3mins */ } } as ProcessorOptions)
+    console.log(`moveToWarehouse forward`)
+    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } })
+    await next(changes, { endworkflow: containsfailed, sleep_until: { time: Date.now() + 1000 * 30 /* 30 secs */ } } as ProcessorOptions)
 }
 
 
 async function complete(ctx, next) {
     console.log(`complete forward`)
-    await next(factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.Complete } }))
+    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.Complete } })
+    await next(changes, { endworkflow: containsfailed }, OperationLabel.NEWINV)
 }
 
 
 // Mongo require
-const { MongoClient, Binary, ObjectID } = require('mongodb'),
-    MongoURL = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev",
-    USE_COSMOS = false
+const { MongoClient, ObjectID } = require('mongodb'),
+    assert = require('assert').strict,
+    MongoURL = process.env.MONGO_DB
 
+import { snapshotState, returnLatestSnapshot, rollForwardState } from '../util/event_hydrate'
 
+var event_seq = 0
 
 async function factory_startup() {
 
@@ -259,7 +205,6 @@ async function factory_startup() {
 
     const factoryProcessor = new Processor({ name: "fctProcv1" })
 
-    factoryProcessor.use(lookupSpec)
     factoryProcessor.use(validateRequest)
     factoryProcessor.use(generateWINo)
     factoryProcessor.use(inFactory)
@@ -268,7 +213,7 @@ async function factory_startup() {
 
 
     const db = factoryProcessor.context.db = client.db()
-    factoryProcessor.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
+    factoryProcessor.context.tenent = await db.collection("business").findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
     console.log(`factory_startup (2):  got context tenent=${factoryProcessor.context.tenent.email}`)
 
     // Setup action on next()
@@ -277,9 +222,34 @@ async function factory_startup() {
     const factoryState = new FactoryStateManager();
     factoryProcessor.context.stateManager = factoryState
 
+    console.log(`factory_startup (3):  get latest checkpoint file, apply to factoryState immediately, and just return processor_snapshop `)
+    const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
+    const { sequence_snapshot, state_snapshot, processor_snapshop } = await returnLatestSnapshot(factoryProcessor.context, chkdir)
 
-    console.log(`factory_startup (3): restore 'factory state', seq=${factoryState.state.sequence}, #orders=${factoryState.state.workitems.length}}`)
 
+    event_seq = sequence_snapshot ? sequence_snapshot : event_seq
+    let lastcheckpoint_seq: number = event_seq
+    factoryState.state = FactoryStateManager.deserializeState(state_snapshot)
+    let factory_processor_state: ProcessingState = Processor.deserializeState(processor_snapshop && processor_snapshop[factoryProcessor.name])
+
+    console.log(`factory_startup (4):  read events since last checkpoint (seq#=${event_seq}), apply to factoryState immediately, and apply to factory_processor_state `)
+    await rollForwardState(factoryProcessor.context, event_seq, ({ state, processor }) => {
+        if (state) {
+            process.stdout.write('s')
+            factoryState.apply_change_events(state)
+        }
+        if (processor) {
+            if (processor[factoryProcessor.name]) {
+                process.stdout.write('p')
+                factory_processor_state = Processor.processor_state_apply(factory_processor_state, processor[factoryProcessor.name])
+            }
+        }
+    })
+    factoryProcessor.state = factory_processor_state
+
+    console.log(`factory_startup (5): restored factory to seq=${factoryState.state.factory_sequence}, #workitems=${factoryState.state.workitems.length}}`)
+
+    console.log(`factory_startup (6): re-start processor state @ seq=${factory_processor_state.processor_sequence}, wi count=${factory_processor_state.proc_map.size}`)
     function checkRestartStage(doc_id, stage) {
         const state = factoryState.state.workitems.find(o => o.doc_id === doc_id)
         if (!state) {
@@ -289,36 +259,50 @@ async function factory_startup() {
         }
         return false
     }
+    factoryProcessor.restartProcessors(checkRestartStage, factory_processor_state)
 
-    //const processorState: ProcessingState = required_processor_state[orderProcessor.name]
-    //console.log(`factory_startup (4): re-applying active processor state, order#=${order_process_state.proc_map.size}`)
-    //factoryProcessor.restartProcessors(checkRestartStage, order_process_state)
-
-    console.log(`factory_startup (4): loop to re-inflate 'sleep_until' processes..`)
+    console.log(`factory_startup (7): loop to re-start 'sleep_until' processes..`)
     setInterval(() => {
         // check to restart 'sleep_until' processes
         factoryProcessor.restartProcessors(checkRestartStage)//, orderProcessor.state, false)
     }, 1000 * 5 /* 5 seconds */)
 
 
-    console.log(`factory_startup (5): starting factory control loop (5 seconds)`)
-    setInterval(function (ctx) {
-        const change = factory_operation(ctx, { type: ActionType.CheckFactoryProgress })
-        if (change) {
-            ws_server_emit(ctx, change)
+
+
+    const LOOP_MINS = 1, LOOP_CHANGES = 100
+    console.log(`factory_startup (8): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
+    // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
+    setInterval(async (ctx, chkdir) => {
+        console.log(`Checkpointing check: seq=${event_seq},  Processing size=${factoryProcessor.state.proc_map.size}`)
+        if (event_seq > lastcheckpoint_seq + LOOP_CHANGES) {
+            console.log(`do checkpoint`)
+            await snapshotState(ctx, chkdir, event_seq,
+                factoryState.serializeState, {
+                [ctx.processor]: factoryProcessor.serializeState()
+            }
+            )
+            lastcheckpoint_seq = event_seq
         }
+    }, 1000 * 60 * LOOP_MINS, factoryProcessor.context, chkdir)
+
+
+
+    console.log(`factory_startup (9): starting factory control loop (5 seconds)`)
+    setInterval(function (ctx) {
+        const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.CheckFactoryProgress })
+        ws_server_emit(ctx, changes, null)
     }, 5000, factoryProcessor.context)
 
-
-    console.log(`factory_startup (6):  start watch for new "inventory" (startAfter=)`)
-
-    // watch for new new Inventory
-    db.collection(StoreDef["inventory"].collection).watch(
+    const cont_token = factory_processor_state.last_trigger
+    assert((factoryState.state.workitems.length === 0) === (!cont_token), 'Error, we we have inflated orders, we need a order continuation token')
+    console.log(`factory_startup (10):  start watch for new "inventory_spec" (startAfter=${cont_token && cont_token._id})`)
+    db.collection("inventory_spec").watch(
         [
-            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": factoryProcessor.context.tenent.email }, { "fullDocument.status": StoreDef["inventory"].status.Required }] } }
+            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": factoryProcessor.context.tenent.email }, { "fullDocument.status": 'Required' }] } }
             , { $project: { "ns": 1, "documentKey": 1, "fullDocument.status": 1, "fullDocument.partition_key": 1 } }
         ],
-        { fullDocument: "updateLookup" }
+        { fullDocument: "updateLookup", ...(cont_token && { startAfter: cont_token._id }) }
     ).on('change', factoryProcessor.callback())
 
 
@@ -332,18 +316,24 @@ async function factory_startup() {
 //  ---- Factory Monitoring Websocket & API
 type WS_ServerClientType = Record<string, any>;
 const ws_server_clients: WS_ServerClientType = new Map()
-function ws_server_emit(ctx, change: ChangeEvent) {
-    //if (factory_updates && factory_updates.length > 0) {
+function ws_server_emit(ctx, state: Array<StateChange>, processor: any, label?: string) {
 
-    //const res = ctx.db.collection("factory_events").insertOne({ partition_key: ctx.tenent.email, ...change })
+    if (state || processor) {
+        const res = ctx.db.collection("factory_events").insertOne({
+            sequence: event_seq++,
+            partition_key: ctx.tenent.email,
+            ...(label && { label }),
+            ...(state && { state }),
+            ...(processor && { processor })
+        })
 
-    console.log(`sending factory updates to ${ws_server_clients.size} clients`)
-    for (let [key, ws] of ws_server_clients.entries()) {
-        //console.log(`${key}`)
-        const { processor, ...changewoprocessor } = change
-        ws.send(JSON.stringify({ type: "events", change: changewoprocessor }))
+        console.log(`sending state updates to ${ws_server_clients.size} clients`)
+        if (state) {
+            for (let [key, ws] of ws_server_clients.entries()) {
+                ws.send(JSON.stringify({ type: "events", state }))
+            }
+        }
     }
-    //}
 }
 
 function ws_server_startup({ stateManager }) {

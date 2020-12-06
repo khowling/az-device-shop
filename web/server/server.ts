@@ -77,7 +77,7 @@ const StoreDef = {
     },
     "inventory": {
         owner: true,
-        collection: "inventory",
+        collection: "inventory_spec",
         schema: Joi.object({
             'status': Joi.string().valid('Draft', 'Required', 'InFactory', 'Cancel', 'Available').required(),
             'product': Joi.string().required(),
@@ -93,7 +93,7 @@ const StoreDef = {
             ActiveCart: 10,
             NewOrder: 30
         },
-        collection: "orders",
+        collection: "orders_spec",
         schema: Joi.object({
             'checkout_date': Joi.number(),
             'status': Joi.number().required(),

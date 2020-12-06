@@ -95,34 +95,38 @@ function stateReducer(current, action) {
             // };
             // status: OrderStatus | InventoryStatus
 
-            const { statechanges, sequence } = action.change
-            let ret_state = { ...current.state, sequence }
+            const statechanges = action.state
+            let newstate = { ...current.state, factory_sequence: current.state.factory_sequence + 1 }
 
             for (let i = 0; i < statechanges.length; i++) {
                 const { kind, metadata, status } = statechanges[i]
+
+                if (!(metadata.next_sequence && metadata.next_sequence === newstate.factory_sequence)) {
+                    throw new Error(`Cannot apply change sequence ${metadata.next_sequence}, expecting ${newstate.factory_sequence}`)
+                }
 
                 switch (kind) {
                     case 'Workitem': {
                         const { doc_id, type } = metadata
                         if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
-                            const order_idx = ret_state.workitems.findIndex(o => o.doc_id === doc_id)
+                            const order_idx = newstate.workitems.findIndex(o => o.doc_id === doc_id)
                             if (order_idx >= 0) {
-                                const existing_order = ret_state.workitems[order_idx]
-                                ret_state.workitems = imm_splice(ret_state.workitems, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
+                                const existing_order = newstate.workitems[order_idx]
+                                newstate.workitems = imm_splice(newstate.workitems, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
                             } else {
                                 console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
                             }
                         } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
-                            ret_state.workitems = ret_state.workitems.concat({ doc_id, status })
+                            newstate.workitems = newstate.workitems.concat({ doc_id, status })
                         }
                         break
                     }
                     case "FactoryUpdate": {
                         const { type } = metadata
                         if (status.sequence_update && type === 3 /*ChangeEventType.INC*/) {
-                            ret_state.workitem_sequence = ret_state.workitem_sequence + status.sequence_update
+                            newstate.workitem_sequence = newstate.workitem_sequence + status.sequence_update
                         } else if (status.allocated_update && type === 1 /*ChangeEventType.UPDATE*/) { // // got new Onhand value (replace)
-                            ret_state.capacity_allocated = ret_state.capacity_allocated + status.allocated_update
+                            newstate.capacity_allocated = newstate.capacity_allocated + status.allocated_update
                         } else {
                             throw new Error(`apply_change_events, only support updates on ${kind}`)
                         }
@@ -133,7 +137,7 @@ function stateReducer(current, action) {
                 }
             }
 
-            return { state: ret_state, metadata: current.metadata }
+            return { state: newstate, metadata: current.metadata }
         case 'closed':
             // socket closed, reset state
             return { state: { sequence: 0, capacity_allocated: 0, workitems: [] }, metadata: {} }
@@ -311,7 +315,7 @@ export function Inventory({ resource }) {
 
                 </Stack>
             </Stack>
-            <DefaultButton iconProps={{ iconName: 'Add' }} text="Create Intentory" styles={{ root: { width: 180 } }} onClick={openWorkItem} />
+            <DefaultButton iconProps={{ iconName: 'Add' }} text="Create Intentory" styles={{ root: { width: 180 } }} onClick={() => openWorkItem()} />
 
         </Stack>
     )
