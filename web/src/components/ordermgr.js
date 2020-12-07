@@ -12,13 +12,6 @@ function stateReducer(current, action) {
 
     switch (action.type) {
         case 'snapshot':
-            // full ordering state
-            // sequence: number;
-            //  inventory: [{metadata:{}, status:{}}];
-            //  orders: [{metadata:{}, status:{}}];
-            //  picking_capacity: number;
-            //  lastupdated: number;
-
             return { state: action.state, metadata: action.metadata }
         case 'events':
             // array of changes:
@@ -30,47 +23,50 @@ function stateReducer(current, action) {
             // };
             // status: OrderStatus | InventoryStatus
 
-            const { statechanges, sequence } = action.change
-            let ret_state = { ...current.state, sequence }
+            const statechanges = action.change
+            let newstate = { ...current.state, ordering_sequence: current.state.ordering_sequence + 1 }
 
             for (let i = 0; i < statechanges.length; i++) {
                 const { kind, metadata, status } = statechanges[i]
 
+                if (!(metadata.next_sequence && metadata.next_sequence === newstate.ordering_sequence)) {
+                    throw new Error(`Cannot apply change sequence ${metadata.next_sequence}, expecting ${newstate.ordering_sequence}`)
+                }
 
                 switch (kind) {
                     case 'Order': {
                         const { doc_id, type } = metadata
                         if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
-                            const order_idx = ret_state.orders.findIndex(o => o.doc_id === doc_id)
+                            const order_idx = newstate.orders.findIndex(o => o.doc_id === doc_id)
                             if (order_idx >= 0) {
-                                const existing_order = ret_state.orders[order_idx]
-                                ret_state.orders = imm_splice(ret_state.orders, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
+                                const existing_order = newstate.orders[order_idx]
+                                newstate.orders = imm_splice(newstate.orders, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
                             } else {
                                 console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
                             }
                         } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
-                            ret_state.orders = ret_state.orders.concat({ doc_id, status })
+                            newstate.orders = newstate.orders.concat({ doc_id, status })
                         }
                         break
                     }
                     case 'Inventory': {
                         const { doc_id, type } = metadata
-                        const existing_idx = ret_state.inventory.findIndex(i => i.doc_id === doc_id)
+                        const existing_idx = newstate.inventory.findIndex(i => i.doc_id === doc_id)
 
                         if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
                             if (existing_idx < 0) {
                                 console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
                             } else {
                                 // got new Onhand value (replace)
-                                ret_state.inventory = imm_splice(ret_state.inventory, existing_idx, { doc_id, status })
+                                newstate.inventory = imm_splice(newstate.inventory, existing_idx, { doc_id, status })
                             }
                         } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
                             // got new Inventory onhand (additive)
                             if (existing_idx < 0) {
-                                ret_state.inventory = ret_state.inventory.concat({ doc_id, status })
+                                newstate.inventory = newstate.inventory.concat({ doc_id, status })
                             } else {
                                 console.log(`got new inventory existing_idx=${existing_idx}`)
-                                ret_state.inventory = imm_splice(ret_state.inventory, existing_idx, { doc_id, status: { onhand: (ret_state.inventory[existing_idx].status.onhand + status.onhand) } })
+                                newstate.inventory = imm_splice(newstate.inventory, existing_idx, { doc_id, status: { onhand: (newstate.inventory[existing_idx].status.onhand + status.onhand) } })
                             }
                         }
                         break
@@ -79,9 +75,9 @@ function stateReducer(current, action) {
                         const { type } = metadata
 
                         if (status.sequence_update && type === 3 /*ChangeEventType.INC*/) {
-                            ret_state.order_sequence = ret_state.order_sequence + status.sequence_update
+                            newstate.order_sequence = newstate.order_sequence + status.sequence_update
                         } else if (status.allocated_update && type === 1 /*ChangeEventType.UPDATE*/) { // // got new Onhand value (replace)
-                            ret_state.picking_allocated = ret_state.picking_allocated + status.allocated_update
+                            newstate.picking_allocated = newstate.picking_allocated + status.allocated_update
                         } else {
                             throw new Error(`apply_change_events, Unsupported OrderingUpdate`)
                         }
@@ -91,10 +87,10 @@ function stateReducer(current, action) {
                 }
             }
 
-            return { state: ret_state, metadata: current.metadata }
+            return { state: newstate, metadata: current.metadata }
         case 'closed':
             // socket closed, reset state
-            return { state: { sequence: 0, inventory: [], picking_allocated: 0, orders: [] }, metadata: {} }
+            return { state: { ordering_sequence: 0, lastupdated: null, picking_allocated: 0, inventory: [], order_sequence: 0, orders: [] }, metadata: {} }
         default:
             throw new Error(`unknown action type ${action.type}`);
     }
@@ -108,7 +104,7 @@ export function OrderMgr({ resource }) {
     //const inventory = result.data
     const { products } = result.refstores
 
-    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: { sequence: 0, inventory: [], orders: [] }, metadata: {} })
+    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: { ordering_sequence: 0, lastupdated: null, picking_allocated: 0, inventory: [], order_sequence: 0, orders: [] }, metadata: {} })
 
     const [message, setMessage] = React.useState({ type: MessageBarType.info, msg: "Not Connected to Order Controller" })
 
@@ -201,7 +197,7 @@ export function OrderMgr({ resource }) {
                 <Stack horizontal tokens={{ childrenGap: 30, padding: 10 }} styles={{ root: { background: 'rgb(225, 228, 232)' } }}>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Event Sequence #</h4>
-                        <Text variant="superLarge" >{state.sequence}</Text>
+                        <Text variant="superLarge" >{state.ordering_sequence}</Text>
                         <Text >tracked skus {state.inventory.length} / orders {state.orders.length}</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>

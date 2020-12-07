@@ -46,7 +46,7 @@ function ordering_operation({ stateManager }, action: OrderingAction): [boolean,
     switch (action.type) {
 
         case ActionType.NewInventory: {
-            const { product, qty } = action.spec
+            const { product, qty, warehouse } = action.spec
             return stateManager.apply_change_events([{ kind: "Inventory", metadata: { doc_id: product, type: ChangeEventType.CREATE, next_sequence }, status: { onhand: qty } }])
         }
         case ActionType.NewOrUpdatedOrder: {
@@ -266,7 +266,7 @@ async function orderprocessing_startup() {
     let last_inventory_trigger = processor_snapshop ? processor_snapshop[orderProcessor.name] : null
 
     console.log(`orderprocessing_startup (4):   read events since last checkpoint (seq#=${event_seq}), apply to factoryState immediately, and apply to factory_process_state `)
-    await rollForwardState(orderProcessor.context, event_seq, ({ state, processor }) => {
+    event_seq = await rollForwardState(orderProcessor.context, "order_events", event_seq, ({ state, processor }) => {
         if (state) {
             process.stdout.write('s')
             orderState.apply_change_events(state)
@@ -275,7 +275,8 @@ async function orderprocessing_startup() {
             if (processor[orderProcessor.name]) {
                 process.stdout.write('p')
                 order_processor_state = Processor.processor_state_apply(order_processor_state, processor[orderProcessor.name])
-            } else if (processor["inventory"]) {
+            }
+            if (processor["inventory"]) {
                 process.stdout.write('i')
                 last_inventory_trigger = processor["inventory"]
             }
@@ -306,7 +307,7 @@ async function orderprocessing_startup() {
 
 
 
-    const LOOP_MINS = 1, LOOP_CHANGES = 100
+    const LOOP_MINS = 10, LOOP_CHANGES = 100
     console.log(`orderprocessing_startup (8): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
     setInterval(async (ctx, chkdir) => {
@@ -346,32 +347,24 @@ async function orderprocessing_startup() {
     assert((orderState.state.inventory.size === 0) === (!cont_inv_token), 'Error, we we have inflated inventry, we need a inventory continuation token')
     console.log(`orderprocessing_startup (11):  start watch for new "factory_events" (startAfter=${cont_inv_token && cont_inv_token._id})`)
     const inventoryAggregationPipeline = [
+
+    ]
+    var inventoryStreamWatcher = db.collection("factory_events").watch([
         { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.label": "NEWINV" }] } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
-    ]
-    var inventoryStreamWatcher = db.collection("factory_events").watch(
-        inventoryAggregationPipeline,
+    ],
         { fullDocument: "updateLookup", ...(cont_inv_token && { startAfter: cont_inv_token._id }) }
     )
     inventoryStreamWatcher.on('change', data => {
         //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
-        console.log(`inventoryStreamWatcher : ${JSON.stringify(data.fullDocument)}`)
-        // spec 
-        // _id
-        // qty
-        // status
-        // category
-        // product 
-        // warehouse
-
-        const [containsfailed, changes] = ordering_operation(orderProcessor.context, { type: ActionType.NewInventory, spec: data.fullDocument })
-        //const processor: ProcessorInfo = {
-        //    processor: ProcessorType.INVENTORY,
-        //    trigger_full: data
-        //}
-
+        console.log(`inventoryStreamWatcher got complete Inventory labeld event`)
+        for (const { status } of data.fullDocument.state) {
+            if (status.complete_item) { // { "qty" : 180, "product" : "5f5253167403c56057f5bb0e", "warehouse" : "emea" }
+                const [containsfailed, changes] = ordering_operation(orderProcessor.context, { type: ActionType.NewInventory, spec: status.complete_item })
+                ws_server_emit(orderProcessor.context, changes, { "inventory": data })
+            }
+        }
         last_inventory_trigger = data
-        ws_server_emit(orderProcessor.context, changes, { "inventory": data })
     })
 
     return orderProcessor.context
@@ -384,7 +377,7 @@ function ws_server_emit(ctx, state: Array<StateChange>, processor: any, label?: 
 
     if (state || processor) {
         const res = ctx.db.collection("order_events").insertOne({
-            sequence: event_seq++,
+            sequence: ++event_seq,
             partition_key: ctx.tenent.email,
             ...(label && { label }),
             ...(state && { state }),

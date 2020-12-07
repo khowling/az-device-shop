@@ -181,7 +181,7 @@ async function moveToWarehouse(ctx, next) {
 
 async function complete(ctx, next) {
     console.log(`complete forward`)
-    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.Complete } })
+    const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.Complete, complete_item: { qty: ctx.spec.qty, product: ctx.spec.product, warehouse: ctx.spec.warehouse } } })
     await next(changes, { endworkflow: containsfailed }, OperationLabel.NEWINV)
 }
 
@@ -233,7 +233,7 @@ async function factory_startup() {
     let factory_processor_state: ProcessingState = Processor.deserializeState(processor_snapshop && processor_snapshop[factoryProcessor.name])
 
     console.log(`factory_startup (4):  read events since last checkpoint (seq#=${event_seq}), apply to factoryState immediately, and apply to factory_processor_state `)
-    await rollForwardState(factoryProcessor.context, event_seq, ({ state, processor }) => {
+    event_seq = await rollForwardState(factoryProcessor.context, "factory_events", event_seq, ({ state, processor }) => {
         if (state) {
             process.stdout.write('s')
             factoryState.apply_change_events(state)
@@ -270,7 +270,7 @@ async function factory_startup() {
 
 
 
-    const LOOP_MINS = 1, LOOP_CHANGES = 100
+    const LOOP_MINS = 10, LOOP_CHANGES = 100
     console.log(`factory_startup (8): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
     setInterval(async (ctx, chkdir) => {
@@ -320,7 +320,7 @@ function ws_server_emit(ctx, state: Array<StateChange>, processor: any, label?: 
 
     if (state || processor) {
         const res = ctx.db.collection("factory_events").insertOne({
-            sequence: event_seq++,
+            sequence: ++event_seq,
             partition_key: ctx.tenent.email,
             ...(label && { label }),
             ...(state && { state }),

@@ -26,6 +26,11 @@ export interface WorkItemStatus extends DocStatus {
         allocated_capacity?: number;
         progress?: number;
     }
+    complete_item?: {
+        qty: number;
+        product: string;
+        warehouse: string;
+    }
 }
 export enum WorkItemStage { Draft, WIValidated, WINumberGenerated, InFactory, FactoryComplete, MoveToWarehouse, Complete }
 export enum FactoryStage { Waiting, Building, Complete }

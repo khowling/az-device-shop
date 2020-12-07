@@ -83,6 +83,7 @@ export class Processor extends Emitter {
             const { update_ctx, ...other_options } = options || {}
             const current_val: ProcessorObject = newstate.proc_map.get(context_id) || {}
             newstate.proc_map.set(context_id, { ...current_val, function_idx, ...(other_options && { options: other_options as ProcessorOptions }), context_object: { ...current_val.context_object, ...update_ctx } })
+            if (update_ctx && update_ctx.trigger) newstate.last_trigger = update_ctx.trigger
         }
         return newstate
     }

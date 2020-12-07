@@ -1,12 +1,13 @@
 const assert = require('assert')
 const fs = require('fs')
 
-export async function rollForwardState(ctx, from_seq: number, applyfn): Promise<any> {
+export async function rollForwardState(ctx, collection_event: string, from_seq: number, applyfn): Promise<number> {
 
+    let processed_seq = from_seq
     console.log(`rollForwardState: reading 'factory_events' from database from seq#=${from_seq}`)
 
-    await ctx.db.collection("factory_events").createIndex({ sequence: 1 })
-    const inflate_events = await ctx.db.collection("factory_events").aggregate(
+    await ctx.db.collection(collection_event).createIndex({ sequence: 1 })
+    const inflate_events = await ctx.db.collection(collection_event).aggregate(
         [
             { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: from_seq } }] } },
             { $sort: { "sequence": 1 } }
@@ -19,20 +20,13 @@ export async function rollForwardState(ctx, from_seq: number, applyfn): Promise<
         // HOW??? TODO
         for (let i = 0; i < inflate_events.length; i++) {
 
-            const { _id, partition_key, ...eventdata } = inflate_events[i]
+            const { _id, sequence, partition_key, ...eventdata } = inflate_events[i]
+            assert(sequence === processed_seq + 1, `rollForwardState: expected seq=${processed_seq + 1}, got ${sequence}`)
             applyfn(eventdata)
-            //this.apply_change_events(change)
-
-            //if (processor) {
-            //    ret_processor.push(processor)
-            //} else {
-            //    // its find to have a workitem state change that is not controlled by the processor (ie picking)
-            //    //throw new Error(`Error re-hydrating event record seq#=${change.sequence}, no processor info. Exiting...`)
-            //}
+            processed_seq = sequence
         }
-        //return ret_processor
     }
-    return null
+    return processed_seq
 }
 
 

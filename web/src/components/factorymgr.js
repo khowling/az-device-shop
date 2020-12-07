@@ -140,7 +140,7 @@ function stateReducer(current, action) {
             return { state: newstate, metadata: current.metadata }
         case 'closed':
             // socket closed, reset state
-            return { state: { sequence: 0, capacity_allocated: 0, workitems: [] }, metadata: {} }
+            return { state: { factory_sequence: 0, lastupdated: null, capacity_allocated: 0, workitem_sequence: 0, workitems: [] }, metadata: {} }
         default:
             throw new Error(`unknown action type ${action.type}`);
     }
@@ -160,7 +160,7 @@ export function Inventory({ resource }) {
             Product: products.Product.map(c => { return { key: c._id, text: c.heading, category: c.category } })
         }
 
-    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: { sequence: 0, capacity_allocated: 0, workitems: [] }, metadata: {} })
+    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: { factory_sequence: 0, lastupdated: null, capacity_allocated: 0, workitem_sequence: 0, workitems: [] }, metadata: {} })
 
     const [panel, setPanel] = React.useState({ open: false })
     const [message, setMessage] = React.useState({ type: MessageBarType.info, msg: "Not Connected to Factory Controller" })
@@ -275,7 +275,7 @@ export function Inventory({ resource }) {
                 <Stack horizontal tokens={{ childrenGap: 30, padding: 10 }} styles={{ root: { background: 'rgb(225, 228, 232)' } }}>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Event Sequence #</h4>
-                        <Text variant="superLarge" >{state.sequence}</Text>
+                        <Text variant="superLarge" >{state.factory_sequence}</Text>
                         <Text >workitems {state.workitems.length}</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
