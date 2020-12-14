@@ -88,11 +88,17 @@ export class Processor extends Emitter {
         return newstate
     }
 
-    restartProcessors(checkSleepStage/*state: OrderingState */, required: ProcessingState = null) {
-        const init_boot = required !== null
+    restartProcessors(checkSleepStage/*state: OrderingState */, required_state: ProcessingState = null) {
 
-        // Restart required_processor_state
-        for (let [context_id, p] of init_boot ? required.proc_map : this.state.proc_map) {
+        let restartall = false
+        if (required_state) {
+            restartall = true
+            this.state = required_state
+        }
+        //const init_boot = required_state !== null
+
+        // Restart required_state_processor_state
+        for (let [context_id, p] of this.state.proc_map) {
 
             if (p.options && p.options.sleep_until) {
 
@@ -106,7 +112,7 @@ export class Processor extends Emitter {
                     continue /* dont restart */
                 }
 
-            } else if (!init_boot) {
+            } else if (!restartall) {
                 continue /* dont restart */
             }
             console.log(`Re-inflating processor for context_id=${context_id}, fnidx=${p.function_idx}, sleep_unit=${JSON.stringify(p.options.sleep_until)}`)
@@ -127,7 +133,7 @@ export class Processor extends Emitter {
 
         function compose(that, middleware) {
 
-            return function (context, start_idx: number, update_opts: any, next) {
+            return function (context, start_idx: number, update_opts: any, restart: boolean, next) {
 
                 console.log(`Processor: callback compose return function start_idx=${start_idx} next=${next}`)
                 // last called middleware #
@@ -139,7 +145,7 @@ export class Processor extends Emitter {
                     console.log(`Processor: dispatch called i=${i}, start_idx=${start_idx}, index=${index} (middleware.length=${middleware.length})`)
                     if (i <= index) return Promise.reject(new Error('next() called multiple times'))
 
-                    const restart = index === -1 && start_idx > 0
+                    const from_restart = index === -1 && restart
 
                     index = i
                     let fn = middleware[i]
@@ -153,7 +159,7 @@ export class Processor extends Emitter {
                     }
 
                     // Add processor details for processor hydration & call 'eventfn' to store in log
-                    if ((!restart) && context.eventfn && (state_changes || options)) {
+                    if ((!from_restart) && context.eventfn && (state_changes || options)) {
                         const p: ProcessorChange = {
                             next_sequence: that.state.processor_sequence + 1,
                             context_id: context.trigger.documentKey._id.toHexString(),
@@ -198,18 +204,18 @@ export class Processor extends Emitter {
             const ctx = Object.create(this.context);
 
             if (doc._restartProcessors) {
-                assert(doc.context_object && doc.context_object.trigger, "Processor, callback, handleRequest : Restart requested, but no context trigger")
-                assert(doc.function_idx && doc.function_idx, "Processor, callback, handleRequest : Restart requested, but no function_idx")
+                assert(doc.hasOwnProperty('context_object') && doc.context_object.hasOwnProperty('trigger'), "Processor, callback, handleRequest : Restart requested, but no context trigger")
+                assert(doc.hasOwnProperty('function_idx') && doc.function_idx >= 0, "Processor, callback, handleRequest : Restart requested, but no function_idx")
                 assert(!doc.complete, "Processor, callback, handleRequest : Restart requested on complete process")
 
                 console.log(`Processor, callback, handleRequest(RESTART from _idx=${doc.function_idx}), create new ctx and call  Processor.handleRequest`)
 
-                for (let k of Object.keys(doc.context_object)) {
-                    ctx[k] = doc.context_object[k]
-                }
-                return this.handleRequest(ctx, fn, doc.function_idx, doc.options as ProcessorOptions)
+                //for (let k of Object.keys(doc.context_object)) {
+                //    ctx[k] = doc.context_object[k]
+                //}
+                return this.handleRequest(ctx, fn, doc.function_idx, { ...doc.options, update_ctx: doc.context_object } as ProcessorOptions, doc._restartProcessors)
             } else {
-                return this.handleRequest(ctx, fn, 0, { endworkflow: false, update_ctx: { trigger: doc } } as ProcessorOptions);
+                return this.handleRequest(ctx, fn, 0, { endworkflow: false, update_ctx: { trigger: doc } } as ProcessorOptions, false);
             }
         }
 
@@ -217,11 +223,11 @@ export class Processor extends Emitter {
         return handleRequest
     }
 
-    handleRequest(ctx, fnMiddleware, restart_idx, update_opts) {
-        console.log(`Processor.handlerequest(ctx, fnMiddleware, restart_idx=${restart_idx}),  return  fnMiddleware(ctx, restart_idx) `)
+    handleRequest(ctx, fnMiddleware, start_fn_idx, update_opts, restart) {
+        console.log(`Processor.handlerequest(ctx, fnMiddleware, start_fn_idx=${start_fn_idx}),  return  fnMiddleware(ctx, start_fn_idx) `)
         const handleResponse = () => console.log(`done`)
         const onerror = err => console.error(`Any error in the pipeline ends here: ${err}`)
-        return fnMiddleware(ctx, restart_idx, update_opts).then(handleResponse).catch(onerror)
+        return fnMiddleware(ctx, start_fn_idx, update_opts, restart).then(handleResponse).catch(onerror)
     }
 
 }

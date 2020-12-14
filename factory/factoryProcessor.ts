@@ -233,7 +233,7 @@ async function factory_startup() {
     let factory_processor_state: ProcessingState = Processor.deserializeState(processor_snapshop && processor_snapshop[factoryProcessor.name])
 
     console.log(`factory_startup (4):  read events since last checkpoint (seq#=${event_seq}), apply to factoryState immediately, and apply to factory_processor_state `)
-    event_seq = await rollForwardState(factoryProcessor.context, "factory_events", event_seq, ({ state, processor }) => {
+    event_seq = await rollForwardState(factoryProcessor.context, "factory_events", event_seq, null, ({ state, processor }) => {
         if (state) {
             process.stdout.write('s')
             factoryState.apply_change_events(state)
@@ -245,7 +245,7 @@ async function factory_startup() {
             }
         }
     })
-    factoryProcessor.state = factory_processor_state
+    //factoryProcessor.state = factory_processor_state
 
     console.log(`factory_startup (5): restored factory to seq=${factoryState.state.factory_sequence}, #workitems=${factoryState.state.workitems.length}}`)
 
@@ -295,7 +295,7 @@ async function factory_startup() {
     }, 5000, factoryProcessor.context)
 
     const cont_token = factory_processor_state.last_trigger
-    assert((factoryState.state.workitems.length === 0) === (!cont_token), 'Error, we we have inflated orders, we need a order continuation token')
+    assert((factory_processor_state.processor_sequence === 0) === (!cont_token), 'Error, we we have inflated orders, we need a order continuation token')
     console.log(`factory_startup (10):  start watch for new "inventory_spec" (startAfter=${cont_token && cont_token._id})`)
     db.collection("inventory_spec").watch(
         [
@@ -327,10 +327,12 @@ function ws_server_emit(ctx, state: Array<StateChange>, processor: any, label?: 
             ...(processor && { processor })
         })
 
-        console.log(`sending state updates to ${ws_server_clients.size} clients`)
         if (state) {
-            for (let [key, ws] of ws_server_clients.entries()) {
-                ws.send(JSON.stringify({ type: "events", state }))
+            console.log(`sending state updates to ${ws_server_clients.size} clients`)
+            if (state) {
+                for (let [key, ws] of ws_server_clients.entries()) {
+                    ws.send(JSON.stringify({ type: "events", state }))
+                }
             }
         }
     }

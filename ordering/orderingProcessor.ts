@@ -6,20 +6,7 @@ import {
 } from './orderingState'
 
 const StoreDef = {
-    "orders": {
-        collection: "orders",
-        status: {
-            InactiveCart: 5,
-            ActiveCart: 10,
-            NewOrUpdatedOrder: 30
-        }
-    },
-    "inventory": { collection: "inventory" },
-    "business": { collection: "business" },
-    "order_events": {
-        description: "collection for immutable event log from orderprocessor, when transient state is derrived from material views",
-        collection: "order_events"
-    }
+    "business": { collection: "business" }
 }
 
 
@@ -180,7 +167,7 @@ function ordering_operation({ stateManager }, action: OrderingAction): [boolean,
 
 async function validateOrder(ctx, next) {
     console.log(`validateOrder forward, find order id=${ctx.trigger.documentKey._id.toHexString()}`)
-    const spec = await ctx.db.collection(StoreDef["orders"].collection).findOne({ _id: ctx.trigger.documentKey._id, partition_key: ctx.tenent.email })
+    const spec = await ctx.db.collection('orders_spec').findOne({ _id: ctx.trigger.documentKey._id, partition_key: ctx.tenent.email })
 
     const [containsfailed, changes] = ordering_operation(ctx, { type: ActionType.NewOrUpdatedOrder, spec })
     await next(changes, { endworkflow: containsfailed, update_ctx: { spec } } as ProcessorOptions)
@@ -255,7 +242,7 @@ async function orderprocessing_startup() {
     const orderState = new OrderStateManager();
     orderProcessor.context.stateManager = orderState
 
-    console.log(`orderprocessing_startup (3):  get latest checkpoint file,apply to factoryState immediately, and just return processor_snapshop  `)
+    console.log(`orderprocessing_startup (3):  get latest checkpoint file, return event sequence #, state and processor snapshots`)
     const chkdir = `${process.env.FILEPATH || '.'}/order_checkpoint`
     const { sequence_snapshot, state_snapshot, processor_snapshop } = await returnLatestSnapshot(orderProcessor.context, chkdir)
 
@@ -265,8 +252,8 @@ async function orderprocessing_startup() {
     let order_processor_state: ProcessingState = Processor.deserializeState(processor_snapshop && processor_snapshop[orderProcessor.name])
     let last_inventory_trigger = processor_snapshop ? processor_snapshop[orderProcessor.name] : null
 
-    console.log(`orderprocessing_startup (4):   read events since last checkpoint (seq#=${event_seq}), apply to factoryState immediately, and apply to factory_process_state `)
-    event_seq = await rollForwardState(orderProcessor.context, "order_events", event_seq, ({ state, processor }) => {
+    console.log(`orderprocessing_startup (4): read events since last checkpoint (seq#=${event_seq}), apply to orderState and order_processor_state`)
+    event_seq = await rollForwardState(orderProcessor.context, "order_events", event_seq, null, ({ state, processor }) => {
         if (state) {
             process.stdout.write('s')
             orderState.apply_change_events(state)
@@ -282,10 +269,7 @@ async function orderprocessing_startup() {
             }
         }
     })
-    orderProcessor.state = order_processor_state
-
     console.log(`orderprocessing_startup (5): restored 'ordering state' to seq=${orderState.state.ordering_sequence}, #orders=${orderState.state.orders.length}, #inv=${orderState.state.inventory.size}`)
-
 
     console.log(`orderprocessing_startup (6): re-start processor state, order count=${order_processor_state.proc_map.size}`)
     function checkRestartStage(doc_id, stage) {
@@ -331,9 +315,60 @@ async function orderprocessing_startup() {
         ws_server_emit(ctx, changes, null)
     }, 5000, orderProcessor.context)
 
+
+    //const cont_inv_token = last_inventory_trigger
+    assert((orderState.state.inventory.size === 0) === (!last_inventory_trigger), 'Error, we we have inflated inventry, we need a inventory continuation token')
+
+    // If we are starting from a empty trigger, or a sequence trigger
+    if ((!last_inventory_trigger) || last_inventory_trigger.factory_events_sequence) {
+        console.log(`orderprocessing_startup (10):  start watch "factory_events":  NO last_inventory_trigger watch_resume, so read all existing events from seq#=${last_inventory_trigger ? last_inventory_trigger.factory_events_sequence : 0} before starting new watch`)
+
+        // get db time, so we know where to continue the watch
+        const admin = db.admin()
+        const { lastStableCheckpointTimestamp } = await admin.replSetGetStatus()
+
+        var factory_events_seq = await rollForwardState(orderProcessor.context, "factory_events", last_inventory_trigger ? last_inventory_trigger.factory_events_sequence : 0, "NEWINV", ({ sequence, state, processor }) => {
+            if (state) {
+                for (const { status } of state) {
+                    if (status.complete_item) { // { "qty" : 180, "product" : "5f5253167403c56057f5bb0e", "warehouse" : "emea" }
+                        last_inventory_trigger = { factory_events_sequence: sequence }
+                        const [containsfailed, changes] = ordering_operation(orderProcessor.context, { type: ActionType.NewInventory, spec: status.complete_item })
+                        ws_server_emit(orderProcessor.context, changes, { "inventory": last_inventory_trigger })
+                    }
+                }
+            }
+        })
+        // it processed any  events, then start main watch from timestamp from query, else assume there are no factory events.
+        console.log(`processed events up until seq#=${factory_events_seq}, setting watch resume from timestamp`)
+        last_inventory_trigger = { watch_resume: { startAtOperationTime: lastStableCheckpointTimestamp } }
+
+    }
+
+    assert(!(last_inventory_trigger && last_inventory_trigger.factory_events_sequence), `orderprocessing_startup (10):  start watch "factory_events" for NEWINV. resume cannot be a sequence`)
+
+    console.log(`orderprocessing_startup (10):  start watch "factory_events" for NEWINV (startAfter=${last_inventory_trigger})`)
+    var inventoryStreamWatcher = db.collection("factory_events").watch([
+        { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.label": "NEWINV" }] } },
+        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+    ],
+        { fullDocument: "updateLookup", ...(last_inventory_trigger && { ...last_inventory_trigger.watch_resume }) }
+    ).on('change', data => {
+        //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
+        console.log(`inventoryStreamWatcher got complete Inventory labeld event`)
+
+        last_inventory_trigger = { watch_resume: { startAfter: data._id } }
+        for (const { status } of data.fullDocument.state) {
+            if (status.complete_item) { // { "qty" : 180, "product" : "5f5253167403c56057f5bb0e", "warehouse" : "emea" }
+                const [containsfailed, changes] = ordering_operation(orderProcessor.context, { type: ActionType.NewInventory, spec: status.complete_item })
+                ws_server_emit(orderProcessor.context, changes, { "inventory": last_inventory_trigger })
+            }
+        }
+
+    })
+
     const cont_order_token = order_processor_state.last_trigger
-    assert((orderState.state.orders.length === 0) === (!cont_order_token), 'Error, we we have inflated orders, we need a order continuation token')
-    console.log(`orderprocessing_startup (10):  start watch for new "orders_spec" (startAfter=${cont_order_token && cont_order_token._id})`)
+    assert((order_processor_state.processor_sequence === 0) === (!cont_order_token), 'orderprocessing_startup (11):  start watch for new "orders_spec": Error, we we have inflated ordering processors, we need a orders_spec continuation token')
+    console.log(`orderprocessing_startup (11):  start watch for new "orders_spec" (startAfter=${cont_order_token && cont_order_token._id})`)
     db.collection("orders_spec").watch(
         [
             { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.status": 30 /*NewOrUpdatedOrder*/ }] } }
@@ -343,34 +378,11 @@ async function orderprocessing_startup() {
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
     ).on('change', orderProcessor.callback())
 
-    const cont_inv_token = last_inventory_trigger
-    assert((orderState.state.inventory.size === 0) === (!cont_inv_token), 'Error, we we have inflated inventry, we need a inventory continuation token')
-    console.log(`orderprocessing_startup (11):  start watch for new "factory_events" (startAfter=${cont_inv_token && cont_inv_token._id})`)
-    const inventoryAggregationPipeline = [
-
-    ]
-    var inventoryStreamWatcher = db.collection("factory_events").watch([
-        { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": orderProcessor.context.tenent.email }, { "fullDocument.label": "NEWINV" }] } },
-        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
-    ],
-        { fullDocument: "updateLookup", ...(cont_inv_token && { startAfter: cont_inv_token._id }) }
-    )
-    inventoryStreamWatcher.on('change', data => {
-        //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
-        console.log(`inventoryStreamWatcher got complete Inventory labeld event`)
-        for (const { status } of data.fullDocument.state) {
-            if (status.complete_item) { // { "qty" : 180, "product" : "5f5253167403c56057f5bb0e", "warehouse" : "emea" }
-                const [containsfailed, changes] = ordering_operation(orderProcessor.context, { type: ActionType.NewInventory, spec: status.complete_item })
-                ws_server_emit(orderProcessor.context, changes, { "inventory": data })
-            }
-        }
-        last_inventory_trigger = data
-    })
 
     return orderProcessor.context
 }
 
-//  ---- Factory Monitoring Websocket & API
+//  ---- Monitoring Websocket & API
 type WS_ServerClientType = Record<string, any>;
 const ws_server_clients: WS_ServerClientType = new Map()
 function ws_server_emit(ctx, state: Array<StateChange>, processor: any, label?: string) {
@@ -384,9 +396,11 @@ function ws_server_emit(ctx, state: Array<StateChange>, processor: any, label?: 
             ...(processor && { processor })
         })
 
-        console.log(`sending factory updates to ${ws_server_clients.size} clients`)
-        for (let [key, ws] of ws_server_clients.entries()) {
-            ws.send(JSON.stringify({ type: "events", state }))
+        if (state) {
+            console.log(`ws_server_emit: sending updates to ${ws_server_clients.size} clients`)
+            for (let [key, ws] of ws_server_clients.entries()) {
+                ws.send(JSON.stringify({ type: "events", state }))
+            }
         }
     }
 }

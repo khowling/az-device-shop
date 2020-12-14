@@ -1,7 +1,7 @@
 const assert = require('assert')
 const fs = require('fs')
 
-export async function rollForwardState(ctx, collection_event: string, from_seq: number, applyfn): Promise<number> {
+export async function rollForwardState(ctx, collection_event: string, from_seq: number, label: string, applyfn): Promise<number> {
 
     let processed_seq = from_seq
     console.log(`rollForwardState: reading 'factory_events' from database from seq#=${from_seq}`)
@@ -9,20 +9,19 @@ export async function rollForwardState(ctx, collection_event: string, from_seq: 
     await ctx.db.collection(collection_event).createIndex({ sequence: 1 })
     const inflate_events = await ctx.db.collection(collection_event).aggregate(
         [
-            { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: from_seq } }] } },
+            { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: from_seq } }].concat(label ? { label } : [] as any) } },
             { $sort: { "sequence": 1 } }
         ]
     ).toArray()
 
     if (inflate_events && inflate_events.length > 0) {
         console.log(`rollForwardState: replaying from seq#=${inflate_events[0].sequence}, to seq#=${inflate_events[inflate_events.length - 1].sequence}  to state`)
-        const ret_processor = []
-        // HOW??? TODO
+
         for (let i = 0; i < inflate_events.length; i++) {
 
             const { _id, sequence, partition_key, ...eventdata } = inflate_events[i]
-            assert(sequence === processed_seq + 1, `rollForwardState: expected seq=${processed_seq + 1}, got ${sequence}`)
-            applyfn(eventdata)
+            if (!label) assert(sequence === processed_seq + 1, `rollForwardState: expected seq=${processed_seq + 1}, got ${sequence}`)
+            applyfn({ sequence, ...eventdata })
             processed_seq = sequence
         }
     }
@@ -60,14 +59,14 @@ export async function returnLatestSnapshot(ctx, chkdir: string): Promise<any> {
     }
 }
 
-export async function snapshotState(ctx, chkdir: string, sequence_snapshot: number, state_snapshot: any, processor_snapshot: any): Promise<any> {
+export async function snapshotState(ctx, chkdir: string, sequence_snapshot: number, state_snapshot: any, processor_snapshot?: any): Promise<any> {
     const now = new Date()
     const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${this.state.sequence}.json`
     console.log(`writing movement ${filename}`)
     await fs.promises.writeFile(filename, JSON.stringify({
         sequence_snapshot,
         state_snapshot, //: this.serializeState,
-        processor_snapshot, //: processor_snapshot
+        ...(processor_snapshot && { processor_snapshot }), //: processor_snapshot
     }))
     //return this.state.sequence
 }

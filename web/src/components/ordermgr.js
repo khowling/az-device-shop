@@ -23,7 +23,7 @@ function stateReducer(current, action) {
             // };
             // status: OrderStatus | InventoryStatus
 
-            const statechanges = action.change
+            const statechanges = action.state
             let newstate = { ...current.state, ordering_sequence: current.state.ordering_sequence + 1 }
 
             for (let i = 0; i < statechanges.length; i++) {
@@ -228,7 +228,7 @@ export function OrderMgr({ resource }) {
                                     }
                                 }} >
                                 <h4>{desc}</h4>
-                                { state.orders && state.orders.filter(i => stages.includes(i.status.stage)).map((o, i) => <ItemDisplay o={o} i={i} idx={idx} metadata={metadata} />)}
+                                { state.orders && state.orders.filter(i => stages.includes(i.status.stage)).map((o, i) => <ItemDisplay key={i} o={o} i={i} idx={idx} metadata={metadata} />)}
                             </Stack>
                         )
 

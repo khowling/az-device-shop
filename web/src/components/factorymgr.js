@@ -306,7 +306,7 @@ export function Inventory({ resource }) {
                                     }
                                 }} >
                                 <h4>{desc}</h4>
-                                { state.workitems && state.workitems.filter(i => stages.includes(i.status.stage)).map((o, i) => <ItemDisplay key={`${i}-${idx}`} o={o} i={i} idx={idx} metadata={metadata} />)}
+                                { state.workitems && state.workitems.filter(i => stages.includes(i.status.stage)).map((o, i) => <ItemDisplay key={i} o={o} i={i} idx={idx} metadata={metadata} />)}
                             </Stack>
                         )
 
