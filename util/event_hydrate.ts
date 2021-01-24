@@ -1,7 +1,7 @@
 const assert = require('assert')
 const fs = require('fs')
 
-export async function rollForwardState(ctx, collection_event: string, from_seq: number, label: string, applyfn): Promise<number> {
+export async function rollForwardState(ctx, collection_event: string, from_seq: number, label_filter: string, applyfn): Promise<number> {
 
     let processed_seq = from_seq
     console.log(`rollForwardState: reading 'factory_events' from database from seq#=${from_seq}`)
@@ -9,7 +9,7 @@ export async function rollForwardState(ctx, collection_event: string, from_seq: 
     await ctx.db.collection(collection_event).createIndex({ sequence: 1 })
     const inflate_events = await ctx.db.collection(collection_event).aggregate(
         [
-            { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: from_seq } }].concat(label ? { label } : [] as any) } },
+            { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: from_seq } }].concat(label_filter ? { label_filter } : [] as any) } },
             { $sort: { "sequence": 1 } }
         ]
     ).toArray()
@@ -20,8 +20,8 @@ export async function rollForwardState(ctx, collection_event: string, from_seq: 
         for (let i = 0; i < inflate_events.length; i++) {
 
             const { _id, sequence, partition_key, ...eventdata } = inflate_events[i]
-            if (!label) assert(sequence === processed_seq + 1, `rollForwardState: expected seq=${processed_seq + 1}, got ${sequence}`)
-            applyfn({ sequence, ...eventdata })
+            if (!label_filter) assert(sequence === processed_seq + 1, `rollForwardState: expected seq=${processed_seq + 1}, got ${sequence}`)
+            applyfn({ ...eventdata })
             processed_seq = sequence
         }
     }
