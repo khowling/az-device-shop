@@ -1,6 +1,6 @@
-import { Processor, ProcessorOptions, ProcessingState } from '../util/processor'
+import { Processor, ProcessorOptions } from '../util/processor'
 import {
-    StateChange, ActionType,
+    StateChange, ActionType, WorkItemAction,
     FactoryStateManager,
     FactoryStage, WorkItemStage
 } from './factoryState'
@@ -9,44 +9,31 @@ export enum OperationLabel { NEWINV = "NEWINV" }
 
 
 
-async function validateRequest(ctx, next) {
+async function validateRequest({ connection, trigger, flow_id }, next: (action: WorkItemAction, options: ProcessorOptions, event_label?: string) => any) {
 
-    let spec = ctx.trigger && ctx.trigger.doc
-    if (ctx.trigger && ctx.trigger.doc_id) {
-        console.log(`validateRequest forward, find id=${ctx.trigger.doc_id}`)
-        let inv_spec = await ctx.db.collection("inventory_spec").findOne({ _id: ctx.trigger.documentKey._id, partition_key: ctx.tenent.email })
-        spec = { ...inv_spec, _id: inv_spec._id.toHexString() }
-
+    let spec = trigger && trigger.doc
+    if (trigger && trigger.doc_id) {
+        spec = await connection.db.collection("inventory_spec").findOne({ _id: trigger.doc_id, partition_key: connection.tenent.email })
     }
-    console.log(`middleware "validateRequest", spec=${JSON.stringify(spec)}`)
-    // pass in the required data, and perform transational operation on the state
-    //const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.NewOrUpdatedInventoryRequest, spec })
-    await next({ type: ActionType.NewOrUpdatedInventoryRequest, spec }, { endIfFailed: true, update_ctx: { spec } } as ProcessorOptions)
+
+    await next({ type: ActionType.NewOrUpdatedInventoryRequest, flow_id, spec }, { update_ctx: { spec } } as ProcessorOptions)
 }
 
-async function generateWINo(ctx, next) {
-    console.log(`generateWINo forward, spec: ${JSON.stringify(ctx.spec)}`)
-    //const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.AllocateWINumber, spec: ctx.spec })
-    await next({ type: ActionType.AllocateWINumber, spec: ctx.spec }, { endIfFailed: true } as ProcessorOptions)
+async function generateWINo({ flow_id, spec }, next) {
+    await next({ type: ActionType.AllocateWINumber, flow_id, spec })
 }
 
-async function inFactory(ctx, next) {
-    console.log(`inFactory forward, trigger: ${JSON.stringify(ctx.trigger)}`)
-    //const [containsfailed, changes] = factory_operation(ctx,  })
-    await next({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.InFactory, factory_status: { starttime: Date.now(), stage: FactoryStage.Waiting, waittime: 0, progress: 0 } } }, { endIfFailed: true, sleep_until: { doc_id: ctx.spec._id, stage: WorkItemStage.FactoryComplete } } as ProcessorOptions)
+async function inFactory({ flow_id, spec }, next) {
+    await next({ type: ActionType.StatusUpdate, flow_id, spec, status: { stage: WorkItemStage.InFactory, factory_status: { starttime: Date.now(), stage: FactoryStage.Waiting, waittime: 0, progress: 0 } } }, { sleep_until: { flow_id, stage: WorkItemStage.FactoryComplete } } as ProcessorOptions)
 }
 
-async function moveToWarehouse(ctx, next) {
-    console.log(`moveToWarehouse forward`)
-    //const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } })
-    await next({ type: ActionType.StatusUpdate, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { endIfFailed: true, sleep_until: { time: Date.now() + 1000 * 30 /* 30 secs */ } } as ProcessorOptions)
+async function moveToWarehouse({ flow_id, spec }, next) {
+    await next({ type: ActionType.StatusUpdate, flow_id, spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: { time: Date.now() + 1000 * 30 /* 30 secs */ } } as ProcessorOptions)
 }
 
 
-async function complete(ctx, next) {
-    console.log(`complete forward`)
-    //const [containsfailed, changes] = factory_operation(ctx, { type: ActionType.CompleteInventry, spec: ctx.spec })
-    await next({ type: ActionType.CompleteInventry, spec: ctx.spec }, { endIfFailed: true }, OperationLabel.NEWINV)
+async function complete({ flow_id, spec }, next) {
+    await next({ type: ActionType.CompleteInventry, flow_id, spec }, null, OperationLabel.NEWINV)
 }
 
 
@@ -56,6 +43,7 @@ const { MongoClient, ObjectID } = require('mongodb'),
     assert = require('assert').strict,
     MongoURL = process.env.MONGO_DB
 
+import { Atomic } from '../util/atomic'
 import { snapshotState, returnLatestSnapshot, rollForwardState } from '../util/event_hydrate'
 
 var event_seq: number
@@ -70,16 +58,22 @@ async function factory_startup() {
         db, tenent: await db.collection("business").findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
     }
 
+    // Get state apply mutex
+    const stateMutex = new Atomic()
 
     console.log(`factory_startup (2):  create factory state manager "factoryState"`)
-    const factoryState = new FactoryStateManager({ commitEventsFn: commitEvents.bind(null, connection) })
+    const factoryState = new FactoryStateManager({
+        commitEventsFn: commitEvents.bind(null, connection),
+        stateMutex,
+    })
 
     console.log(`factory_startup (3):  create factory workflow manager "factoryProcessor", and use middleware`)
     const factoryProcessor = new Processor({
         name: "fctProcv1",
         processActionFn: factoryState.processAction.bind(factoryState),
         applyEventsFn: factoryState.applyEvents.bind(factoryState),
-        commitEventsFn: commitEvents.bind(null, connection)
+        commitEventsFn: commitEvents.bind(null, connection),
+        stateMutex
     })
     // add connection to ctx, to allow middleware access, (maybe not required!)
     factoryProcessor.context.connection = connection
@@ -117,21 +111,21 @@ async function factory_startup() {
     console.log(`factory_startup (5): restored factory seq=${factoryState.state.factory_sequence}, factory #workitems=${factoryState.state.workitems.length}}`)
 
     console.log(`factory_startup (6): re-start workflow engine state @ seq=${factoryProcessor.state.processor_sequence}, active flows count=${factoryProcessor.state.proc_map.size}`)
-    function checkRestartStage(doc_id, stage) {
-        const state = factoryState.state.workitems.find(o => o.doc_id === doc_id)
-        if (!state) {
-            throw new Error(`factory_startup: Got a processor state without the state: doc_id=${doc_id}`)
-        } else if (stage !== state.status.stage) {
+    function checkRestartStage({ flow_id, stage }) {
+        const widx = factoryState.state.workitems.findIndex(o => o.flow_id === flow_id)
+        if (widx < 0) {
+            throw new Error(`factory_startup: Got a processor state without the state: flow_id=${flow_id}`)
+        } else if (stage !== factoryState.state.workitems[widx].status.stage) {
             return true
         }
         return false
     }
     factoryProcessor.restartProcessors(checkRestartStage, true)
 
-    if (false) {
+    if (true) {
         console.log(`factory_startup (7): loop to re-start 'sleep_until' processes..`)
         setInterval(() => {
-            // check to restart 'sleep_until' processes
+            //console.log('factory_startup: check to restart "sleep_until" processes')
             factoryProcessor.restartProcessors(checkRestartStage, false)
         }, 1000 * 10 /* 10 seconds */)
     }
@@ -154,9 +148,10 @@ async function factory_startup() {
     }, 1000 * 60 * LOOP_MINS, connection, chkdir)
 
 
-    if (false) {
+    if (true) {
         console.log(`factory_startup (9): starting factory control loop (5 seconds)`)
         setInterval(async function () {
+            //console.log('factory_startup: checking on progress WorkItems in "FactoryStage.Building"')
             await factoryState.apply({ type: ActionType.CheckFactoryProgress })
         }, 5000)
     }
@@ -202,7 +197,7 @@ async function commitEvents({ db, tenent }, state: Array<StateChange>, processor
         })
 
         if (state) {
-            console.log(`sending state updates to ${ws_server_clients.size} clients`)
+            //            console.log(`sending state updates to ${ws_server_clients.size} clients`)
             if (state) {
                 for (let [key, ws] of ws_server_clients.entries()) {
                     ws.send(JSON.stringify({ type: "events", state }))
@@ -229,14 +224,14 @@ function ws_server_startup({ factoryProcessor, factoryState }) {
                 body = body + chunk
             });
             req.on('end', async () => {
-                console.log(`http trigger got: ${body}`)
+                //console.log(`http trigger got: ${body}`)
                 try {
                     const po = await factoryProcessor.initiateWorkflow({ trigger: { doc: JSON.parse(body) } })
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         status: 'ack',
                         processorObject: po,
-                        status_url: `/query/${po.process_id}`
+                        status_url: `/query/${po.flow_id}`
                     }))
                 } catch (err) {
                     res.writeHead(400, { 'Content-Type': 'application/json' })

@@ -107,36 +107,30 @@ function stateReducer(current, action) {
 
                 switch (kind) {
                     case 'Workitem': {
-                        const { doc_id, type } = metadata
+                        const { flow_id, type } = metadata
                         if (type === 1 /* ChangeEventType.UPDATE */) { // // got new Onhand value (replace)
-                            const order_idx = newstate.workitems.findIndex(o => o.doc_id === doc_id)
-                            if (order_idx >= 0) {
-                                const existing_order = newstate.workitems[order_idx]
-                                newstate.workitems = imm_splice(newstate.workitems, order_idx, { ...existing_order, status: { ...existing_order.status, ...status } })
+                            const idx = newstate.workitems.findIndex(o => o.flow_id === flow_id)
+                            if (idx >= 0) {
+                                const existing_doc = newstate.workitems[idx]
+                                const new_doc = { ...existing_doc, status: { ...existing_doc.status, ...status } }
+                                newstate.workitems = imm_splice(newstate.workitems, idx, new_doc)
                             } else {
-                                console.error(`Cannot find existing ${kind} with doc_id=${doc_id}`)
+                                console.error(`Cannot find existing ${kind} with doc_id=${flow_id}`)
                             }
                         } else if (type === 0 /* ChangeEventType.CREATE */) { // // got new Inventory onhand (additive)
-                            newstate.workitems = newstate.workitems.concat({ doc_id, status })
+                            newstate.workitems = newstate.workitems.concat({ flow_id, status })
                         }
                         break
                     }
                     case "FactoryUpdate": {
                         const { type } = metadata
-                        if (status.sequence_update && type === 3 /*ChangeEventType.INC*/) {
-                            newstate.workitem_sequence = newstate.workitem_sequence + status.sequence_update
-                        } else if (status.allocated_update && type === 1 /*ChangeEventType.UPDATE*/) { // // got new Onhand value (replace)
-                            newstate.capacity_allocated = newstate.capacity_allocated + status.allocated_update
-                        } else {
-                            throw new Error(`apply_change_events, only support updates on ${kind}`)
-                        }
+                        newstate = { ...newstate, ...Object.keys(status).map(k => { return { [k]: status[k] + (type === 3 /*ChangeEventType.INC*/ ? newstate[k] : 0) } }).reduce((a, i) => { return { ...a, ...i } }, {}) }
                         break
                     }
                     default:
                         console.warn(`Error, unknown kind ${kind}`)
                 }
             }
-
             return { state: newstate, metadata: current.metadata }
         case 'closed':
             // socket closed, reset state
@@ -230,6 +224,7 @@ export function Inventory({ resource }) {
 
                 <Stack horizontal tokens={{ childrenGap: 3 }}>
                     <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "40%", backgroundColor: "rgb(255, 244, 206)" } }}>
+                        <Text variant="xSmall">Flow Id: {o.flow_id}</Text>
                         <Text variant="xSmall">Spec: <Link route="/o" urlid={o.doc_id}><Text variant="xSmall">open</Text></Link></Text>
                     </Stack>
                     <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >

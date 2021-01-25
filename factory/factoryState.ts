@@ -1,5 +1,4 @@
 const assert = require('assert')
-import { Atomic } from '../util/atomic'
 
 export interface FactoryState extends FactoryStateSequences {
     factory_sequence: number;
@@ -14,7 +13,7 @@ export interface FactoryStateSequences {
 }
 
 export interface WorkItemObject {
-    doc_id: string;
+    flow_id: string;
     status: WorkItemStatus;
 }
 
@@ -58,7 +57,7 @@ export interface StateChange {
     kind: string;
     metadata: {
         type: ChangeEventType;
-        doc_id?: string;
+        flow_id?: string;
         next_sequence: number;
     };
     status: WorkItemStatus | FactoryStateSequences;
@@ -73,21 +72,22 @@ export enum ChangeEventType {
 // Perform Action on state
 export interface WorkItemAction {
     type: ActionType;
+    flow_id?: string;
     spec?: any;
-    doc_id?: string;
     status?: any;
 }
 export enum ActionType { NewOrUpdatedInventoryRequest, AllocateWINumber, StatusUpdate, CheckFactoryProgress, CheckWaiting, Sync, CompleteInventry }
 
 
 
-export class FactoryStateManager extends Atomic {
+export class FactoryStateManager {
 
     private _state = { factory_sequence: 0, lastupdated: null, capacity_allocated: 0, inventory_sequence: 0, workitem_sequence: 0, workitems: [] } as FactoryState
     private commitEventsFn
+    private _stateMutex
 
     constructor(opts: any = {}) {
-        super()
+        this._stateMutex = opts.stateMutex
         this.commitEventsFn = opts.commitEventsFn
     }
 
@@ -109,102 +109,62 @@ export class FactoryStateManager extends Atomic {
         }
     }
 
-    static getWorkitem(thisstate: FactoryState, spec_id: string): [number, WorkItemObject] {
-        const wi_idx = spec_id ? thisstate.workitems.findIndex(o => o.doc_id === spec_id) : -1
-        if (wi_idx >= 0) {
-            return [wi_idx, thisstate.workitems[wi_idx]]
-        }
-        return [null, null]
-    }
-
-    // Replace array entry at index 'index' with 'val'
-    static imm_splice(array: Array<any>, index: number, val: any) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
-
-    applyEvents(statechanges: Array<StateChange>) {
-
-        assert(statechanges && statechanges.length > 0, "No changes provided")
-
-        let newstate: FactoryState = { ...this.state, factory_sequence: this.state.factory_sequence + 1, lastupdated: Date.now() }
-
-        for (let { kind, metadata, status } of statechanges) {
-
-            assert(metadata.next_sequence && metadata.next_sequence === newstate.factory_sequence, `applyEvents, Cannot apply change sequence ${metadata.next_sequence}, expecting ${newstate.factory_sequence}`)
-
-            switch (kind) {
-                case "Workitem": {
-                    const { doc_id, type } = metadata
-                    const new_status = status as WorkItemStatus
-
-                    if (type === ChangeEventType.UPDATE) {
-                        const [wi_idx, existing_wi] = FactoryStateManager.getWorkitem(newstate, doc_id)
-                        if (existing_wi) {
-                            const new_wi = { ...existing_wi, status: { ...existing_wi.status, ...new_status } }
-                            newstate.workitems = FactoryStateManager.imm_splice(newstate.workitems, wi_idx, new_wi)
-                        } else {
-                            throw new Error(`applyEvents, Cannot find existing ${kind} with doc_id=${doc_id}`)
-                        }
-                    } else if (type === ChangeEventType.CREATE) {
-                        // using typescript "type assertion"
-                        // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
-                        newstate.workitems = newstate.workitems.concat([{ doc_id, status: new_status }])
-                    }
-                    break
-                }
-                case "FactoryUpdate": {
-                    const { type } = metadata
-                    const new_status = status as FactoryStateSequences
-                    newstate = { ...newstate, ...Object.keys(new_status).map(k => { return { [k]: new_status[k] + (type === ChangeEventType.INC ? newstate[k] : 0) } }).reduce((a, i) => { return { ...a, ...i } }, {}) }
-                    break
-                }
-                default:
-                    throw new Error(`applyEvents, Unsupported kind ${kind} in local state`)
-            }
-        }
-        this._state = newstate
-    }
-
     // Convert 'action' on existing 'staateManager' into 'StateChanges[]' events
     processAction(action: WorkItemAction): [boolean, Array<StateChange>] {
 
         const kind = "Workitem"
         const next_sequence = this.state.factory_sequence + 1
+
+
         switch (action.type) {
 
             case ActionType.NewOrUpdatedInventoryRequest: {
-                const { spec } = action
-                if (spec.hasOwnProperty('_id') && spec.hasOwnProperty('product') && spec.hasOwnProperty('qty') && spec.hasOwnProperty('status')) {
-                    const new_wi_status: WorkItemStatus = { failed: false, stage: action.spec.status === 'Draft' ? WorkItemStage.Draft : WorkItemStage.WIValidated }
-                    if (this.state.workitems.findIndex(w => w.doc_id === spec._id) < 0) {
-                        return [false, [{ kind, metadata: { doc_id: spec._id, type: ChangeEventType.CREATE, next_sequence }, status: new_wi_status }]]
-                    } else {
-                        return [true, [{ kind, metadata: { doc_id: spec._id || 'none', type: ChangeEventType.CREATE, next_sequence }, status: { failed: true, message: 'Require properties missing' } }]]
-                    }
+                const { spec, flow_id } = action
+                if (!flow_id) {
+                    return [true, [{ kind, metadata: { type: ChangeEventType.CREATE, next_sequence }, status: { failed: true, message: 'Require "flow_id" missing', stage: WorkItemStage.WIValidated } }]]
                 } else {
+                    const required_props = ['product', 'qty', 'status']
+                    if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true)) {
+                        const new_wi_status: WorkItemStatus = { failed: false, stage: action.spec.status === 'Draft' ? WorkItemStage.Draft : WorkItemStage.WIValidated }
+                        if (this.state.workitems.findIndex(w => w.flow_id === flow_id) < 0) {
+                            return [false, [{ kind, metadata: { flow_id, type: ChangeEventType.CREATE, next_sequence }, status: new_wi_status }]]
+                        } else {
+                            return [true, [{ kind, metadata: { flow_id, type: ChangeEventType.CREATE, next_sequence }, status: { failed: true, message: '"flow_id" is not unique', stage: WorkItemStage.WIValidated } }]]
+                        }
+                    } else {
 
-                    return [true, [{ kind, metadata: { doc_id: spec._id || 'none', type: ChangeEventType.CREATE, next_sequence }, status: { failed: true, message: 'Require properties missing' } }]]
+                        return [true, [{ kind, metadata: { flow_id, type: ChangeEventType.CREATE, next_sequence }, status: { failed: true, message: `Require properties missing. ${required_props.map(i => `"${i}"`).join(',')}`, stage: WorkItemStage.WIValidated } }]]
+                    }
                 }
-
             }
             case ActionType.AllocateWINumber: {
-                const { spec } = action
-                return [false, [
-                    { kind, metadata: { doc_id: spec._id, type: ChangeEventType.UPDATE, next_sequence }, status: { stage: WorkItemStage.WINumberGenerated, workitem_number: 'WI' + String(this.state.workitem_sequence + 1).padStart(5, '0') } as WorkItemStatus },
-                    { kind: "FactoryUpdate", metadata: { type: ChangeEventType.INC, next_sequence }, status: { workitem_sequence: 1 } as FactoryStateSequences }
-                ]]
+                const { spec, flow_id } = action
+                if (!flow_id) {
+                    return [true, [{ kind, metadata: { type: ChangeEventType.UPDATE, next_sequence }, status: { failed: true, message: 'Require "flow_id" missing', stage: WorkItemStage.WINumberGenerated } }]]
+                } else {
+                    return [false, [
+                        { kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { stage: WorkItemStage.WINumberGenerated, workitem_number: 'WI' + String(this.state.workitem_sequence + 1).padStart(5, '0') } as WorkItemStatus },
+                        { kind: "FactoryUpdate", metadata: { type: ChangeEventType.INC, next_sequence }, status: { workitem_sequence: 1 } as FactoryStateSequences }
+                    ]]
+                }
             }
             case ActionType.CompleteInventry: {
-                const { spec } = action
-                return [false, [
-                    { kind, metadata: { doc_id: spec._id, type: ChangeEventType.UPDATE, next_sequence }, status: { stage: WorkItemStage.Complete, completed_sequence: this.state.inventory_sequence + 1, complete_item: { qty: spec.qty, product: spec.product, warehouse: spec.warehouse } } as WorkItemStatus },
-                    { kind: "FactoryUpdate", metadata: { type: ChangeEventType.INC, next_sequence }, status: { intentory_sequence: 1 } as FactoryStateSequences }
-                ]]
+                const { flow_id, spec } = action
+                if (!flow_id) {
+                    return [true, [{ kind, metadata: { type: ChangeEventType.UPDATE, next_sequence }, status: { failed: true, message: 'Require "flow_id" missing', stage: WorkItemStage.Complete } }]]
+                } else {
+                    return [false, [
+                        { kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { stage: WorkItemStage.Complete, completed_sequence: this.state.inventory_sequence + 1, complete_item: { qty: spec.qty, product: spec.product, warehouse: spec.warehouse } } as WorkItemStatus },
+                        { kind: "FactoryUpdate", metadata: { type: ChangeEventType.INC, next_sequence }, status: { intentory_sequence: 1 } as FactoryStateSequences }
+                    ]]
+                }
             }
             case ActionType.StatusUpdate: {
-                const { spec, status } = action
+                const { spec, status, flow_id } = action
                 // Needs to be Idempotent
                 // TODO: Check if state already has  Number 
                 return [false, [
-                    { kind, metadata: { doc_id: spec._id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...status } }
+                    { kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...status } }
                 ]]
             }
             case ActionType.CheckFactoryProgress: {
@@ -223,7 +183,7 @@ export class FactoryStateManager extends Atomic {
                 // check wi in factory_status status look for for completion to free up capacity
                 for (let ord of workitems_in_factory.filter(o => o.status.factory_status.stage === FactoryStage.Building)) {
                     // all wi in Picking status
-                    const { doc_id, status } = ord
+                    const { flow_id, status } = ord
                     let factory_status_update = {}
 
                     const timeleft = (TIME_TO_PROCESS_A_WI /* * qty */) - (now - status.factory_status.starttime)
@@ -234,13 +194,13 @@ export class FactoryStateManager extends Atomic {
                         capacity_allocated_update = capacity_allocated_update - status.factory_status.allocated_capacity
                         factory_status_update = { factory_status: { ...status.factory_status, stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 }, stage: WorkItemStage.FactoryComplete }
                     }
-                    statechanges.push({ kind, metadata: { doc_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
+                    statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
                 }
 
                 // check wi in factory_status status look for for completion to free up capacity
                 for (let ord of workitems_in_factory.filter(o => o.status.factory_status.stage === FactoryStage.Waiting)) {
                     // all wi in Picking status
-                    const { doc_id, status } = ord
+                    const { flow_id, status } = ord
                     let factory_status_update = {}
                     const required_capacity = 1
 
@@ -255,7 +215,7 @@ export class FactoryStateManager extends Atomic {
                         }
 
                     }
-                    statechanges.push({ kind, metadata: { doc_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
+                    statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
                 }
 
                 if (capacity_allocated_update !== 0) {
@@ -318,18 +278,66 @@ export class FactoryStateManager extends Atomic {
         }
     }
 
+    // Replace array entry at index 'index' with 'val'
+    static imm_splice(array: Array<any>, index: number, val: any) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
+
+    applyEvents(statechanges: Array<StateChange>) {
+
+        assert(statechanges && statechanges.length > 0, "No changes provided")
+
+        let newstate: FactoryState = { ...this.state, factory_sequence: this.state.factory_sequence + 1, lastupdated: Date.now() }
+
+        for (let { kind, metadata, status } of statechanges) {
+
+            assert(metadata.next_sequence && metadata.next_sequence === newstate.factory_sequence, `factoryState.applyEvents, Cannot apply next_sequence=${metadata.next_sequence}, expecting factory_sequence=${newstate.factory_sequence}`)
+
+            switch (kind) {
+                case "Workitem": {
+                    const { flow_id, type } = metadata
+                    const new_status = status as WorkItemStatus
+
+                    if (type === ChangeEventType.UPDATE) {
+                        const idx = flow_id ? newstate.workitems.findIndex(o => o.flow_id === flow_id) : -1
+                        if (idx >= 0) {
+                            const existing_doc = newstate.workitems[idx]
+                            const new_doc = { ...existing_doc, status: { ...existing_doc.status, ...new_status } }
+                            newstate.workitems = FactoryStateManager.imm_splice(newstate.workitems, idx, new_doc)
+                        } else {
+                            throw new Error(`applyEvents, Cannot find existing ${kind} with flow_id=${flow_id}`)
+                        }
+                    } else if (type === ChangeEventType.CREATE) {
+                        // using typescript "type assertion"
+                        // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
+                        newstate.workitems = newstate.workitems.concat([{ flow_id, status: new_status }])
+                    }
+                    break
+                }
+                case "FactoryUpdate": {
+                    const { type } = metadata
+                    const new_status = status as FactoryStateSequences
+                    newstate = { ...newstate, ...Object.keys(new_status).map(k => { return { [k]: new_status[k] + (type === ChangeEventType.INC ? newstate[k] : 0) } }).reduce((a, i) => { return { ...a, ...i } }, {}) }
+                    break
+                }
+                default:
+                    throw new Error(`applyEvents, Unsupported kind ${kind} in local state`)
+            }
+        }
+        this._state = newstate
+    }
+
+
     async apply(action: WorkItemAction) {
         // Needs to be Atomic!
-        let release = await this.aquire()
+        let release = await this._stateMutex.aquire()
 
         // This generated events to be applied to the state based on the action & current state.   
         // NOTE: Nothing else shoud perform a action on a state until this is applied.
         const [hasFailed, events] = this.processAction(action)
 
         if (events) {
+            console.log(`factoryState.apply: action: flow_id=${action.flow_id} type=${action.type}. ${events ? `Event: next_seq=${events[0].metadata.next_sequence} type=${events[0].metadata.type}` : ''}`)
             // persist events
             await this.commitEventsFn(events, null, null)
-
             // apply events to local state
             this.applyEvents(events)
         }
