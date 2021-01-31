@@ -1,43 +1,17 @@
 const assert = require('assert')
 
 
-export interface OrderingState {
-    ordering_sequence: number;
-    inventory: Map<string, InventoryStatus>;
-    orders: Array<OrderObject>;
-    order_sequence: number;
-    picking_allocated: number;
-    lastupdated: number;
-}
-
 export interface OrderObject {
-    doc_id: string;
+    id: string;
+    spec: any;
     status: OrderStatus;
 }
 
-
 export interface OrderStatus extends DocStatus {
     stage?: OrderStage;
-    order_number?: string;
-    inventory?: any;
-    picking?: {
-        status: PickingStage;
-        starttime: number;
-        waittime: number;
-        allocated_capacity: number;
-        progress: number;
-    }
-}
-export enum OrderStage { OrderQueued, OrderNumberGenerated, InventoryAllocated, Picking, PickingComplete, Shipped, Complete }
-export enum PickingStage { Waiting, Picking, Complete }
 
-export interface InventoryStatus {
-    onhand: number;
-}
-
-export interface OrderingUpdate {
-    allocated_update?: number;
-    sequence_update?: number;
+    // Factory status
+    orderId?: string;
 }
 
 interface DocStatus {
@@ -45,137 +19,281 @@ interface DocStatus {
     message?: string;
 }
 
-
-/*
-// Change Events
-export interface ChangeEvent {
-    statechanges: Array<StateChange>; // Required transational changes to state
-    nextaction: boolean; // end of lifecycle?
-    sequence?: number; // Set when statechanges are applied to state
-    processor?: any; // {
-    //    [processor name]: ProcessorInfo | Custom
-    // }
-
-}
-*/
-
-export interface StateChange {
-    kind: string;
-    metadata: {
-        type: ChangeEventType;
-        doc_id?: string;
-        next_sequence: number;
-    };
-    status: OrderStatus | InventoryStatus | OrderingUpdate;
-}
-export enum ChangeEventType {
-    CREATE,
-    UPDATE,
-    DELETE,
-    INC
+export enum OrderStage {
+    Draft,// = "Draft",
+    New,// = "New",
+    InventoryAllocated,// = "Validated",
+    PickingReady,// = "PickingReady",
+    PickingAccepted,
+    PickingComplete,// = "PickingComplete",
+    Shipped,// = "Shipped",
+    Complete// = "Complete",
 }
 
 
-export class OrderStateManager {
+import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn } from '../util/flux'
+export { StateUpdates } from '../util/flux'
 
-    _state = { ordering_sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), order_sequence: 0, orders: [] }
+// Mutate state in a Consistant, Safe, recorded mannore
+export interface OrderAction {
+    type: OrderActionType;
+    id?: string;
+    spec?: any;
+    status?: any;
+}
+export enum OrderActionType {
+    New = 'orders/New',
+    InventryNew = 'inventry/New',
+    StatusUpdate = 'orders/StatusUpdate',
+    PickingProcess = 'orders/PickingProcess',
+    AllocateInventory = 'orders/AllocateInventory',
+    Complete = 'orders/Complete'
+}
+
+interface OrderReducerState {
+    items: Array<OrderObject>;
+    order_sequence: number;
+}
+
+
+function orderReducer(state: OrderReducerState = { items: [], order_sequence: 0 }, action: OrderAction, passInSlice): ReducerReturnWithSlice | OrderReducerState {
+
+    if (action) {
+        const { spec, id, status } = action
+        switch (action.type) {
+            case 'orders/New':
+                const required_props = ['items']
+                if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true) && Array.isArray(spec.items) && spec.items.length > 0) {
+                    if (state.items.findIndex(w => w.id === id) < 0) {
+                        return [[false, [
+                            { method: UpdatesMethod.Inc, doc: { order_sequence: 1 } },
+                            { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: false, orderId: 'ORD' + String(state.order_sequence).padStart(5, '0'), stage: OrderStage.New } } }
+                        ]]]
+                    } else {
+                        return [[true, [
+                            { method: UpdatesMethod.Add, path: 'items', doc: { id: `${id}-dup`, spec: action.spec, status: { failed: true, message: `Adding order with "id" that already exists id=${id}`, stage: OrderStage.New } } }
+                        ]]]
+                    }
+                } else {
+                    return [[true, [
+                        { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: true, message: `Require lines items missing. ${required_props.map(i => `"${i}"`).join(',')}`, stage: OrderStage.New } } }
+                    ]]]
+                }
+            case 'orders/StatusUpdate':
+                return [[false, [
+                    { method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status } }
+                ]]]
+            case 'orders/AllocateInventory':
+
+                const idx = state.items.findIndex(w => w.id === id)
+                let order_update: OrderStatus = { failed: false, stage: OrderStage.InventoryAllocated }
+                let inventory_updates: Array<StateUpdates> = []
+
+                if (idx >= 0) {
+                    const order_spec = state.items[idx].spec
+                    const [inventoryState, inventoryReducer] = passInSlice
+
+                    if (order_spec.items && order_spec.items.length > 0) {
+
+                        for (let i of order_spec.items) {
+                            if (i.item._id) {
+                                const
+                                    sku = i.item._id.toHexString(),
+                                    required_qty = i.qty
+
+                                const [inv_failed, inv_update] = inventoryReducer(inventoryState, { type: OrderActionType.AllocateInventory, spec: { sku, required_qty } })
+                                if (!inv_failed) {
+                                    inventory_updates = inventory_updates.concat(inv_update)
+                                } else {
+                                    order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, Insufficnet stock sku=${sku}` }
+                                    break
+                                }
+                            } else {
+                                order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, Malformed lineitem` }
+                                break
+                            }
+                        }
+                    } else {
+                        order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, no lineitems` }
+                    }
+                } else {
+                    order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, No order found id=${id}` }
+                }
+
+                return order_update.failed ?
+                    [
+                        [true, [{ method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status: order_update } }]]
+                    ]
+                    :
+                    [
+                        [false, [{ method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status: order_update } }]],
+                        [false, inventory_updates]
+                    ]
+
+            default:
+                // action not for this reducer, so no updates
+                return [null, null]
+        }
+    } else {
+        // is no 'action' return state (used to allow reducer to initialise its own state slice)
+        return state
+    }
+}
+
+
+export interface PickingItem {
+    id: number;
+    stage: FactoryStage;
+    acceptedtime?: number;
+    starttime?: number;
+    waittime?: number;
+    allocated_capacity?: number;
+    progress?: number;
+}
+export enum FactoryStage { Waiting, Building, Complete }
+
+function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, pickingCapacity = 5) {
+
+    return function (state: { items: Array<PickingItem>, capacity_allocated: number } = { items: [], capacity_allocated: 0 }, action: OrderAction, passInSlice) {
+
+        if (action) {
+            switch (action.type) {
+                case OrderActionType.PickingProcess:
+
+                    const [orderState, orderReducer] = passInSlice
+                    //console.log(`orderState=${JSON.stringify(orderState)}`)
+                    const now = Date.now()
+                    let capacity_allocated_update = 0
+
+                    let factory_updates = []
+                    let order_updates = []
+
+                    // check wi in factory_status status look for for completion to free up capacity
+                    for (let item of state.items.filter(o => o.stage === FactoryStage.Building)) {
+                        // all wi in Picking status
+                        //const { id, status } = ord
+                        const timeleft = (timeToProcess /* * qty */) - (now - item.starttime)
+
+                        if (timeleft > 0) { // not finished, just update progress
+                            factory_updates.push({ method: 'update', path: 'items', filter: { id: item.id }, doc: { progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) } })
+                        } else { // finished
+                            capacity_allocated_update = capacity_allocated_update - item.allocated_capacity
+                            factory_updates.push({ method: 'update', path: 'items', filter: { id: item.id }, doc: { stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } })
+                            const [[complete_failed, complete_updates]] = orderReducer(orderState, { type: 'orders/StatusUpdate', id: item.id, status: { stage: OrderStage.PickingComplete } })
+                            order_updates = order_updates.concat(complete_updates)
+                        }
+                        //statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
+                    }
+
+                    const required_capacity = 1
+
+                    // new orders that are ready for the Factory
+                    for (let wi of orderState.items.filter(i => i.status.stage === OrderStage.PickingReady)) {
+                        const [[accept_failed, accept_updates]] = orderReducer(orderState, { type: 'orders/StatusUpdate', id: wi.id, status: { stage: OrderStage.PickingAccepted } })
+                        order_updates = order_updates.concat(accept_updates)
+
+                        if ((pickingCapacity - (state.capacity_allocated + capacity_allocated_update)) >= required_capacity) {
+                            // we have capacity, move to inprogress
+                            factory_updates.push({ method: 'add', path: 'items', doc: { id: wi.id, stage: FactoryStage.Building, acceptedtime: now, starttime: now, allocated_capacity: required_capacity, progress: 0, waittime: 0 } })
+                            capacity_allocated_update = capacity_allocated_update + required_capacity
+                        } else {
+                            // need to wait
+                            factory_updates.push({ method: 'add', path: 'items', doc: { id: wi.id, stage: FactoryStage.Waiting, acceptedtime: now, waittime: 0 } })
+                        }
+                    }
+
+                    // check wi in "waiting" status
+                    for (let item of state.items.filter(o => o.stage === FactoryStage.Waiting)) {
+                        if ((pickingCapacity - (state.capacity_allocated + capacity_allocated_update)) >= required_capacity) {
+                            // we have capacity, move to inprogress
+                            factory_updates.push({ method: 'update', path: 'items', filter: { id: item.id }, doc: { stage: FactoryStage.Building, allocated_capacity: required_capacity, progress: 0, waittime: now - item.acceptedtime } })
+                            capacity_allocated_update = capacity_allocated_update + required_capacity
+                        } else {
+                            // still need to wait
+                            factory_updates.push({ method: 'update', path: 'items', filter: { id: item.id }, doc: { waittime: now - item.acceptedtime } })
+                        }
+                        //statechanges.push({ kind, metadata: { id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
+                    }
+
+                    if (capacity_allocated_update !== 0) {
+                        factory_updates.push({ method: "inc", doc: { capacity_allocated: capacity_allocated_update } })
+                    }
+
+                    return [factory_updates.length > 0 ? [false, factory_updates] : null, order_updates.length > 0 ? [false, order_updates] : null]
+
+                default:
+                    // action not for this reducer, so no updates
+                    return [null, null]
+            }
+        } else {
+            // is no 'action' return state (used to allow reducer to initialise its own state slice)
+            return state
+        }
+    }
+}
+
+
+export interface InventoryItem {
+    qty: number;
+    product: string;
+    warehouse: string;
+}
+
+
+
+function inventryReducer(state: Array<InventoryItem> = [], action: OrderAction): ReducerReturn | Array<InventoryItem> {
+    if (action) {
+        const { spec, id, type } = action
+        switch (type) {
+            case OrderActionType.InventryNew:
+                const { product, qty, warehouse } = spec
+                const existing_idx = state.findIndex(i => i.product === product)
+                if (existing_idx >= 0) {
+                    return [false, [
+                        { method: UpdatesMethod.Inc, filter: { product }, doc: { qty } }
+                    ]]
+                } else {
+                    return [false, [
+                        { method: UpdatesMethod.Add, doc: spec }
+                    ]]
+                }
+                break
+            case OrderActionType.AllocateInventory:
+                const { sku, required_qty } = spec
+                const sku_idx = state.findIndex(i => i.product === sku)
+                if (sku_idx >= 0) {
+                    if (state[sku_idx].qty >= required_qty) {
+                        return [false, [
+                            { method: UpdatesMethod.Inc, filter: { product: sku }, doc: { qty: -required_qty } }
+                        ]]
+                    } else {
+                        return [true, null]
+                    }
+                } else {
+                    return [true, null]
+                }
+
+            default:
+                // action not for this reducer, so no updates
+                return null
+        }
+    } else {
+        // is no 'action' return state (used to allow reducer to initialise its own state slice)
+        return state
+    }
+}
+
+export class OrderStateManager extends StateManager {
 
     constructor(opts: any = {}) {
-    }
-
-    get state() {
-        return this._state;
-    }
-
-    set state(newstate: OrderingState) {
-        this._state = newstate
-    }
-
-    get serializeState() {
-        return { ...this._state, inventory: [...this._state.inventory] }
-    }
-
-    static deserializeState(newstate): OrderingState {
-        if (newstate) {
-            return { ...newstate, inventory: new Map(newstate.inventory) }
-        } else {
-            return { ordering_sequence: 0, lastupdated: null, picking_allocated: 0, inventory: new Map(), order_sequence: 0, orders: [] }
-        }
-    }
-
-    // Replace array entry at index 'index' with 'val'
-    static imm_splice(array: Array<any>, index: number, val: any) { return [...array.slice(0, index), val, ...array.slice(index + 1)] }
-
-    apply_change_events(statechanges: Array<StateChange>): [boolean, Array<StateChange>] {
-
-        assert(statechanges && statechanges.length > 0, "No changes provided")
-
-        let newstate: OrderingState = { ...this.state, ordering_sequence: this.state.ordering_sequence + 1, lastupdated: Date.now() }
-        let contains_failed = false
-
-        for (let { kind, metadata, status } of statechanges) {
-
-            assert(metadata.next_sequence && metadata.next_sequence === newstate.ordering_sequence, `apply_change_events, Cannot apply change sequence ${metadata.next_sequence}, expecting ${newstate.ordering_sequence}`)
-
-            switch (kind) {
-                case "Order": {
-                    const { doc_id, type } = metadata
-                    const new_status = status as OrderStatus
-
-                    if (new_status.failed) { contains_failed = true }
-                    if (type === ChangeEventType.UPDATE) {
-                        const order_idx = doc_id ? newstate.orders.findIndex(o => o.doc_id === doc_id) : -1
-                        if (order_idx >= 0) {
-                            const existing_order = newstate.orders[order_idx]
-                            const new_order = { ...existing_order, status: { ...existing_order.status, ...new_status } }
-                            newstate.orders = OrderStateManager.imm_splice(newstate.orders, order_idx, new_order)
-                        } else {
-                            throw new Error(`apply_change_events, Cannot find existing ${kind} with doc_id=${doc_id}`)
-                        }
-                    } else if (type === ChangeEventType.CREATE) {
-                        // using typescript "type assertion"
-                        // https://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types
-                        newstate.orders = newstate.orders.concat([{ doc_id, status: new_status }])
-                    }
-                    break
-                }
-                case "Inventory": {
-                    const { doc_id, type } = metadata
-                    const new_status = status as InventoryStatus
-
-                    const inventory_updates: Map<string, InventoryStatus> = new Map()
-                    const existing_sku: InventoryStatus = newstate.inventory.get(doc_id)
-
-                    if (type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
-                        if (!existing_sku) {
-                            throw new Error(`apply_change_events, Cannot find existing ${kind} with doc_id=${doc_id}`)
-                        }
-                        inventory_updates.set(doc_id, new_status)
-                    } else if (type === ChangeEventType.CREATE) { // got new Inventory onhand (additive)
-                        inventory_updates.set(doc_id, { onhand: existing_sku ? (existing_sku.onhand + new_status.onhand) : new_status.onhand })
-                    }
-                    newstate.inventory = new Map([...newstate.inventory, ...inventory_updates])
-                    break
-                }
-                case "OrderingUpdate": {
-                    const { type } = metadata
-                    const new_status = status as OrderingUpdate
-
-                    if (new_status.sequence_update && type === ChangeEventType.INC) {
-                        newstate.order_sequence = newstate.order_sequence + new_status.sequence_update
-                    } else if (new_status.allocated_update && type === ChangeEventType.UPDATE) { // // got new Onhand value (replace)
-                        newstate.picking_allocated = newstate.picking_allocated + new_status.allocated_update
-                    } else {
-                        throw new Error(`apply_change_events, Unsupported OrderingUpdate`)
-                    }
-                    break
-                }
-                default:
-                    throw new Error(`apply_change_events, Unsupported kind ${kind} in local state`)
+        super({
+            stateMutex: opts.stateMutex,
+            commitEventsFn: opts.commitEventsFn,
+            reducers: {
+                orders: { passInSlice: 'inventory', reducerFn: orderReducer }
+                , picking: { passInSlice: 'orders', reducerFn: initFactoryReducer() }
+                , inventory: { reducerFn: inventryReducer }
             }
-        }
-        this._state = newstate
-        return [contains_failed, statechanges]
+        })
     }
 }
-

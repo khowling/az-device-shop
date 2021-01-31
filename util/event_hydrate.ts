@@ -59,12 +59,12 @@ export async function returnLatestSnapshot(ctx, chkdir: string): Promise<any> {
     }
 }
 
-export async function snapshotState(ctx, chkdir: string, sequence_snapshot: number, state_snapshot: any, processor_snapshot?: any): Promise<any> {
+export async function snapshotState(ctx, chkdir: string, event_seq: number, state_snapshot: any, processor_snapshot?: any): Promise<any> {
     const now = new Date()
-    const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${this.state.sequence}.json`
+    const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${event_seq}.json`
     console.log(`writing movement ${filename}`)
     await fs.promises.writeFile(filename, JSON.stringify({
-        sequence_snapshot,
+        event_seq,
         state_snapshot, //: this.serializeState,
         ...(processor_snapshot && { processor_snapshot }), //: processor_snapshot
     }))

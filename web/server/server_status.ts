@@ -15,7 +15,7 @@ export async function order_state_startup({ db, tenent }) {
     // if there is no snapshot, build materialised view from scratch
     var event_seq = sequence_snapshot ? sequence_snapshot : 0
     let lastcheckpoint_seq: number = event_seq
-    orderState.state = OrderStateManager.deserializeState(state_snapshot)
+    orderState.stateStore.deserializeState(state_snapshot)
 
     // get db time, so we know where to continue the watch
     const admin = db.admin()
@@ -25,7 +25,7 @@ export async function order_state_startup({ db, tenent }) {
     event_seq = await rollForwardState({ tenent, db }, "order_events", event_seq, null, ({ state, processor }) => {
         if (state) {
             process.stdout.write('s')
-            orderState.apply_change_events(state)
+            orderState.stateStoreApply(state)
         }
     })
 
@@ -34,11 +34,11 @@ export async function order_state_startup({ db, tenent }) {
     const LOOP_MINS = 10, LOOP_CHANGES = 100
     console.log(`order_state_startup (4): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
-    setInterval(async (ctx, chkdir) => {
-        console.log(`Checkpointing check: seq=${event_seq}, #orders=${orderState.state.orders.length}, #inv=${orderState.state.inventory.size}`)
+    setInterval(async (c, chkdir) => {
+        console.log(`Checkpointing check: seq=${event_seq}, #orders=${orderState.stateStore.state.orders.items.length}, #inv=${orderState.stateStore.state.inventory.length}`)
         if (event_seq > lastcheckpoint_seq + LOOP_CHANGES) {
             console.log(`do checkpoint`)
-            await snapshotState(ctx, chkdir, event_seq, orderState.serializeState)
+            await snapshotState(c, chkdir, event_seq, orderState.stateStore.serializeState)
             lastcheckpoint_seq = event_seq
         }
     }, 1000 * 60 * LOOP_MINS, { db, tenent }, chkdir)
@@ -61,7 +61,7 @@ export async function order_state_startup({ db, tenent }) {
         console.log(`inventoryStreamWatcher : got seq#=${sequence}, processor=${processor !== undefined} state=${state && state.length}`)
         assert(sequence === ++event_seq, `order_state_startup: watch ERROR, expected seq#=${event_seq} got seq=${sequence}`)
         if (state) {
-            orderState.apply_change_events(state)
+            orderState.stateStoreApply(state)
         }
 
     })

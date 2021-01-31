@@ -66,12 +66,17 @@ export class Processor {
     private _middleware: Array<() => any> = []
 
     constructor(opts: any = {}) {
-        this._stateMutex = opts.stateMutex
+
         this._name = opts.name
-        this.processActionFn = opts.processActionFn
-        this.commitEventsFn = opts.commitEventsFn
-        this.applyEventsFn = opts.applyEventsFn
         this._context = { processor: this.name }
+
+        if (opts.statePlugin) {
+            this._stateMutex = opts.statePlugin.stateMutex
+            this.processActionFn = opts.statePlugin.processActionFn
+            this.commitEventsFn = opts.statePlugin.commitEventsFn
+            this.applyEventsFn = opts.statePlugin.applyEventsFn
+        }
+
     }
 
     get name(): string {
@@ -200,7 +205,7 @@ export class Processor {
 
         let release = await this._stateMutex.aquire()
 
-        const [hasFailed, middleware_events] = middlewareActions ? this.processActionFn(middlewareActions) : [, null]
+        const [hasFailed, middleware_events] = middlewareActions ? await this.processActionFn(middlewareActions) : [, null]
 
         const proc_events = this.processAction(action, hasFailed)
         console.log(`processor.apply: action: pid=${action.flow_id} fidx=${action.function_idx}  complete=${action.complete}. Event: next_seq=${proc_events.next_sequence} pid=${proc_events.flow_id} fidx=${proc_events.function_idx}  complete=${proc_events.complete} `)
