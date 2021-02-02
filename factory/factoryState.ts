@@ -59,35 +59,35 @@ function workItemsReducer(): ReducerWithPassin<WorkItemReducerState, WorkItemAct
 
     return {
         sliceKey: 'workItems',
-        passInSlice: 'inventory',
+        passInSlice: 'inventory_complete',
         initState: { items: [], workitem_sequence: 0 } as WorkItemReducerState,
         fn: async function (connection, state: WorkItemReducerState, action: WorkItemAction, passInSlice): Promise<ReducerReturnWithSlice> {
             const { spec, id, status } = action
             switch (action.type) {
                 case 'workItems/New':
-                    const required_props = ['product', 'qty', 'warehouse']
+                    const required_props = ['productId', 'qty', 'warehouse']
                     if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true)) {
                         if (state.items.findIndex(w => w.id === id) < 0) {
-                            return [[false, [
+                            return [[{ failed: false }, [
                                 { method: UpdatesMethod.Inc, doc: { workitem_sequence: 1 } },
                                 { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: false, workItemId: 'WI' + String(state.workitem_sequence).padStart(5, '0'), stage: WorkItemStage.New } } }
                             ]]]
                         } else {
-                            return [[true, [
+                            return [[{ failed: true }, [
                                 { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: true, message: `Adding workItem with "id" that already exists id=${id}`, stage: WorkItemStage.New } } }
                             ]]]
                         }
                     } else {
-                        return [[true, [
+                        return [[{ failed: true }, [
                             { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: true, message: `Require properties missing. ${required_props.map(i => `"${i}"`).join(',')}`, stage: WorkItemStage.New } } }
                         ]]]
                     }
                 case 'workItems/StatusUpdate':
-                    return [[false, [
+                    return [[{ failed: false }, [
                         { method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status } }
                     ]]]
                 case 'tidyUp':
-                    return [[false, [
+                    return [[{ failed: false }, [
                         { method: UpdatesMethod.Rm, path: 'items', filter: { id } }
                     ]]]
                 case 'workItems/InventoryAvailable':
@@ -96,17 +96,17 @@ function workItemsReducer(): ReducerWithPassin<WorkItemReducerState, WorkItemAct
                     if (wiidx >= 0) {
                         const [inventoryState, inventoryReducer] = passInSlice
 
-                        return [[false, [
+                        return [[{ failed: false }, [
                             { method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status: { failed: false, stage: WorkItemStage.InventoryAvailable } } }
                         ]], await inventoryReducer(connection, inventoryState, { type: 'inventry/New', id, spec })]
                     } else {
-                        return [[true, [
+                        return [[{ failed: true }, [
                             { method: UpdatesMethod.Add, path: 'items', doc: { id, status: { stage: WorkItemStage.InventoryAvailable, failed: true, message: `workItem missing in store id=${id}` } } }
                         ]]]
                     }
                 default:
                     // action not for this reducer, so no updates
-                    return [null, null]
+                    return [[{ failed: true, message: `unknown action.type=${action.type}` }, null]]
             }
         }
     }
@@ -140,7 +140,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, fa
 
             switch (action.type) {
                 case 'tidyUp':
-                    return [[false, [
+                    return [[{ failed: false }, [
                         { method: UpdatesMethod.Rm, path: 'items', filter: { id: action.id } }
                     ]]]
                 case 'factory/Process':
@@ -204,7 +204,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, fa
                         factory_updates.push({ method: UpdatesMethod.Inc, doc: { capacity_allocated: capacity_allocated_update } })
                     }
 
-                    return [factory_updates.length > 0 ? [false, factory_updates] : null, workitem_updates.length > 0 ? [false, workitem_updates] : null] as ReducerReturnWithSlice
+                    return [factory_updates.length > 0 ? [{ failed: false }, factory_updates] : null, workitem_updates.length > 0 ? [{ failed: false }, workitem_updates] : null] as ReducerReturnWithSlice
 
                 default:
                     // action not for this reducer, so no updates
@@ -220,7 +220,7 @@ export interface InventoryItem {
     id: string;
     workItemId: string;
     qty: number;
-    product: string;
+    productId: string;
     warehouse: string;
 }
 
@@ -232,26 +232,26 @@ interface InventoryReducerState {
 function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
 
     return {
-        sliceKey: 'inventory',
+        sliceKey: 'inventory_complete',
         initState: { /*items: [], */ inventry_sequence: 0 } as InventoryReducerState,
         fn: async function (connection, state: InventoryReducerState, action: WorkItemAction): Promise<ReducerReturn> {
 
             const { spec, id, type } = action
             switch (type) {
                 case 'inventry/New':
-                    const result = await connection.db.collection("inventory").insertOne({
+                    const result = await connection.db.collection("inventory_complete").insertOne({
                         sequence: state.inventry_sequence,
                         partition_key: connection.tenent.email,
                         inventoryId: 'INV' + String(state.inventry_sequence).padStart(5, '0'),
                         ...spec
                     })
                     if (result && result.insertedCount === 1) {
-                        return [false, [
+                        return [{ failed: false }, [
                             { method: UpdatesMethod.Inc, doc: { inventry_sequence: 1 } }
                             //{ method: UpdatesMethod.Add, path: 'items', doc: { ...spec, id: 'INV' + String(state.inventry_sequence).padStart(5, '0'), inventry_sequence: state.inventry_sequence } }
                         ]]
                     } else {
-                        return [true, null]
+                        return [{ failed: true }, null]
                     }
                 default:
                     // action not for this reducer, so no updates
@@ -263,19 +263,19 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
 
 export class FactoryStateManager extends StateManager {
 
-    constructor(opts) {
-        super({
+    constructor(name, opts) {
+        super(name, {
             connection: opts.connection,
             stateMutex: opts.stateMutex,
             commitEventsFn: opts.commitEventsFn,
             reducers: [
-                workItemsReducer(),
-                initFactoryReducer(),
-                inventryReducer()
+                workItemsReducer,
+                initFactoryReducer,
+                inventryReducer
             ]
-            //     workItems: { passInSlice: 'inventory', reducerFn: workItemsReducer }
+            //     workItems: { passInSlice: 'inventory_complete', reducerFn: workItemsReducer }
             //      , factory: { passInSlice: 'workItems', reducerFn: initFactoryReducer() }
-            //      , inventory: { reducerFn: inventryReducer }
+            //      , inventory_complete: { reducerFn: inventryReducer }
             //   }
         })
     }

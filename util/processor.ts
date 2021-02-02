@@ -1,6 +1,6 @@
 const assert = require('assert')
 const Emitter = require('events')
-
+/*
 // This represents the 'state' of the processor (its hydrated from the ProcessorChange events)
 export interface ProcessingState {
     processor_sequence: number;     // lateset processor_sequence # (one for each workflow event)
@@ -30,7 +30,7 @@ interface ProcessorChange {
     options?: ProcessorOptions;
     trigger?: any // from trigger
 }
-
+*/
 export interface ProcessorOptions {
     update_ctx?: any;
     sleep_until?: {
@@ -39,7 +39,7 @@ export interface ProcessorOptions {
         time?: number;
     }
 }
-
+/*
 // Perform Action on state
 export interface ProcessorAction {
     type: ActionType;
@@ -50,33 +50,144 @@ export interface ProcessorAction {
     trigger?: any; // add trigger info to process
 }
 export enum ActionType { NEW, UPDATE }
+*/
 
+///////////////////////////////////
+
+import { StateStore, StateManager, StateUpdates, StateUpdateControl, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer } from '../util/flux'
+
+interface ProcessAction {
+    type: ProcessActionType;
+    flow_id?: string;
+    function_idx?: number;
+    complete: boolean;
+    options?: ProcessorOptions;
+    failedMiddleware: boolean;
+    trigger?: any;
+}
+
+enum ProcessActionType {
+    New = 'workflow/New',
+    Update = 'workflow/Update',
+}
+
+interface ProcessReducerState {
+    processor_sequence: number;     // lateset processor_sequence # (one for each workflow event)
+    flow_sequence: number;          // lateset flow_sequence # (one for each workflow)
+    last_incoming_processed: any;
+    proc_map: Array<ProcessObject>
+}
+
+interface ProcessObject {
+    // Same value as "proc_map" key
+    flow_id?: string;
+    complete: boolean;
+    // full process context, only used for 'ProcessingState', not event log
+    context_object?: any;
+    function_idx?: number;
+    options?: ProcessorOptions;
+}
+
+function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
+
+    return {
+        sliceKey: 'processor',
+        initState: { flow_sequence: 0, last_incoming_processed: {}, proc_map: [] } as ProcessReducerState,
+        fn: async function (connection, state: ProcessReducerState, action: ProcessAction): Promise<ReducerReturn> {
+            const { type, flow_id, function_idx, complete, failedMiddleware, trigger } = action
+            // split 'action.options.update_ctx' out of event, and aggritate into state 'context_object'
+            const { update_ctx, ...options } = action.options
+
+            switch (type) {
+                case ProcessActionType.New:
+                    const new_flow_id = `WF${state.flow_sequence}`
+                    return [{ failed: false, id: new_flow_id }, [
+                        { method: UpdatesMethod.Inc, doc: { flow_sequence: 1 } },
+                        {
+                            method: UpdatesMethod.Add, path: 'proc_map', doc: {
+                                flow_id: new_flow_id,
+                                function_idx: 0,
+                                complete: false,
+                                options: action.options,
+                                context_object: update_ctx
+                            } as ProcessObject
+                        }
+                    ].concat(trigger ? { method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: { ...trigger } } : [])
+                    ]
+                case ProcessActionType.Update:
+
+                    return [{ failed: false }, [
+                        {
+                            method: UpdatesMethod.Merge, path: 'proc_map', filter: { flow_id }, doc: {
+                                function_idx: function_idx,
+                                complete: complete || failedMiddleware,
+                                options: options,
+                                context_object: update_ctx
+                            } as ProcessObject
+                        }]]
+                default:
+                    assert.fail('Cannot apply processor actions, unknown ActionType')
+            }
+        }
+    }
+}
+
+class ProcessorStateManager extends StateManager {
+
+    constructor(name, opts) {
+        super(name, {
+            connection: opts.connection,
+            stateMutex: opts.stateMutex,
+            commitEventsFn: opts.commitEventsFn,
+            reducers: [
+                processorReducer
+            ]
+        })
+    }
+}
+
+///////////////////////////////////
 
 
 export class Processor {
 
-    private _name: string = "defaultProcessor"
-    private processActionFn: (action: any) => [boolean, Array<any>]
-    private commitEventsFn: (middlewareEvnts: Array<any>, processor: any, label: string) => void
-    private applyEventsFn: (events: Array<any>) => void
+    private _name: string
+    //private stateProcessActionFn
+    private _commitEventsFn: (state: { [key: string]: { [key: string]: StateUpdateControl | Array<StateUpdates> } }) => Promise<void>
+    //private stateApplyEventsFn
     private _stateMutex
+    private _statePlugin: StateManagerInterface
+    private _stateManager: ProcessorStateManager
 
-    private _state = { processor_sequence: 0, flow_sequence: 0, last_trigger: {}, proc_map: new Map() }
+    //private _state = { processor_sequence: 0, flow_sequence: 0, last_trigger: {}, proc_map: new Map() }
     private _context: any
     private _middleware: Array<() => any> = []
 
-    constructor(opts: any = {}) {
+    constructor(name, opts: any = {}) {
 
-        this._name = opts.name
+        this._name = name
         this._context = { processor: this.name }
 
-        if (opts.statePlugin) {
-            this._stateMutex = opts.statePlugin.stateMutex
-            this.processActionFn = opts.statePlugin.processActionFn
-            this.commitEventsFn = opts.statePlugin.commitEventsFn
-            this.applyEventsFn = opts.statePlugin.applyEventsFn
-        }
+        this._stateManager = new ProcessorStateManager(name, {
 
+        })
+        this._statePlugin = opts.statePlugin
+
+        //if (opts.statePlugin) {
+        this._stateMutex = opts.stateMutex
+        //    this.stateProcessActionFn = opts.statePlugin.stateProcessActionFn
+        this._commitEventsFn = opts.commitEventsFn
+        //    this.stateApplyEventsFn = opts.statePlugin.stateApplyEventsFn
+        //}
+
+    }
+
+    get stateStore(): StateStore {
+        return this._stateManager.stateStore
+    }
+
+    get processorState(): ProcessReducerState {
+        return this._stateManager.stateStore['processor']
     }
 
     get name(): string {
@@ -88,66 +199,68 @@ export class Processor {
     }
 
 
-
-    get state(): ProcessingState {
-        return this._state;
-    }
-
-    set state(newstate: ProcessingState) {
-        this._state = newstate
-    }
-
-    get serializeState() {
-        return { ...this._state, proc_map: [...this._state.proc_map] }
-    }
-
-    deserializeState(newstate?): void {
-        if (newstate) {
-            this.state = { ...newstate, proc_map: new Map(newstate.proc_map) }
+    /*
+        get state(): ProcessingState {
+            return this._state;
         }
-    }
-
-    applyEvents(val: ProcessorChange): ProcessorObject {
-
-        assert(val.flow_id, `applyEvents, Cannot apply ProcessorChange, no "flow_id"`)
-        assert(val.next_sequence && val.next_sequence === this.state.processor_sequence + 1, `applyEvents, Cannot apply change sequence ${val.next_sequence}, expecting ${this.state.processor_sequence + 1}`)
-
-        const { flow_id, next_sequence, options, complete, function_idx, trigger } = val // dont need to store flow_id, its the key to the Map
-        const newstate = { ...this.state, ...(val.flow_sequence_inc && { flow_sequence: this.state.flow_sequence + val.flow_sequence_inc }), processor_sequence: val.next_sequence, proc_map: new Map(this.state.proc_map) } // a clone
-
-        if (trigger) {
-            newstate.last_trigger = { ...newstate.last_trigger, ...val.trigger }
+    
+        set state(newstate: ProcessingState) {
+            this._state = newstate
         }
-
-        let new_proc_object
-
-        if (complete) {
-            newstate.proc_map.delete(flow_id)
-        } else {
-
-            // split 'update_ctx' out of event, and aggritate into 'context_object'
-            const { update_ctx, ...other_options } = options || {}
-            const current_proc_object: ProcessorObject = newstate.proc_map.get(flow_id) || {}
-            new_proc_object = { ...current_proc_object, flow_id, function_idx, ...(other_options && { options: other_options as ProcessorOptions }), context_object: { ...current_proc_object.context_object, ...update_ctx } }
-            newstate.proc_map.set(flow_id, new_proc_object)
+    
+        get serializeState() {
+            return { ...this._state, proc_map: [...this._state.proc_map] }
         }
-        this.state = newstate
-        return new_proc_object
-    }
+    
+        deserializeState(newstate?): void {
+            if (newstate) {
+                this.state = { ...newstate, proc_map: new Map(newstate.proc_map) }
+            }
+        }
+    
+    
+        applyEvents(val: ProcessorChange): ProcessorObject {
+    
+            assert(val.flow_id, `applyEvents, Cannot apply ProcessorChange, no "flow_id"`)
+            assert(val.next_sequence && val.next_sequence === this.state.processor_sequence + 1, `applyEvents, Cannot apply change sequence ${val.next_sequence}, expecting ${this.state.processor_sequence + 1}`)
+    
+            const { flow_id, next_sequence, options, complete, function_idx, trigger } = val // dont need to store flow_id, its the key to the Map
+            const newstate = { ...this.state, ...(val.flow_sequence_inc && { flow_sequence: this.state.flow_sequence + val.flow_sequence_inc }), processor_sequence: val.next_sequence, proc_map: new Map(this.state.proc_map) } // a clone
+    
+            if (trigger) {
+                newstate.last_trigger = { ...newstate.last_trigger, ...val.trigger }
+            }
+    
+            let new_proc_object
+    
+            if (complete) {
+                newstate.proc_map.delete(flow_id)
+            } else {
+    
+                // split 'update_ctx' out of event, and aggritate into 'context_object'
+                const { update_ctx, ...other_options } = options || {}
+                const current_proc_object: ProcessorObject = newstate.proc_map.get(flow_id) || {}
+                new_proc_object = { ...current_proc_object, flow_id, function_idx, ...(other_options && { options: other_options as ProcessorOptions }), context_object: { ...current_proc_object.context_object, ...update_ctx } }
+                newstate.proc_map.set(flow_id, new_proc_object)
+            }
+            this.state = newstate
+            return new_proc_object
+        }
+    */
 
     restartProcessors(checkSleepStageFn, restartall) {
 
         // Restart required_state_processor_state
-        for (let [flow_id, p] of this.state.proc_map) {
+        for (let pobj of this.processorState.proc_map) {
 
-            if (p.options && p.options.sleep_until) {
+            if (pobj.options && pobj.options.sleep_until) {
 
-                if (p.options.sleep_until.stage) {
-                    if (checkSleepStageFn(p.options.sleep_until)) {
+                if (pobj.options.sleep_until.stage) {
+                    if (checkSleepStageFn(pobj.options.sleep_until)) {
                         continue
                     }
-                } else if (p.options.sleep_until.time) {
-                    if (p.options.sleep_until.time >= Date.now()) continue /* dont restart */
+                } else if (pobj.options.sleep_until.time) {
+                    if (pobj.options.sleep_until.time >= Date.now()) continue /* dont restart */
                 } else {
                     continue /* dont restart */
                 }
@@ -155,11 +268,11 @@ export class Processor {
             } else if (!restartall) {
                 continue /* dont restart */
             }
-            console.log(`processor.restartProcessors pid=${flow_id}, fidx=${p.function_idx}, sleep_unit=${JSON.stringify(p.options.sleep_until)}`)
+            console.log(`processor.restartProcessors pid=${pobj.flow_id}, fidx=${pobj.function_idx}, sleep_unit=${JSON.stringify(pobj.options.sleep_until)}`)
             try {
-                this.launchHandler(p)
+                this.launchHandler(pobj.flow_id)
             } catch (err) {
-                console.error(`restartProcessors, failed to restart process ${flow_id}, err=${err}`)
+                console.error(`restartProcessors, failed to restart process ${pobj.flow_id}, err=${err}`)
             }
         }
     }
@@ -172,6 +285,7 @@ export class Processor {
         return this;
     }
 
+    /*
     private processAction(action: ProcessorAction, failedMiddleware: boolean): ProcessorChange {
         // generate events from action
         const next_sequence = this.state.processor_sequence + 1
@@ -198,38 +312,51 @@ export class Processor {
                 assert.fail('Cannot apply processor actions, unknown ActionType')
         }
     }
-
-    async apply(action: ProcessorAction, middlewareActions, event_label): Promise<ProcessorObject> {
-        assert(this.commitEventsFn, 'Cannot apply processor actions, no "commitEventsFn" provided')
-        assert(middlewareActions ? this.processActionFn && this.applyEventsFn : true, 'Cannot apply processor actions, got "middlewareActions" to ally, but no "processActionFn" or "applyEventsFn" provided')
+*/
+    // requires custom dispatch, because need to see if stateActions have failed, if so, stop the workflow.
+    async combindDispatch(action: ProcessAction, stateActions: any/*, event_label*/): Promise<boolean /*{ [key: string]: ReducerInfo }*/> {
+        assert(this._commitEventsFn, 'combindDispatch: Cannot apply processor actions, no "commitEventsFn" provided')
+        assert(stateActions ? this._statePlugin : true, 'Cannot apply processor actions, got "stateActions" to apply, but no "statePlugin" class provided')
 
         let release = await this._stateMutex.aquire()
 
-        const [hasFailed, middleware_events] = middlewareActions ? await this.processActionFn(middlewareActions) : [, null]
+        const [stateInfo, stateChanges] = stateActions ? await this._statePlugin.processAction(stateActions) : [{}, null]
 
-        const proc_events = this.processAction(action, hasFailed)
-        console.log(`processor.apply: action: pid=${action.flow_id} fidx=${action.function_idx}  complete=${action.complete}. Event: next_seq=${proc_events.next_sequence} pid=${proc_events.flow_id} fidx=${proc_events.function_idx}  complete=${proc_events.complete} `)
+        // if any of the state reducers return failed, then stop the workflow
+        if (Object.keys(stateInfo).reduce((acc, i) => stateInfo[i].failed || acc, false)) {
+            action.complete = true
+        }
+
+
+        const [info, changes] = await this._stateManager.processAction(action)
+        //console.log(`processor.apply: action: pid=${action.flow_id} fidx=${action.function_idx}  complete=${action.complete}. Event: next_seq=${proc_events.next_sequence} pid=${proc_events.flow_id} fidx=${proc_events.function_idx}  complete=${proc_events.complete} `)
 
         // write events
-        await this.commitEventsFn(middleware_events,
-            { [this.name]: proc_events },
-            event_label)
+        await this._commitEventsFn({
+            [this._statePlugin.name]: stateChanges,
+            [this.name]: changes
+        })
+        /*,  event_label*/
 
         // applyEvents to local state
-        let new_proc_object = this.applyEvents(proc_events)
+        if (changes) {
+            this._stateManager.stateStoreApply(changes)
+        }
         //applyEvents events from middleware
-        if (middleware_events) {
-            this.applyEventsFn(middleware_events)
+        if (stateChanges) {
+            this._statePlugin.stateStoreApply(stateChanges)
         }
 
         release()
-        return new_proc_object
+
+        return action.complete
     }
 
-    //  Initiate new processor workflow
-    launchHandler(trigger: ProcessorObject) {
 
-        function compose(trigger: ProcessorObject) {
+    //  Initiate new processor workflow
+    launchHandler(id: string) {
+
+        function compose(trigger: ProcessObject) {
             if (!trigger.flow_id) {
                 throw new Error('Error, launchHandler called without trigger.flow_id')
             }
@@ -244,7 +371,7 @@ export class Processor {
 
             return dispatch.bind(this, trigger.function_idx, null, trigger.options, null)()
 
-            async function dispatch(i: number, middlewareActions: any, options: ProcessorOptions, event_label: string) {
+            async function dispatch(i: number, stateActions: any, options: ProcessorOptions /*, event_label: string*/) {
 
                 //console.log(`Processor: dispatch called i=${i}, trigger.function_idx=${trigger.function_idx}, index=${index} (middleware.length=${this.middleware.length})`)
 
@@ -264,16 +391,17 @@ export class Processor {
 
                     const complete: boolean = i >= this._middleware.length
 
-                    const proc: ProcessorObject = await this.apply({
-                        type: ActionType.UPDATE,
+                    //const proc: ProcessorObject = await this.combindDispatch({
+                    const iscomplete = await this.combindDispatch({
+                        type: ProcessActionType.Update,
                         flow_id: trigger.flow_id,
                         function_idx: i,
                         complete,
                         options
-                    }, middlewareActions, event_label)
+                    }, stateActions/*, event_label*/)
 
 
-                    if (!proc) {  // if !proc, that means its been marked as completed, thus removed from "proc_map" ProcessingState
+                    if (iscomplete) {
                         return Promise.resolve({ state: 'complete', flow_id: trigger.flow_id })
                     } else if (options && options.sleep_until) {
                         return Promise.resolve({ state: 'sleep_until', flow_id: trigger.flow_id })
@@ -289,7 +417,8 @@ export class Processor {
             }
         }
 
-        return (compose.bind(this, trigger)()).then(result =>
+        const pobj = this.processorState.proc_map.find(i => i.flow_id === id)
+        return compose.bind(this, pobj).then(result =>
             console.log(`process successfullly finished pid=${JSON.stringify(result)} `)
         )//.catch(err =>
         //     console.error(`Any error in the pipeline ends here: ${err}`)
@@ -298,19 +427,26 @@ export class Processor {
 
     }
 
-    async initiateWorkflow(new_ctx, trigger): Promise<ProcessorObject> {
+    async initiateWorkflow(new_ctx, trigger): Promise<ReducerInfo> {
         console.log('initiateWorkflow: creating process event')
 
-        const po = await this.apply({
-            type: ActionType.NEW,
-            complete: false,
-            options: {
-                update_ctx: new_ctx
-            },
+        const { processor } = await this._stateManager.dispatch({
+            type: ProcessActionType.New,
+            options: { update_ctx: new_ctx },
             ...(trigger && { trigger })
-        } as ProcessorAction, null, null)
-        this.launchHandler(po)//.then(r => console.log(r))
-        return po
+        })
+        /*
+                const po = await this.apply({
+                    type: ActionType.NEW,
+                    complete: false,
+                    options: {
+                        update_ctx: new_ctx
+                    },
+                    ...(trigger && { trigger })
+                } as ProcessorAction, null, null)
+        */
+        this.launchHandler(processor.id)//.then(r => console.log(r))
+        return processor
     }
 
 }

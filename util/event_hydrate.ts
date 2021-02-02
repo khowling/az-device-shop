@@ -1,35 +1,38 @@
 const assert = require('assert')
 const fs = require('fs')
 
-export async function rollForwardState(ctx, collection_event: string, from_seq: number, label_filter: string, applyfn): Promise<number> {
+import { StateStore } from './flux'
 
-    let processed_seq = from_seq
-    console.log(`rollForwardState: reading 'factory_events' from database from seq#=${from_seq}`)
+export async function rollForwardState({ db, tenent }, collection: string, from_sequence: number, stateStores: StateStore[]): Promise<number> {
 
-    await ctx.db.collection(collection_event).createIndex({ sequence: 1 })
-    const inflate_events = await ctx.db.collection(collection_event).aggregate(
-        [
-            { $match: { $and: [{ "partition_key": ctx.tenent.email }, { sequence: { $gt: from_seq } }].concat(label_filter ? { label_filter } : [] as any) } },
-            { $sort: { "sequence": 1 } }
-        ]
-    ).toArray()
+    let processed_seq = from_sequence
+    console.log(`rollForwardState: reading 'factory_events' from database from seq#=${from_sequence}`)
 
-    if (inflate_events && inflate_events.length > 0) {
-        console.log(`rollForwardState: replaying from seq#=${inflate_events[0].sequence}, to seq#=${inflate_events[inflate_events.length - 1].sequence}  to state`)
+    const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
 
-        for (let i = 0; i < inflate_events.length; i++) {
+    await db.collection(collection).createIndex({ sequence: 1 })
+    const cursor = await db.collection(collection).aggregate([
+        { $match: { $and: [{ "partition_key": tenent.email }, { sequence: { $gt: from_sequence } }] } },
+        { $sort: { "sequence": 1 } }
+    ])
 
-            const { _id, sequence, partition_key, ...eventdata } = inflate_events[i]
-            if (!label_filter) assert(sequence === processed_seq + 1, `rollForwardState: expected seq=${processed_seq + 1}, got ${sequence}`)
-            applyfn({ ...eventdata })
-            processed_seq = sequence
+    while (await cursor.hasNext()) {
+        const { _id, partition_key, sequence, ...changedata } = await cursor.next()
+
+        for (let key of Object.keys(changedata)) {
+
+            if (stateStoreByName.hasOwnProperty(key)) {
+                stateStoreByName[key].apply(changedata[key])
+            }
         }
+        processed_seq = sequence
     }
     return processed_seq
+
 }
 
 
-export async function returnLatestSnapshot(ctx, chkdir: string): Promise<any> {
+export async function restoreLatestSnapshot(ctx, chkdir: string, stateStores: StateStore[]): Promise<number> {
     const dir = `${chkdir}/${ctx.tenent.email}`
     await fs.promises.mkdir(dir, { recursive: true })
     let latestfile = { fileseq: null, filedate: null, filename: null }
@@ -45,29 +48,42 @@ export async function returnLatestSnapshot(ctx, chkdir: string): Promise<any> {
             }
         }
     }
+
     if (latestfile.filename) {
         console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
         //const { state_snapshot, ...rest } = 
-        return await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
+        const body = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
 
-        //this.state = FactoryStateManager.deserializeState(state_snapshot)
-        //return rest
+        const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
+
+        const { event_seq, ...snapshotdata } = body
+
+        for (let key of Object.keys(snapshotdata)) {
+            if (stateStoreByName.hasOwnProperty(key)) {
+                stateStoreByName[key].deserializeState(snapshotdata[key])
+            }
+        }
+
+        return event_seq
     } else {
         console.log(`No checkpoint found, start from 0`)
-        return {}
+        return 0
 
     }
 }
 
-export async function snapshotState(ctx, chkdir: string, event_seq: number, state_snapshot: any, processor_snapshot?: any): Promise<any> {
+export async function snapshotState(ctx, chkdir: string, event_seq: number, stateMutex, stateStores: StateStore[]): Promise<any> {
     const now = new Date()
+    let release = await stateMutex.aquire()
     const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${event_seq}.json`
     console.log(`writing movement ${filename}`)
+
     await fs.promises.writeFile(filename, JSON.stringify({
         event_seq,
-        state_snapshot, //: this.serializeState,
-        ...(processor_snapshot && { processor_snapshot }), //: processor_snapshot
+        ...stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i.serializeState } }, {})
     }))
+
+    release()
     //return this.state.sequence
 }
 

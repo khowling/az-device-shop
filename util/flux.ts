@@ -1,11 +1,25 @@
 const assert = require('assert')
 
-class JSStateStore {
+export interface StateStore {
+    name: string;
+    state: any;
+    serializeState(): any;
+    deserializeState(newstate: any): void
+    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
+}
 
+class JSStateStore implements StateStore {
+
+    private _name
     private _state
 
-    constructor(initstate) {
+    constructor(name, initstate) {
+        this._name = name
         this._state = initstate
+    }
+
+    get name() {
+        return this._name
     }
 
     get state() {
@@ -38,18 +52,20 @@ class JSStateStore {
         }
     }
 
-    apply(statechanges) {
+    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void {
 
-        assert(statechanges._control && statechanges._control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${statechanges._control && statechanges._control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
-        let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: statechanges._control.lastupdated } }
+        const _control: StateUpdateControl = statechanges._control as StateUpdateControl
+        assert(_control && _control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
+        let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
         for (let stateKey of Object.keys(statechanges)) {
             if (stateKey === '_control') continue
             // get the relevent section of the state
+            const stateKeyChanges: Array<StateUpdates> = statechanges[stateKey] as Array<StateUpdates>
             let reducerKeyState = this._state[stateKey]
 
-            for (let i = 0; i < statechanges[stateKey].length; i++) {
-                const update: StateUpdates = statechanges[stateKey][i]
+            for (let i = 0; i < stateKeyChanges.length; i++) {
+                const update: StateUpdates = stateKeyChanges[i]
                 let pathKeyState = update.path ? reducerKeyState[update.path] : reducerKeyState
 
                 switch (update.method) {
@@ -98,7 +114,7 @@ class JSStateStore {
                         }
                         break
                     default:
-                        assert(false, `applyToLocalState: Cannot apply update seq=${statechanges._control.head_sequence}, unknown method=${update.method}`)
+                        assert(false, `applyToLocalState: Cannot apply update seq=${_control.head_sequence}, unknown method=${update.method}`)
                 }
 
                 if (update.path) {
@@ -116,6 +132,11 @@ class JSStateStore {
     }
 }
 
+export interface StateUpdateControl {
+    head_sequence: number;
+    lastupdated: number;
+}
+
 export interface StateUpdates {
     method: UpdatesMethod;
     path?: string; // state path to process (optional)
@@ -129,8 +150,15 @@ export enum UpdatesMethod {
     Merge = 'merge',
     Set = 'set'
 }
-export type ReducerReturnWithSlice = [boolean, Array<StateUpdates>][];
-export type ReducerReturn = [boolean, Array<StateUpdates>];
+
+export interface ReducerInfo {
+    failed: boolean;
+    id?: string;
+    message?: string;
+}
+
+export type ReducerReturnWithSlice = [ReducerInfo, Array<StateUpdates>][];
+export type ReducerReturn = [ReducerInfo, Array<StateUpdates>];
 
 export interface ReducerWithPassin<S, A> {
     sliceKey: string;
@@ -155,32 +183,45 @@ interface ControlReducer {
     fn: (connection: any, state: ControlReducerState) => Promise<[boolean, ControlReducerState]>
 }
 
-export class StateManager {
+export interface StateManagerInterface {
+    name: string;
+    stateStore: StateStore;
+    processAction(action: any): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]>
+    stateStoreApply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
+
+}
+export class StateManager implements StateManagerInterface {
 
     // hols
-    private _stateStore
-    private commitEventsFn
+    private _name
+    private _stateStore: StateStore
+    private _commitEventsFn
     private _stateMutex
     private _connection
     // A reducer that invokes every reducer inside the reducers object, and constructs a state object with the same shape.
     private _rootReducer
 
-    constructor(opts) {
+    constructor(name, opts) {
+        this._name = name
         this._connection = opts.connection
         this._stateMutex = opts.stateMutex
-        this.commitEventsFn = opts.commitEventsFn
+        this._commitEventsFn = opts.commitEventsFn
 
         let reducers = [this.applyReducer()].concat(opts.reducers)
-        this._stateStore = new JSStateStore(opts.initState || reducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {}))
+        this._stateStore = new JSStateStore(this._name, opts.initState || reducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {}))
         this._rootReducer = this.combineReducers(this._connection, reducers)
         //console.log(`StateManager: ${JSON.stringify(this.state)}`)
+    }
+
+    get name() {
+        return this._name
     }
 
     get stateStore() {
         return this._stateStore
     }
 
-    applyReducer(): ControlReducer {
+    private applyReducer(): ControlReducer {
         return {
             sliceKey: '_control',
             initState: { head_sequence: 0, lastupdated: null } as ControlReducerState,
@@ -191,10 +232,10 @@ export class StateManager {
     }
 
 
-    combineReducers(coonnection, reducers) {
+    private combineReducers(coonnection, reducers) {
         // A reducer function that invokes every reducer inside the passed
         // *   object, and builds a state object with the same shape.
-        return async function (state, action) {
+        return async function (state, action): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]> {
 
             assert(action, 'reducers require action parameter')
             //let hasChanged = false
@@ -223,7 +264,7 @@ export class StateManager {
             }
 
             return Object.keys(allUpdates).length > 1 ? [
-                Object.keys(allUpdates).reduce((acc, i) => allUpdates[i][0] || acc, false),
+                Object.keys(allUpdates).map(k => { return { [k]: allUpdates[k][0] } }).reduce((acc, i) => { return { ...acc, ...i } }, {}),
                 Object.keys(allUpdates).map(k => { return { [k]: allUpdates[k][1] } }).reduce((acc, i) => { return { ...acc, ...i } }, {})
             ] : [null, null]
 
@@ -232,7 +273,7 @@ export class StateManager {
 
     // Used by external processor when managing multiple state updates //
     //
-    async processAction(action) {
+    async processAction(action: any): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]> {
         return await this._rootReducer(this.stateStore.state, action)
     }
     stateStoreApply(statechanges) {
@@ -243,24 +284,27 @@ export class StateManager {
 
     // Used when only this state is updated
     //
-    async dispatch(action, processor?: any, label?: string) {
+    async dispatch(action /*, processor?: any, label?: string*/): Promise<{ [key: string]: ReducerInfo }> {
         //console.log(`Action: \n${JSON.stringify(action)}`)
+        assert(this._commitEventsFn, 'dispatch: Cannot apply processor actions, no "commitEventsFn" provided')
 
         let release = await this._stateMutex.aquire()
+        const [reducerInfo, changes] = await this._rootReducer(this.stateStore.state, action)
+        // console.log(`Updates: \n${JSON.stringify(changes)}`)
 
-        const [failed, statechanges] = await this._rootReducer(this.stateStore.state, action)
-
-        // console.log(`Updates: \n${JSON.stringify(statechanges)}`)
-
-        if (statechanges) {
-            console.log(`factoryState.apply: action: flow_id=${action.id} type=${action.type}. ${statechanges ? `Event: current_head=${statechanges._control.head_sequence}` : ''}`)
+        if (changes) {
+            console.log(`factoryState.apply: action: flow_id=${action.id} type=${action.type}. ${changes ? `Event: current_head=${changes._control.head_sequence}` : ''}`)
             // persist events
-            await this.commitEventsFn(statechanges, processor, label)
+            await this._commitEventsFn({
+                [this.name]: changes
+            }) /*, processor, label*/
             // apply events to local state
-            this._stateStore.apply(statechanges)
+
+            this._stateStore.apply(changes)
         }
         release()
-
+        //                Object.keys(allUpdates).reduce((acc, i) => allUpdates[i][0] || acc, false),
+        return reducerInfo
         //console.log(`State: \n${JSON.stringify(this.state)}`)
     }
 }
