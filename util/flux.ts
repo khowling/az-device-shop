@@ -106,7 +106,13 @@ class JSStateStore implements StateStore {
                                 update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
 
                             assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                            const new_doc_updates = Object.keys(update.doc).map(k => { return { [k]: Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ? { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k] } }).reduce((a, i) => { return { ...a, ...i } }, {})
+                            const new_doc_updates = Object.keys(update.doc).map(k => {
+                                return {
+                                    [k]:
+                                        update.doc[k] && Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && pathKeyState[update_idx][k] && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ?
+                                            { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k]
+                                }
+                            }).reduce((a, i) => { return { ...a, ...i } }, {})
                             const new_doc = { ...pathKeyState[update_idx], ...new_doc_updates }
                             pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, new_doc)
                         } else {
@@ -190,26 +196,26 @@ export interface StateManagerInterface {
     stateStoreApply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
 
 }
-export class StateManager implements StateManagerInterface {
 
-    // hols
+import { EventEmitter } from 'events'
+import { StateConnection } from './stateConnection'
+
+export class StateManager extends EventEmitter implements StateManagerInterface {
+
     private _name
     private _stateStore: StateStore
-    private _commitEventsFn
-    private _stateMutex
-    private _connection
+    private _connection: StateConnection
     // A reducer that invokes every reducer inside the reducers object, and constructs a state object with the same shape.
     private _rootReducer
 
-    constructor(name, opts) {
+    constructor(name: string, connection: StateConnection, reducers: Array<Reducer<any, any> | ReducerWithPassin<any, any>>) {
+        super()
         this._name = name
-        this._connection = opts.connection
-        this._stateMutex = opts.stateMutex
-        this._commitEventsFn = opts.commitEventsFn
+        this._connection = connection
 
-        let reducers = [this.applyReducer()].concat(opts.reducers)
-        this._stateStore = new JSStateStore(this._name, opts.initState || reducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {}))
-        this._rootReducer = this.combineReducers(this._connection, reducers)
+        const allReducers = [this.applyReducer()].concat(reducers as any)
+        this._stateStore = new JSStateStore(this._name, allReducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {}))
+        this._rootReducer = this.combineReducers(this._connection, allReducers)
         //console.log(`StateManager: ${JSON.stringify(this.state)}`)
     }
 
@@ -284,26 +290,31 @@ export class StateManager implements StateManagerInterface {
 
     // Used when only this state is updated
     //
-    async dispatch(action /*, processor?: any, label?: string*/): Promise<{ [key: string]: ReducerInfo }> {
+    async dispatch(action): Promise<{ [key: string]: ReducerInfo }> {
         //console.log(`Action: \n${JSON.stringify(action)}`)
-        assert(this._commitEventsFn, 'dispatch: Cannot apply processor actions, no "commitEventsFn" provided')
+        assert(this._connection, 'dispatch: Cannot apply processor actions, no "Connection" details provided')
+        const cs = this._connection
 
-        let release = await this._stateMutex.aquire()
+        let release = await cs.mutex.aquire()
         const [reducerInfo, changes] = await this._rootReducer(this.stateStore.state, action)
         // console.log(`Updates: \n${JSON.stringify(changes)}`)
 
         if (changes) {
             console.log(`factoryState.apply: action: flow_id=${action.id} type=${action.type}. ${changes ? `Event: current_head=${changes._control.head_sequence}` : ''}`)
             // persist events
-            await this._commitEventsFn({
+            const msg = {
+                sequence: cs.sequence,
+                partition_key: cs.tenent.email,
                 [this.name]: changes
-            }) /*, processor, label*/
+            }
+            const res = await cs.db.collection(cs.collection).insertOne(msg)
+            this.emit('changes', msg)
+            cs.sequence = cs.sequence + 1
             // apply events to local state
-
             this._stateStore.apply(changes)
         }
         release()
-        //                Object.keys(allUpdates).reduce((acc, i) => allUpdates[i][0] || acc, false),
+        //  Object.keys(allUpdates).reduce((acc, i) => allUpdates[i][0] || acc, false),
         return reducerInfo
         //console.log(`State: \n${JSON.stringify(this.state)}`)
     }

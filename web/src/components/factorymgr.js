@@ -14,8 +14,8 @@ function WorkItem({ resource, dismissPanel, refstores }) {
     const [input, handleInputChange] = useState({
         'qty': result.qty,
         'status': result.status || "Required",
-        'category': result.category,
-        'product': result.product,
+        'categoryId': result.categoryId,
+        'productId': result.productId,
         'price': result.price,
         'warehouse': result.warehouse
     })
@@ -42,8 +42,8 @@ function WorkItem({ resource, dismissPanel, refstores }) {
     return (
         <Stack tokens={{ childrenGap: 15 }} styles={{ root: { width: 300 } }}>
 
-            <Dropdown label="Category" defaultSelectedKey={input.category} onChange={(e, i) => _onChange({ target: { name: "category" } }, i.key)} options={refstores.Category} />
-            <Dropdown label="Product" defaultSelectedKey={input.product} onChange={(e, i) => _onChange({ target: { name: "product" } }, i.key)} options={refstores.Product.filter(x => x.category === input.category)} />
+            <Dropdown label="Category" defaultSelectedKey={input.categoryId} onChange={(e, i) => _onChange({ target: { name: "categoryId" } }, i.key)} options={refstores.Category} />
+            <Dropdown label="Product" defaultSelectedKey={input.productId} onChange={(e, i) => _onChange({ target: { name: "productId" } }, i.key)} options={refstores.Product.filter(x => x.category === input.category)} />
 
             <Slider
                 label="Number to build"

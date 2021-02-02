@@ -1,36 +1,7 @@
 const assert = require('assert')
 const Emitter = require('events')
-/*
-// This represents the 'state' of the processor (its hydrated from the ProcessorChange events)
-export interface ProcessingState {
-    processor_sequence: number;     // lateset processor_sequence # (one for each workflow event)
-    flow_sequence: number;          // lateset flow_sequence # (one for each workflow)
-    last_trigger: any;
-    proc_map: Map<string, ProcessorObject>
-}
 
-interface ProcessorObject {
-    // Same value as "proc_map" key
-    flow_id?: string;
 
-    // full process context, only used for 'ProcessingState', not event log
-    context_object?: any;
-    function_idx?: number;
-    options?: ProcessorOptions;
-}
-
-// this gets written to the eventlog for re-hybration
-interface ProcessorChange {
-    // only used for event log, its the Map key in 'ProcessingState'
-    flow_id?: string;
-    next_sequence?: number;
-    flow_sequence_inc?: number;
-    function_idx?: number;
-    complete: boolean;
-    options?: ProcessorOptions;
-    trigger?: any // from trigger
-}
-*/
 export interface ProcessorOptions {
     update_ctx?: any;
     sleep_until?: {
@@ -39,22 +10,10 @@ export interface ProcessorOptions {
         time?: number;
     }
 }
-/*
-// Perform Action on state
-export interface ProcessorAction {
-    type: ActionType;
-    flow_id?: string;
-    function_idx: number;
-    complete: boolean;
-    options: ProcessorOptions;
-    trigger?: any; // add trigger info to process
-}
-export enum ActionType { NEW, UPDATE }
-*/
 
-///////////////////////////////////
-
-import { StateStore, StateManager, StateUpdates, StateUpdateControl, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer } from '../util/flux'
+import { StateConnection } from '../util/stateConnection'
+import { StateStore, StateManager, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer } from '../util/flux'
+import { EventEmitter } from 'events'
 
 interface ProcessAction {
     type: ProcessActionType;
@@ -62,7 +21,7 @@ interface ProcessAction {
     function_idx?: number;
     complete: boolean;
     options?: ProcessorOptions;
-    failedMiddleware: boolean;
+    //failedMiddleware: boolean;
     trigger?: any;
 }
 
@@ -92,11 +51,11 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
 
     return {
         sliceKey: 'processor',
-        initState: { flow_sequence: 0, last_incoming_processed: {}, proc_map: [] } as ProcessReducerState,
+        initState: { flow_sequence: 0, last_incoming_processed: null, proc_map: [] } as ProcessReducerState,
         fn: async function (connection, state: ProcessReducerState, action: ProcessAction): Promise<ReducerReturn> {
-            const { type, flow_id, function_idx, complete, failedMiddleware, trigger } = action
+            const { type, flow_id, function_idx, complete /*, failedMiddleware */, trigger } = action
             // split 'action.options.update_ctx' out of event, and aggritate into state 'context_object'
-            const { update_ctx, ...options } = action.options
+            const { update_ctx, ...options } = action.options || {}
 
             switch (type) {
                 case ProcessActionType.New:
@@ -108,8 +67,8 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
                                 flow_id: new_flow_id,
                                 function_idx: 0,
                                 complete: false,
-                                options: action.options,
-                                context_object: update_ctx
+                                ...(Object.keys(options).length > 0 && { options }),
+                                ...(update_ctx && { context_object: update_ctx })
                             } as ProcessObject
                         }
                     ].concat(trigger ? { method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: { ...trigger } } : [])
@@ -120,9 +79,9 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
                         {
                             method: UpdatesMethod.Merge, path: 'proc_map', filter: { flow_id }, doc: {
                                 function_idx: function_idx,
-                                complete: complete || failedMiddleware,
-                                options: options,
-                                context_object: update_ctx
+                                complete /* || failedMiddleware*/,
+                                options: Object.keys(options).length > 0 ? options : null, // if no options props, send a 'null' to overrite any existing options
+                                ...(update_ctx && { context_object: update_ctx })
                             } as ProcessObject
                         }]]
                 default:
@@ -134,52 +93,34 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
 
 class ProcessorStateManager extends StateManager {
 
-    constructor(name, opts) {
-        super(name, {
-            connection: opts.connection,
-            stateMutex: opts.stateMutex,
-            commitEventsFn: opts.commitEventsFn,
-            reducers: [
-                processorReducer
-            ]
-        })
+    constructor(name: string, connection: StateConnection) {
+        super(name, connection, [
+            processorReducer()
+        ])
     }
 }
 
 ///////////////////////////////////
 
 
-export class Processor {
+export class Processor extends EventEmitter {
 
     private _name: string
-    //private stateProcessActionFn
-    private _commitEventsFn: (state: { [key: string]: { [key: string]: StateUpdateControl | Array<StateUpdates> } }) => Promise<void>
-    //private stateApplyEventsFn
-    private _stateMutex
+
     private _statePlugin: StateManagerInterface
     private _stateManager: ProcessorStateManager
-
-    //private _state = { processor_sequence: 0, flow_sequence: 0, last_trigger: {}, proc_map: new Map() }
+    private _connection: StateConnection
     private _context: any
     private _middleware: Array<() => any> = []
 
-    constructor(name, opts: any = {}) {
-
+    constructor(name: string, connection: StateConnection, opts: any = {}) {
+        super()
         this._name = name
+        this._connection = connection
         this._context = { processor: this.name }
-
-        this._stateManager = new ProcessorStateManager(name, {
-
-        })
         this._statePlugin = opts.statePlugin
 
-        //if (opts.statePlugin) {
-        this._stateMutex = opts.stateMutex
-        //    this.stateProcessActionFn = opts.statePlugin.stateProcessActionFn
-        this._commitEventsFn = opts.commitEventsFn
-        //    this.stateApplyEventsFn = opts.statePlugin.stateApplyEventsFn
-        //}
-
+        this._stateManager = new ProcessorStateManager(name, connection)
     }
 
     get stateStore(): StateStore {
@@ -187,7 +128,7 @@ export class Processor {
     }
 
     get processorState(): ProcessReducerState {
-        return this._stateManager.stateStore['processor']
+        return this._stateManager.stateStore.state['processor']
     }
 
     get name(): string {
@@ -199,59 +140,10 @@ export class Processor {
     }
 
 
-    /*
-        get state(): ProcessingState {
-            return this._state;
-        }
-    
-        set state(newstate: ProcessingState) {
-            this._state = newstate
-        }
-    
-        get serializeState() {
-            return { ...this._state, proc_map: [...this._state.proc_map] }
-        }
-    
-        deserializeState(newstate?): void {
-            if (newstate) {
-                this.state = { ...newstate, proc_map: new Map(newstate.proc_map) }
-            }
-        }
-    
-    
-        applyEvents(val: ProcessorChange): ProcessorObject {
-    
-            assert(val.flow_id, `applyEvents, Cannot apply ProcessorChange, no "flow_id"`)
-            assert(val.next_sequence && val.next_sequence === this.state.processor_sequence + 1, `applyEvents, Cannot apply change sequence ${val.next_sequence}, expecting ${this.state.processor_sequence + 1}`)
-    
-            const { flow_id, next_sequence, options, complete, function_idx, trigger } = val // dont need to store flow_id, its the key to the Map
-            const newstate = { ...this.state, ...(val.flow_sequence_inc && { flow_sequence: this.state.flow_sequence + val.flow_sequence_inc }), processor_sequence: val.next_sequence, proc_map: new Map(this.state.proc_map) } // a clone
-    
-            if (trigger) {
-                newstate.last_trigger = { ...newstate.last_trigger, ...val.trigger }
-            }
-    
-            let new_proc_object
-    
-            if (complete) {
-                newstate.proc_map.delete(flow_id)
-            } else {
-    
-                // split 'update_ctx' out of event, and aggritate into 'context_object'
-                const { update_ctx, ...other_options } = options || {}
-                const current_proc_object: ProcessorObject = newstate.proc_map.get(flow_id) || {}
-                new_proc_object = { ...current_proc_object, flow_id, function_idx, ...(other_options && { options: other_options as ProcessorOptions }), context_object: { ...current_proc_object.context_object, ...update_ctx } }
-                newstate.proc_map.set(flow_id, new_proc_object)
-            }
-            this.state = newstate
-            return new_proc_object
-        }
-    */
-
     restartProcessors(checkSleepStageFn, restartall) {
 
         // Restart required_state_processor_state
-        for (let pobj of this.processorState.proc_map) {
+        for (let pobj of this.processorState.proc_map.filter(p => !p.complete)) {
 
             if (pobj.options && pobj.options.sleep_until) {
 
@@ -279,47 +171,20 @@ export class Processor {
 
     use(fn) {
         if (typeof fn !== 'function') throw new TypeError('middleware must be a function!');
-
         //console.log('use %s', fn._name || fn.name || '-');
         this._middleware.push(fn);
         return this;
     }
 
-    /*
-    private processAction(action: ProcessorAction, failedMiddleware: boolean): ProcessorChange {
-        // generate events from action
-        const next_sequence = this.state.processor_sequence + 1
-        switch (action.type) {
-            case ActionType.NEW:
-                return {
-                    flow_id: `WF${this.state.flow_sequence}`,
-                    flow_sequence_inc: 1,
-                    next_sequence,
-                    function_idx: 0,
-                    complete: false,
-                    options: action.options,
-                    ...(action.trigger && { trigger: action.trigger })
-                }
-            case ActionType.UPDATE:
-                return {
-                    flow_id: action.flow_id,
-                    next_sequence,
-                    function_idx: action.function_idx,
-                    complete: action.complete || failedMiddleware,
-                    options: action.options
-                }
-            default:
-                assert.fail('Cannot apply processor actions, unknown ActionType')
-        }
-    }
-*/
+
     // requires custom dispatch, because need to see if stateActions have failed, if so, stop the workflow.
     async combindDispatch(action: ProcessAction, stateActions: any/*, event_label*/): Promise<boolean /*{ [key: string]: ReducerInfo }*/> {
-        assert(this._commitEventsFn, 'combindDispatch: Cannot apply processor actions, no "commitEventsFn" provided')
+        assert(this._connection, 'dispatch: Cannot apply processor actions, no "Connection" details provided')
+        const cs = this._connection
+
         assert(stateActions ? this._statePlugin : true, 'Cannot apply processor actions, got "stateActions" to apply, but no "statePlugin" class provided')
 
-        let release = await this._stateMutex.aquire()
-
+        let release = await cs.mutex.aquire()
         const [stateInfo, stateChanges] = stateActions ? await this._statePlugin.processAction(stateActions) : [{}, null]
 
         // if any of the state reducers return failed, then stop the workflow
@@ -332,11 +197,16 @@ export class Processor {
         //console.log(`processor.apply: action: pid=${action.flow_id} fidx=${action.function_idx}  complete=${action.complete}. Event: next_seq=${proc_events.next_sequence} pid=${proc_events.flow_id} fidx=${proc_events.function_idx}  complete=${proc_events.complete} `)
 
         // write events
-        await this._commitEventsFn({
-            [this._statePlugin.name]: stateChanges,
+        const msg = {
+            sequence: cs.sequence,
+            partition_key: cs.tenent.email,
+            ...(stateChanges && { [this._statePlugin.name]: stateChanges }),
             [this.name]: changes
-        })
-        /*,  event_label*/
+        }
+
+        const res = await cs.db.collection(cs.collection).insertOne(msg)
+        this.emit('changes', msg)
+        cs.sequence = cs.sequence + 1
 
         // applyEvents to local state
         if (changes) {
@@ -348,7 +218,6 @@ export class Processor {
         }
 
         release()
-
         return action.complete
     }
 
@@ -371,7 +240,7 @@ export class Processor {
 
             return dispatch.bind(this, trigger.function_idx, null, trigger.options, null)()
 
-            async function dispatch(i: number, stateActions: any, options: ProcessorOptions /*, event_label: string*/) {
+            async function dispatch(i: number, stateActions: any, options: ProcessorOptions = null /*, event_label: string*/) {
 
                 //console.log(`Processor: dispatch called i=${i}, trigger.function_idx=${trigger.function_idx}, index=${index} (middleware.length=${this.middleware.length})`)
 
@@ -384,7 +253,6 @@ export class Processor {
                         context[k] = options.update_ctx[k]
                     }
                 }
-
 
                 // Add processor details for processor hydration & call 'eventfn' to store in log
                 if (i > trigger.function_idx) {
@@ -418,7 +286,7 @@ export class Processor {
         }
 
         const pobj = this.processorState.proc_map.find(i => i.flow_id === id)
-        return compose.bind(this, pobj).then(result =>
+        return (compose.bind(this)(pobj)).then(result =>
             console.log(`process successfullly finished pid=${JSON.stringify(result)} `)
         )//.catch(err =>
         //     console.error(`Any error in the pipeline ends here: ${err}`)
@@ -435,16 +303,6 @@ export class Processor {
             options: { update_ctx: new_ctx },
             ...(trigger && { trigger })
         })
-        /*
-                const po = await this.apply({
-                    type: ActionType.NEW,
-                    complete: false,
-                    options: {
-                        update_ctx: new_ctx
-                    },
-                    ...(trigger && { trigger })
-                } as ProcessorAction, null, null)
-        */
         this.launchHandler(processor.id)//.then(r => console.log(r))
         return processor
     }

@@ -32,6 +32,7 @@ export enum OrderStage {
 
 
 import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../util/flux'
+import { StateConnection } from '../util/stateConnection'
 export { StateUpdates } from '../util/flux'
 
 // Mutate state in a Consistant, Safe, recorded mannore
@@ -60,7 +61,7 @@ interface OrderReducerState {
 function orderReducer(): ReducerWithPassin<OrderReducerState, OrderAction> {
 
     return {
-        sliceKey: 'workItems',
+        sliceKey: 'orders',
         passInSlice: 'inventory_complete',
         initState: { items: [], order_sequence: 0 } as OrderReducerState,
         fn: async function (connection, state: OrderReducerState = { items: [], order_sequence: 0 }, action: OrderAction, passInSlice): Promise<ReducerReturnWithSlice> {
@@ -166,7 +167,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, pi
 
     return {
         sliceKey: 'factory',
-        passInSlice: 'workItems',
+        passInSlice: 'orders',
         initState: { items: [], capacity_allocated: 0 } as FactoryReducerState,
         fn: async function (connection, state: FactoryReducerState, action: OrderAction, passInSlice): Promise<ReducerReturnWithSlice> {
 
@@ -311,15 +312,11 @@ function inventryReducer(): Reducer<InventoryReducerState, OrderAction> {
 
 export class OrderStateManager extends StateManager {
 
-    constructor(name, opts: any = {}) {
-        super(name, {
-            stateMutex: opts.stateMutex,
-            commitEventsFn: opts.commitEventsFn,
-            reducers: [
-                orderReducer(),
-                initFactoryReducer(),
-                inventryReducer()
-            ]
-        })
+    constructor(name: string, connection: StateConnection) {
+        super(name, connection, [
+            orderReducer(),
+            initFactoryReducer(),
+            inventryReducer()
+        ])
     }
 }

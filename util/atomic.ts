@@ -1,6 +1,11 @@
+export interface AtomicInterface {
+    aquire(): Promise<() => void>;
+
+}
+
 // 
 // Big thanks to https://github.com/DirtyHairy/async-mutex/blob/master/src/Semaphore.ts
-export class Atomic {
+export class Atomic implements AtomicInterface {
 
     private _queue: Array<(lease: [number, () => void]) => void> = [];
     private _currentReleaser: () => void | undefined;

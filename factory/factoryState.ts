@@ -31,6 +31,7 @@ export enum WorkItemStage {
 
 
 import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../util/flux'
+import { StateConnection } from '../util/stateConnection'
 export { StateUpdates } from '../util/flux'
 
 // Mutate state in a Consistant, Safe, recorded mannore
@@ -106,7 +107,7 @@ function workItemsReducer(): ReducerWithPassin<WorkItemReducerState, WorkItemAct
                     }
                 default:
                     // action not for this reducer, so no updates
-                    return [[{ failed: true, message: `unknown action.type=${action.type}` }, null]]
+                    return [null, null]
             }
         }
     }
@@ -263,20 +264,11 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
 
 export class FactoryStateManager extends StateManager {
 
-    constructor(name, opts) {
-        super(name, {
-            connection: opts.connection,
-            stateMutex: opts.stateMutex,
-            commitEventsFn: opts.commitEventsFn,
-            reducers: [
-                workItemsReducer,
-                initFactoryReducer,
-                inventryReducer
-            ]
-            //     workItems: { passInSlice: 'inventory_complete', reducerFn: workItemsReducer }
-            //      , factory: { passInSlice: 'workItems', reducerFn: initFactoryReducer() }
-            //      , inventory_complete: { reducerFn: inventryReducer }
-            //   }
-        })
+    constructor(name: string, connection: StateConnection) {
+        super(name, connection, [
+            workItemsReducer(),
+            initFactoryReducer(),
+            inventryReducer()
+        ])
     }
 }

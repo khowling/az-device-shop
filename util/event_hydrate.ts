@@ -2,18 +2,25 @@ const assert = require('assert')
 const fs = require('fs')
 
 import { StateStore } from './flux'
+import { StateConnection } from './stateConnection'
 
-export async function rollForwardState({ db, tenent }, collection: string, from_sequence: number, stateStores: StateStore[]): Promise<number> {
+export async function restoreState(sc: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<[restore_sequence: number, last_checkpoint: number]> {
+
+    let last_checkpoint = await restoreLatestSnapshot(sc, chkdir, stateStores)
+    return [await rollForwardState(sc, last_checkpoint, stateStores), last_checkpoint]
+}
+
+async function rollForwardState(cs: StateConnection, from_sequence: number, stateStores: StateStore[]): Promise<number> {
 
     let processed_seq = from_sequence
-    console.log(`rollForwardState: reading 'factory_events' from database from seq#=${from_sequence}`)
+    console.log(`rollForwardState: reading "${cs.collection}" from database from_sequence#=${from_sequence}`)
 
     const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
 
-    await db.collection(collection).createIndex({ sequence: 1 })
-    const cursor = await db.collection(collection).aggregate([
-        { $match: { $and: [{ "partition_key": tenent.email }, { sequence: { $gt: from_sequence } }] } },
-        { $sort: { "sequence": 1 } }
+    await cs.db.collection(cs.collection).createIndex({ sequence: 1 })
+    const cursor = await cs.db.collection(cs.collection).aggregate([
+        { $match: { $and: [{ "partition_key": cs.tenent.email }, { sequence: { $gte: from_sequence } }] } },
+        { $sort: { "sequence": 1 /* assending */ } }
     ])
 
     while (await cursor.hasNext()) {
@@ -32,8 +39,8 @@ export async function rollForwardState({ db, tenent }, collection: string, from_
 }
 
 
-export async function restoreLatestSnapshot(ctx, chkdir: string, stateStores: StateStore[]): Promise<number> {
-    const dir = `${chkdir}/${ctx.tenent.email}`
+async function restoreLatestSnapshot(cs: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
+    const dir = `${chkdir}/${cs.tenent.email}`
     await fs.promises.mkdir(dir, { recursive: true })
     let latestfile = { fileseq: null, filedate: null, filename: null }
     const checkpoints = await fs.promises.readdir(dir)
@@ -72,14 +79,14 @@ export async function restoreLatestSnapshot(ctx, chkdir: string, stateStores: St
     }
 }
 
-export async function snapshotState(ctx, chkdir: string, event_seq: number, stateMutex, stateStores: StateStore[]): Promise<any> {
+export async function snapshotState(cs: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<any> {
     const now = new Date()
-    let release = await stateMutex.aquire()
-    const filename = `${chkdir}/${ctx.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${event_seq}.json`
+    let release = await cs.mutex.aquire()
+    const filename = `${chkdir}/${cs.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${cs.sequence}.json`
     console.log(`writing movement ${filename}`)
 
     await fs.promises.writeFile(filename, JSON.stringify({
-        event_seq,
+        event_seq: cs.sequence,
         ...stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i.serializeState } }, {})
     }))
 

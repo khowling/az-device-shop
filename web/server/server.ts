@@ -80,8 +80,8 @@ const StoreDef = {
         collection: "inventory_spec",
         schema: Joi.object({
             'status': Joi.string().valid('Draft', 'Required', 'InFactory', 'Cancel', 'Available').required(),
-            'product': Joi.string().required(),
-            'category': Joi.string().required(),
+            'productId': Joi.string().required(),
+            'categoryId': Joi.string().required(),
             'warehouse': Joi.string().required(),
             'qty': Joi.number().required()
         })

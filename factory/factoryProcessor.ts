@@ -1,3 +1,4 @@
+
 import { Processor, ProcessorOptions } from '../util/processor'
 import {
     StateUpdates, WorkItemActionType, WorkItemAction,
@@ -38,82 +39,47 @@ async function tidyUp({ flow_id, spec }, next) {
 
 
 // Mongo require
-const { MongoClient, ObjectID } = require('mongodb'),
-    assert = require('assert').strict,
-    MongoURL = process.env.MONGO_DB
 
-import { Atomic } from '../util/atomic'
-import { snapshotState, restoreLatestSnapshot, rollForwardState } from '../util/event_hydrate'
+const assert = require('assert').strict
+const MongoURL = process.env.MONGO_DB
 
-var event_seq: number
-var stateFactoryName = 'emeafactory_v0.0.1'
+import { StateConnection } from '../util/stateConnection'
+import { snapshotState, restoreState } from '../util/event_hydrate'
+
+
 async function factory_startup() {
-
-    const murl = new URL(MongoURL)
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
-    console.log(`factory_startup (1):  connecting to db: ${murl.toString()}`)
-    const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
-    const db = client.db()
-    const connection = {
-        db, tenent: await db.collection("business").findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
-    }
+    console.log(`factory_startup (1):  Initilise Connection`)
+    const cs = await new StateConnection(new URL(MongoURL), 'factory_events').init()
 
-    // Get state apply mutex
-    const stateMutex = new Atomic()
 
     console.log(`factory_startup (2):  create factory state manager "factoryState"`)
-    const factoryState = new FactoryStateManager(stateFactoryName, {
-        connection,
-        commitEventsFn: commitEvents.bind(null, connection),
-        stateMutex,
-    })
+    const factoryState = new FactoryStateManager('emeafactory_v0', cs)
 
     console.log(`factory_startup (3):  create factory workflow manager "factoryProcessor", and use middleware`)
-    const factoryProcessor = new Processor('emeafactory_processor_v0.0.1', {
-        name: "fctProcv1",
-        statePlugin: factoryState,//{
-        //processActionFn: factoryState.processAction.bind(factoryState),
-        //applyEventsFn: factoryState.stateStoreApply.bind(factoryState), //Events.bind(factoryState),
-        commitEventsFn: commitEvents.bind(null, connection),
-        stateMutex
-        // }
-    })
-    // add connection to ctx, to allow middleware access, (maybe not required!)
-    factoryProcessor.context.connection = connection
+    const factoryProcessor = new Processor('emeaprocessor_v001', cs, { statePlugin: factoryState })
 
+    // add connection to ctx, to allow middleware access, (maybe not required!)
+    factoryProcessor.context.connection = cs
+
+    // add workflow actions
     factoryProcessor.use(validateRequest)
     factoryProcessor.use(inFactory)
     factoryProcessor.use(moveToWarehouse)
     factoryProcessor.use(publishInventory)
     factoryProcessor.use(tidyUp)
 
-    console.log(`factory_startup (3):  get latest checkpoint file, deserialize to "factoryState" & "factoryProcessor"`)
     const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
-    event_seq = await restoreLatestSnapshot(connection, chkdir, [
+    let [restore_sequence, last_checkpoint] = await restoreState(cs, chkdir, [
         factoryState.stateStore,
         factoryProcessor.stateStore
     ])
-    /*
-    const { sequence_snapshot, state_snapshot, processor_snapshop } = await returnLatestSnapshot(connection, chkdir)
-    factoryState.stateStore.deserializeState(state_snapshot)
-    factoryProcessor.deserializeState(processor_snapshop && processor_snapshop[factoryProcessor.name])
-    */
-    // Set "event_seq" & "lastcheckpoint_seq" to value from snapshop
-    /*
-    event_seq = sequence_snapshot ? sequence_snapshot : 0
-    */
+    cs.sequence = restore_sequence
 
-    let lastcheckpoint_seq: number = event_seq
+    console.log(`factory_startup (4): restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
 
-    console.log(`factory_startup (4):  read events since last checkpoint (seq#=${event_seq}), apply to factoryState and factoryProcessor`)
-    await rollForwardState(connection, "factory_events", event_seq, [
-        factoryState.stateStore,
-        factoryProcessor.stateStore
-    ])
 
-    console.log(`factory_startup (5): restored factory state to head_sequence=${factoryState.stateStore.state._control.head_sequence}, factory #workItems=${factoryState.stateStore.state.workItems.items.length}`)
-
-    console.log(`factory_startup (6): re-start workflow engine state @ seq=${factoryProcessor.processorState.processor_sequence}, active flows count=${factoryProcessor.processorState.proc_map.length}`)
+    console.log(`factory_startup (5): Re-start active "factoryProcessor" workflows, #flows=${factoryProcessor.processorState.proc_map.length}`)
     function checkRestartStage({ id, stage }) {
         const widx = factoryState.stateStore.state.workItems.items.findIndex(o => o.id === id)
         if (widx < 0) {
@@ -126,7 +92,7 @@ async function factory_startup() {
     factoryProcessor.restartProcessors(checkRestartStage, true)
 
     if (true) {
-        console.log(`factory_startup (7): loop to re-start 'sleep_until' processes..`)
+        console.log(`factory_startup (6): Starting Interval to process 'sleep_until' workflows.`)
         setInterval(() => {
             //console.log('factory_startup: check to restart "sleep_until" processes')
             factoryProcessor.restartProcessors(checkRestartStage, false)
@@ -136,23 +102,22 @@ async function factory_startup() {
 
 
     const LOOP_MINS = 10, LOOP_CHANGES = 100
-    console.log(`factory_startup (8): starting checkpointing loop (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
+    console.log(`factory_startup (7): Starting Interval to checkpoint state  (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
     // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
-    setInterval(async (c, chkdir) => {
-        console.log(`Checkpointing check: seq=${event_seq},  Processing size=${factoryProcessor.processorState.proc_map.length}`)
-        if (event_seq > lastcheckpoint_seq + LOOP_CHANGES) {
+    setInterval(async (cs, chkdir) => {
+        console.log(`Checkpointing check: seq=${cs.sequence},  Processing size=${factoryProcessor.processorState.proc_map.length}`)
+        if (cs.sequence > last_checkpoint + LOOP_CHANGES) {
             console.log(`do checkpoint`)
-            await snapshotState(c, chkdir, event_seq, stateMutex, [
+            last_checkpoint = await snapshotState(cs, chkdir, [
                 factoryState.stateStore,
                 factoryProcessor.stateStore
             ])
-            lastcheckpoint_seq = event_seq
         }
-    }, 1000 * 60 * LOOP_MINS, connection, chkdir)
+    }, 1000 * 60 * LOOP_MINS, cs, chkdir)
 
 
     if (true) {
-        console.log(`factory_startup (9): starting factory control loop (5 seconds)`)
+        console.log(`factory_startup (8): Starting Interval to run "FactoryProcess" action (5 seconds)`)
         setInterval(async function () {
             //console.log('factory_startup: checking on progress WorkItems in "FactoryStage.Building"')
             await factoryState.dispatch({ type: WorkItemActionType.FactoryProcess })
@@ -161,10 +126,10 @@ async function factory_startup() {
 
 
     const cont_token = factoryProcessor.processorState.last_incoming_processed
-    console.log(`factory_startup (10):  start watch for new "inventory_spec" (startAfter=${cont_token})`)
-    db.collection("inventory_spec").watch(
+    console.log(`factory_startup (9): Starting "watch" for new "inventory_spec" (startAfter=${cont_token})`)
+    cs.db.collection("inventory_spec").watch(
         [
-            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": connection.tenent.email }, { "fullDocument.status": 'Required' }] } }
+            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": cs.tenent.email }, { "fullDocument.status": 'Required' }] } }
             , { $project: { "ns": 1, "documentKey": 1, "fullDocument.status": 1, "fullDocument.partition_key": 1 } }
         ],
         { fullDocument: "updateLookup", ...(cont_token && { ...cont_token }) }
@@ -177,41 +142,14 @@ async function factory_startup() {
         factoryProcessor.initiateWorkflow({ trigger: { doc_id: doc.documentKey._id } }, { startAfter: doc._id })
     })
 
-
     return { factoryProcessor, factoryState }
 }
 
 
 
 //  ---- Factory Monitoring Websocket
-
 //  ---- Factory Monitoring Websocket & API
 type WS_ServerClientType = Record<string, any>;
-const ws_server_clients: WS_ServerClientType = new Map()
-
-async function commitEvents({ db, tenent }, state: { [key: string]: Array<StateUpdates> } /*, processor: any, label?: string*/): Promise<void> {
-
-    //if (state || processor) {
-    const res = await db.collection("factory_events").insertOne({
-        sequence: ++event_seq,
-        partition_key: tenent.email,
-        ...state
-        /*
-        ...(label && { label }),
-        ...(state && { state }),
-        ...(processor && { processor }*/
-    })
-
-    if (state) {
-        //            console.log(`sending state updates to ${ws_server_clients.size} clients`)
-        if (state[stateFactoryName]) {
-            for (let [key, ws] of ws_server_clients.entries()) {
-                ws.send(JSON.stringify({ type: "events", state: state[stateFactoryName] }))
-            }
-        }
-    }
-    //}
-}
 
 function ws_server_startup({ factoryProcessor, factoryState }) {
 
@@ -262,6 +200,8 @@ function ws_server_startup({ factoryProcessor, factoryState }) {
         }
     }
 
+    const ws_server_clients: WS_ServerClientType = new Map()
+
     const httpServer = http.createServer(httpTrigger).listen(port)
     console.log(`ws_server_startup: listening to port ${port}`)
 
@@ -293,12 +233,25 @@ function ws_server_startup({ factoryProcessor, factoryState }) {
             }
         })
     })
+
+    function sendEvents(state) {
+        console.log('got emitted events!!')
+        console.log(state)
+        if (state) {
+            // console.log(`sending state updates to ${ws_server_clients.size} clients`)
+            for (let [key, ws] of ws_server_clients.entries()) {
+                ws.send(JSON.stringify({ type: "events", state }))
+            }
+        }
+    }
+
+    factoryProcessor.on('changes', (events) => sendEvents(events[factoryState.name]))
+    factoryState.on('changes', (events) => sendEvents(events[factoryState.name]))
 }
 
 async function init() {
     //try {
     ws_server_startup(await factory_startup())
-
     //} catch (e) {
     //    console.error(e)
     //    process.exit(1)
