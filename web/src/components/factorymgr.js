@@ -43,7 +43,7 @@ function WorkItem({ resource, dismissPanel, refstores }) {
         <Stack tokens={{ childrenGap: 15 }} styles={{ root: { width: 300 } }}>
 
             <Dropdown label="Category" defaultSelectedKey={input.categoryId} onChange={(e, i) => _onChange({ target: { name: "categoryId" } }, i.key)} options={refstores.Category} />
-            <Dropdown label="Product" defaultSelectedKey={input.productId} onChange={(e, i) => _onChange({ target: { name: "productId" } }, i.key)} options={refstores.Product.filter(x => x.category === input.category)} />
+            <Dropdown label="Product" defaultSelectedKey={input.productId} onChange={(e, i) => _onChange({ target: { name: "productId" } }, i.key)} options={refstores.Product.filter(x => x.category === input.categoryId)} />
 
             <Slider
                 label="Number to build"
@@ -104,8 +104,10 @@ function stateReducer({ state, metadata }, action) {
             // status: OrderStatus | InventoryStatus
 
             const statechanges = action.state
-            console.assert(statechanges._control && statechanges._control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${statechanges._control && statechanges._control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
-            let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: statechanges._control.lastupdated } }
+            const _control = statechanges._control
+
+            console.assert(_control && _control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
+            let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
             for (let stateKey of Object.keys(statechanges)) {
                 if (stateKey === '_control') continue
@@ -154,7 +156,14 @@ function stateReducer({ state, metadata }, action) {
                                     update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
 
                                 console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                                const new_doc_updates = Object.keys(update.doc).map(k => { return { [k]: Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ? { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k] } }).reduce((a, i) => { return { ...a, ...i } }, {})
+                                const new_doc_updates = Object.keys(update.doc).map(k => {
+                                    return {
+                                        [k]:
+                                            update.doc[k] && Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && pathKeyState[update_idx][k] && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ?
+                                                { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k]
+                                    }
+                                }).reduce((a, i) => { return { ...a, ...i } }, {})
+
                                 const new_doc = { ...pathKeyState[update_idx], ...new_doc_updates }
                                 pathKeyState = imm_splice(pathKeyState, update_idx, new_doc)
                             } else {

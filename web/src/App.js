@@ -86,7 +86,8 @@ export const AppRouteCfg = {
     component: ManageProducts,
     componentFetch: {
       operation: "get",
-      store: "products"
+      store: "products",
+      refstores: [{ orderState: true, store: "inventory" }]
     }
   },
   "/product": {

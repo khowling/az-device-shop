@@ -1,5 +1,5 @@
 
-import { Processor, ProcessorOptions } from '../util/processor'
+import { Processor, ProcessorOptions } from '../common/processor'
 import {
     StateUpdates, WorkItemActionType, WorkItemAction,
     FactoryStateManager,
@@ -43,9 +43,9 @@ async function tidyUp({ flow_id, spec }, next) {
 const assert = require('assert').strict
 const MongoURL = process.env.MONGO_DB
 
-import { StateConnection } from '../util/stateConnection'
-import { snapshotState, restoreState } from '../util/event_hydrate'
-
+import { StateConnection } from '../common/stateConnection'
+import { startCheckpointing, restoreState } from '../common/event_hydrate'
+import { mongoWatchProcessorTrigger } from '../common/processorActions'
 
 async function factory_startup() {
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
@@ -70,17 +70,16 @@ async function factory_startup() {
     factoryProcessor.use(tidyUp)
 
     const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
-    let [restore_sequence, last_checkpoint] = await restoreState(cs, chkdir, [
+    const last_checkpoint = await restoreState(cs, chkdir, [
         factoryState.stateStore,
         factoryProcessor.stateStore
     ])
-    cs.sequence = restore_sequence
 
     console.log(`factory_startup (4): restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
 
 
     console.log(`factory_startup (5): Re-start active "factoryProcessor" workflows, #flows=${factoryProcessor.processorState.proc_map.length}`)
-    function checkRestartStage({ id, stage }) {
+    const prInterval = factoryProcessor.initProcessors(function ({ id, stage }) {
         const widx = factoryState.stateStore.state.workItems.items.findIndex(o => o.id === id)
         if (widx < 0) {
             throw new Error(`factory_startup: Got a processor state without the state: id=${id}`)
@@ -88,59 +87,22 @@ async function factory_startup() {
             return true
         }
         return false
-    }
-    factoryProcessor.restartProcessors(checkRestartStage, true)
-
-    if (true) {
-        console.log(`factory_startup (6): Starting Interval to process 'sleep_until' workflows.`)
-        setInterval(() => {
-            //console.log('factory_startup: check to restart "sleep_until" processes')
-            factoryProcessor.restartProcessors(checkRestartStage, false)
-        }, 1000 * 10 /* 10 seconds */)
-    }
-
-
-
-    const LOOP_MINS = 10, LOOP_CHANGES = 100
-    console.log(`factory_startup (7): Starting Interval to checkpoint state  (LOOP_MINS=${LOOP_MINS}, LOOP_CHANGES=${LOOP_CHANGES})`)
-    // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
-    setInterval(async (cs, chkdir) => {
-        console.log(`Checkpointing check: seq=${cs.sequence},  Processing size=${factoryProcessor.processorState.proc_map.length}`)
-        if (cs.sequence > last_checkpoint + LOOP_CHANGES) {
-            console.log(`do checkpoint`)
-            last_checkpoint = await snapshotState(cs, chkdir, [
-                factoryState.stateStore,
-                factoryProcessor.stateStore
-            ])
-        }
-    }, 1000 * 60 * LOOP_MINS, cs, chkdir)
-
-
-    if (true) {
-        console.log(`factory_startup (8): Starting Interval to run "FactoryProcess" action (5 seconds)`)
-        setInterval(async function () {
-            //console.log('factory_startup: checking on progress WorkItems in "FactoryStage.Building"')
-            await factoryState.dispatch({ type: WorkItemActionType.FactoryProcess })
-        }, 5000)
-    }
-
-
-    const cont_token = factoryProcessor.processorState.last_incoming_processed
-    console.log(`factory_startup (9): Starting "watch" for new "inventory_spec" (startAfter=${cont_token})`)
-    cs.db.collection("inventory_spec").watch(
-        [
-            { $match: { $and: [{ "operationType": { $in: ["insert", "update"] } }, { "fullDocument.partition_key": cs.tenent.email }, { "fullDocument.status": 'Required' }] } }
-            , { $project: { "ns": 1, "documentKey": 1, "fullDocument.status": 1, "fullDocument.partition_key": 1 } }
-        ],
-        { fullDocument: "updateLookup", ...(cont_token && { ...cont_token }) }
-    ).on('change', doc => {
-        // doc._id == event document includes a resume token as the _id field
-        // doc.clusterTime == 
-        // doc.opertionType == "insert"
-        // doc.ns.coll == "Collection"
-        // doc.documentKey == A document that contains the _id of the document created or modified 
-        factoryProcessor.initiateWorkflow({ trigger: { doc_id: doc.documentKey._id } }, { startAfter: doc._id })
     })
+
+    const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
+        factoryState.stateStore,
+        factoryProcessor.stateStore
+    ])
+
+
+    console.log(`factory_startup (8): Starting Interval to run "FactoryProcess" action (5 seconds)`)
+    const factInterval = setInterval(async function () {
+        //console.log('factory_startup: checking on progress WorkItems in "FactoryStage.Building"')
+        await factoryState.dispatch({ type: WorkItemActionType.FactoryProcess })
+    }, 5000)
+
+
+    const mwatch = mongoWatchProcessorTrigger(cs, 'inventory_spec', factoryProcessor, { "fullDocument.status": 'Required' })
 
     return { factoryProcessor, factoryState }
 }

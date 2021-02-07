@@ -11,8 +11,8 @@ export interface ProcessorOptions {
     }
 }
 
-import { StateConnection } from '../util/stateConnection'
-import { StateStore, StateManager, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer } from '../util/flux'
+import { StateConnection } from './stateConnection'
+import { StateStore, StateManager, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer, StateUpdates } from './flux'
 import { EventEmitter } from 'events'
 
 interface ProcessAction {
@@ -33,7 +33,10 @@ enum ProcessActionType {
 interface ProcessReducerState {
     processor_sequence: number;     // lateset processor_sequence # (one for each workflow event)
     flow_sequence: number;          // lateset flow_sequence # (one for each workflow)
-    last_incoming_processed: any;
+    last_incoming_processed: {
+        sequence: number;
+        continuation: any;
+    }
     proc_map: Array<ProcessObject>
 }
 
@@ -51,17 +54,28 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
 
     return {
         sliceKey: 'processor',
-        initState: { flow_sequence: 0, last_incoming_processed: null, proc_map: [] } as ProcessReducerState,
+        initState: { flow_sequence: 0, last_incoming_processed: { sequence: 0, continuation: null }, proc_map: [] } as ProcessReducerState,
         fn: async function (connection, state: ProcessReducerState, action: ProcessAction): Promise<ReducerReturn> {
-            const { type, flow_id, function_idx, complete /*, failedMiddleware */, trigger } = action
+            const { type, flow_id, function_idx, complete, trigger } = action
             // split 'action.options.update_ctx' out of event, and aggritate into state 'context_object'
             const { update_ctx, ...options } = action.options || {}
 
             switch (type) {
                 case ProcessActionType.New:
+                    let updates: Array<StateUpdates> = []
+                    if (trigger) {
+                        if (Number.isInteger(trigger.sequence)) {
+                            assert(trigger.sequence === state.last_incoming_processed.sequence + 1, `processorReducer, cannot apply incoming new trigger.sequence=${trigger.sequence}, last_incoming_processed=${state.last_incoming_processed.sequence}`)
+                            updates.push({ method: UpdatesMethod.Inc, path: 'last_incoming_processed', doc: { sequence: 1 } })
+                        }
+                        if (trigger.continuation) {
+                            updates.push({ method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: { continuation: trigger.continuation } })
+                        }
+                    }
+
                     const new_flow_id = `WF${state.flow_sequence}`
                     return [{ failed: false, id: new_flow_id }, [
-                        { method: UpdatesMethod.Inc, doc: { flow_sequence: 1 } },
+                        { method: UpdatesMethod.Inc, doc: { flow_sequence: 1 } } as StateUpdates,
                         {
                             method: UpdatesMethod.Add, path: 'proc_map', doc: {
                                 flow_id: new_flow_id,
@@ -70,9 +84,8 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
                                 ...(Object.keys(options).length > 0 && { options }),
                                 ...(update_ctx && { context_object: update_ctx })
                             } as ProcessObject
-                        }
-                    ].concat(trigger ? { method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: { ...trigger } } : [])
-                    ]
+                        } as StateUpdates
+                    ].concat(updates)]
                 case ProcessActionType.Update:
 
                     return [{ failed: false }, [
@@ -139,8 +152,18 @@ export class Processor extends EventEmitter {
         return this._context
     }
 
+    initProcessors(checkSleepStageFn: (any) => boolean, seconds: number = 10): NodeJS.Timeout {
+        this.restartProcessors(checkSleepStageFn, true)
 
-    restartProcessors(checkSleepStageFn, restartall) {
+        console.log(`Processor: Starting Interval to process 'sleep_until' workflows.`)
+        return setInterval(() => {
+            //console.log('factory_startup: check to restart "sleep_until" processes')
+            this.restartProcessors(checkSleepStageFn, false)
+        }, 1000 * seconds /* 10 seconds */)
+    }
+
+
+    private restartProcessors(checkSleepStageFn, restartall) {
 
         // Restart required_state_processor_state
         for (let pobj of this.processorState.proc_map.filter(p => !p.complete)) {
@@ -160,7 +183,7 @@ export class Processor extends EventEmitter {
             } else if (!restartall) {
                 continue /* dont restart */
             }
-            console.log(`processor.restartProcessors pid=${pobj.flow_id}, fidx=${pobj.function_idx}, sleep_unit=${JSON.stringify(pobj.options.sleep_until)}`)
+            console.log(`processor.restartProcessors pid=${pobj.flow_id}, fidx=${pobj.function_idx}, sleep_unit=${pobj.options && JSON.stringify(pobj.options.sleep_until)}`)
             try {
                 this.launchHandler(pobj.flow_id)
             } catch (err) {
@@ -198,7 +221,7 @@ export class Processor extends EventEmitter {
 
         // write events
         const msg = {
-            sequence: cs.sequence,
+            sequence: cs.sequence + 1,
             partition_key: cs.tenent.email,
             ...(stateChanges && { [this._statePlugin.name]: stateChanges }),
             [this.name]: changes

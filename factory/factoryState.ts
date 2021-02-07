@@ -30,9 +30,9 @@ export enum WorkItemStage {
 
 
 
-import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../util/flux'
-import { StateConnection } from '../util/stateConnection'
-export { StateUpdates } from '../util/flux'
+import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../common/flux'
+import { StateConnection } from '../common/stateConnection'
+export { StateUpdates } from '../common/flux'
 
 // Mutate state in a Consistant, Safe, recorded mannore
 export interface WorkItemAction {
@@ -165,7 +165,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, fa
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - item.allocated_capacity
                             factory_updates.push({ method: UpdatesMethod.Merge, path: 'items', filter: { id: item.id }, doc: { stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } })
-                            const [[complete_failed, complete_updates]] = await workItemsReducer(connection, workItemsState, { type: 'workItems/StatusUpdate', id: item.id, status: { stage: WorkItemStage.FactoryComplete } })
+                            const [[{ failed }, complete_updates]] = await workItemsReducer(connection, workItemsState, { type: 'workItems/StatusUpdate', id: item.id, status: { stage: WorkItemStage.FactoryComplete } })
                             workitem_updates = workitem_updates.concat(complete_updates)
                         }
                         //statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
@@ -175,7 +175,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, fa
 
                     // new WorkItems that are ready for the Factory
                     for (let wi of workItemsState.items.filter(i => i.status.stage === WorkItemStage.FactoryReady)) {
-                        const [[accept_failed, accept_updates]] = await workItemsReducer(connection, workItemsState, { type: 'workItems/StatusUpdate', id: wi.id, status: { stage: WorkItemStage.FactoryAccepted } })
+                        const [[{ failed }, accept_updates]] = await workItemsReducer(connection, workItemsState, { type: 'workItems/StatusUpdate', id: wi.id, status: { stage: WorkItemStage.FactoryAccepted } })
                         workitem_updates = workitem_updates.concat(accept_updates)
 
                         if ((factoryCapacity - (state.capacity_allocated + capacity_allocated_update)) >= required_capacity) {
@@ -241,7 +241,7 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
             switch (type) {
                 case 'inventry/New':
                     const result = await connection.db.collection("inventory_complete").insertOne({
-                        sequence: state.inventry_sequence,
+                        sequence: state.inventry_sequence + 1,
                         partition_key: connection.tenent.email,
                         inventoryId: 'INV' + String(state.inventry_sequence).padStart(5, '0'),
                         ...spec

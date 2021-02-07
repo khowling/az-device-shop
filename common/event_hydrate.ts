@@ -4,10 +4,27 @@ const fs = require('fs')
 import { StateStore } from './flux'
 import { StateConnection } from './stateConnection'
 
-export async function restoreState(sc: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<[restore_sequence: number, last_checkpoint: number]> {
+export async function restoreState(sc: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
 
-    let last_checkpoint = await restoreLatestSnapshot(sc, chkdir, stateStores)
-    return [await rollForwardState(sc, last_checkpoint, stateStores), last_checkpoint]
+    const last_checkpoint = await restoreLatestSnapshot(sc, chkdir, stateStores)
+    sc.sequence = await rollForwardState(sc, last_checkpoint, stateStores)
+    return last_checkpoint
+}
+
+
+export function startCheckpointing(cs: StateConnection, chkdir: string, chkpntAtSeq: number, stateStores: StateStore[], loopMins: number = 10, loopChanges: number = 100): NodeJS.Timeout {
+
+    let last_checkpoint = chkpntAtSeq
+
+    console.log(`Starting Interval to checkpoint state loopMins=${loopMins}, loopChanges=${loopChanges})`)
+    // check every 5 mins, if there has been >100 transations since last checkpoint, then checkpoint
+    return setInterval(async (cs, chkdir) => {
+        console.log(`Checkpointing check: seq=${cs.sequence}`)
+        if (cs.sequence > last_checkpoint + loopChanges) {
+            console.log(`do checkpoint`)
+            last_checkpoint = await snapshotState(cs, chkdir, stateStores)
+        }
+    }, 1000 * 60 * loopMins, cs, chkdir)
 }
 
 async function rollForwardState(cs: StateConnection, from_sequence: number, stateStores: StateStore[]): Promise<number> {

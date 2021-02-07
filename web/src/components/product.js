@@ -152,7 +152,8 @@ const classNames = mergeStyleSets({
 export function ManageProducts({ resource }) {
   const [panel, setPanel] = React.useState({ open: false })
   const { status, result } = resource.read()
-  console.log(status)
+
+  const { inventory } = result.refstores || {}
 
   function openNewItem(type, editid) {
     const refstores = type === 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
@@ -291,11 +292,15 @@ export function ManageProducts({ resource }) {
           },
           {
             key: 'badge',
-            name: 'Badge',
+            name: 'On hand',
             fieldName: 'badge',
             className: classNames.fileIconHeaderIcon,
-            minWidth: 50,
-            maxWidth: 100
+            minWidth: 100,
+            maxWidth: 100,
+            onRender: (item) => {
+              const onhand = inventory && inventory.onhand.find(i => i.productId === item._id)
+              return <Text variant="medium">{onhand ? onhand.qty : '0'}</Text>;
+            }
           },
         ]}
         compact={false}

@@ -58,6 +58,8 @@ class JSStateStore implements StateStore {
         assert(_control && _control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
         let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
+        console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${this._state._control.head_sequence}`)
+
         for (let stateKey of Object.keys(statechanges)) {
             if (stateKey === '_control') continue
             // get the relevent section of the state
@@ -192,6 +194,7 @@ interface ControlReducer {
 export interface StateManagerInterface {
     name: string;
     stateStore: StateStore;
+    dispatch(action: any): Promise<{ [key: string]: ReducerInfo }>
     processAction(action: any): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]>
     stateStoreApply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
 
@@ -300,10 +303,10 @@ export class StateManager extends EventEmitter implements StateManagerInterface 
         // console.log(`Updates: \n${JSON.stringify(changes)}`)
 
         if (changes) {
-            console.log(`factoryState.apply: action: flow_id=${action.id} type=${action.type}. ${changes ? `Event: current_head=${changes._control.head_sequence}` : ''}`)
+            console.log(`[${this.name}] dispatch(): action.type=${action.type} ${changes ? `Event: current_head=${changes._control.head_sequence}` : ''}`)
             // persist events
             const msg = {
-                sequence: cs.sequence,
+                sequence: cs.sequence + 1,
                 partition_key: cs.tenent.email,
                 [this.name]: changes
             }

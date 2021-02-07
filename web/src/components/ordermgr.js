@@ -32,11 +32,13 @@ function stateReducer({ state, metadata }, action) {
             // status: OrderStatus | InventoryStatus
 
             const statechanges = action.state
-            console.assert(statechanges._apply && statechanges._apply.current_head === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update to current_head=${statechanges._apply && statechanges._apply.current_head} to state at head_sequence=${state._control.head_sequence}`)
-            let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: statechanges._apply.changedate } }
+            const _control = statechanges._control
+
+            console.assert(_control && _control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
+            let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
             for (let stateKey of Object.keys(statechanges)) {
-                if (stateKey === '_apply') continue
+                if (stateKey === '_control') continue
                 // get the relevent section of the state
                 let reducerKeyState = state[stateKey]
 
@@ -82,7 +84,14 @@ function stateReducer({ state, metadata }, action) {
                                     update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
 
                                 console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                                const new_doc_updates = Object.keys(update.doc).map(k => { return { [k]: Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ? { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k] } }).reduce((a, i) => { return { ...a, ...i } }, {})
+                                const new_doc_updates = Object.keys(update.doc).map(k => {
+                                    return {
+                                        [k]:
+                                            update.doc[k] && Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && pathKeyState[update_idx][k] && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ?
+                                                { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k]
+                                    }
+                                }).reduce((a, i) => { return { ...a, ...i } }, {})
+
                                 const new_doc = { ...pathKeyState[update_idx], ...new_doc_updates }
                                 pathKeyState = imm_splice(pathKeyState, update_idx, new_doc)
                             } else {
@@ -293,26 +302,34 @@ export function OrderMgr({ resource }) {
 
             { state.inventory &&
                 [
-                    <h3>Stock ({state.inventory.length})</h3>,
-                    <DetailsList
+                    <h3 key='stock'>Stock ({state.inventory.onhand.length})</h3>,
+                    <DetailsList key='list'
                         columns={[
                             {
-                                key: 'heading',
+                                key: 'sku',
                                 name: 'SKU',
-                                fieldName: 'doc_id',
-                                minWidth: 100, maxWidth: 250,
-                                onRender: (i) => <div>{refstores.Product.find(x => x._id === i.doc_id).heading}</div>
+                                fieldName: 'productId',
+                                minWidth: 100, maxWidth: 250
                             },
                             {
-                                key: 'oh',
-                                name: 'Available Units',
+                                key: 'heading',
+                                name: 'Description',
+                                fieldName: 'productId',
                                 minWidth: 100, maxWidth: 250,
-                                onRender: (i) => <div>{i.status.onhand}</div>
+                                onRender: function (i) {
+                                    return <div>{refstores.Product.find(x => x.key === i.productId).text}</div>
+                                }
+                            },
+                            {
+                                key: 'qty',
+                                fieldName: 'qty',
+                                name: 'Onhand Stock',
+                                minWidth: 100, maxWidth: 250
                             }
                         ]}
                         compact={true}
                         selectionMode={SelectionMode.none}
-                        items={state.inventory}
+                        items={state.inventory.onhand}
                         setKey="none"
                         layoutMode={DetailsListLayoutMode.justified}
                         isHeaderVisible={true}

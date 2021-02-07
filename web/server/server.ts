@@ -135,6 +135,7 @@ const StoreProjections = Object.keys(StoreDef).reduce((ac, c) => ({ ...ac, [c]: 
 
 // Operations
 const FetchOperation = {
+    // no side effect, doesnt require auth
     "mycart": async function (ctx): Promise<any> {
         if (!ctx.tenent) throw `Requires init`
         const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { projection: StoreProjections["orders"] })
@@ -149,13 +150,12 @@ const FetchOperation = {
         if (!ctx.tenent) throw `Requires init`
         if (!ctx.session.auth) throw 'Requires logged in'
         const orders = await ctx.db.collection(StoreDef["orders"].collection).find({ owner: { _id: ctx.session.auth.sub }, status: { $gte: 30 }, partition_key: ctx.tenent.email }, { projection: StoreProjections["orders"] }).toArray()
-        for (let o of orders) {
-            const ostate = ctx.orderState.state.orders.find(os => os.doc_id === o._id.toHexString())
-            if (ostate) {
-                o.orderState = ostate.status
-            }
-        }
-        return orders || []
+
+        return orders.map(o => {
+            const orderState = ctx.orderState.stateStore.state.orders.items.find(os => o._id.equals(os.spec._id))
+            return orderState ? { ...o, orderState: orderState.status } : o
+        })
+
     },
     "get": async function (ctx, store, query?: any, proj?: any): Promise<any> {
         if (!ctx.tenent) throw `Requires init`
@@ -225,11 +225,15 @@ const FetchOperation = {
             if (componentFetch.refstores && componentFetch.refstores.length > 0) {
                 let fetch_promises: Array<Promise<any>> = []
                 for (let refstore of componentFetch.refstores) {
-                    console.log(`componentFetch: get refstore : ${JSON.stringify(refstore)}`)
-                    if (!refstore.lookup_field) {
-                        fetch_promises.push(FetchOperation.get(ctx, refstore.store))
+                    if (refstore.orderState) {
+                        fetch_promises.push(Promise.resolve(ctx.orderState.stateStore.state[refstore.store]))
                     } else {
-                        fetch_promises.push(FetchOperation.get(ctx, refstore.store, { _id: ObjectID(refstore.lookup_field === "urlidField" ? urlid : result.data[refstore.lookup_field]) }))
+                        console.log(`componentFetch: get refstore : ${JSON.stringify(refstore)}`)
+                        if (!refstore.lookup_field) {
+                            fetch_promises.push(FetchOperation.get(ctx, refstore.store))
+                        } else {
+                            fetch_promises.push(FetchOperation.get(ctx, refstore.store, { _id: ObjectID(refstore.lookup_field === "urlidField" ? urlid : result.data[refstore.lookup_field]) }))
+                        }
                     }
                 }
                 result.refstores = (await Promise.all(fetch_promises)).reduce((o, v, i) => { return { ...o, [componentFetch.refstores[i].store]: v } }, {})
@@ -301,7 +305,7 @@ const app = new Koa();
 app.use(bodyParser())
 
 import { OrderStateManager } from '../../ordering/orderingState'
-import { order_state_startup } from './server_status'
+import { order_state_startup } from './orderingFollower'
 
 async function init() {
     // Init DB
@@ -593,6 +597,7 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(400, `cannot retreive mycart: ${e}`)
         }
     })
+    // side effect, requires auth (force sign-in, so any cart data will be against auth.sub)
     .put('/checkout', async function (ctx, next) {
         if (!ctx.session.auth) {
             ctx.throw(401, 'please login')
@@ -600,7 +605,7 @@ const api = new Router({ prefix: '/api' })
             try {
                 const { value, error } = Joi.object({ 'shipping': Joi.string().valid('A', 'B').required() }).validate(ctx.request.body, { allowUnknown: true })
 
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { status: StoreDef["orders"].status.NewOrder, owner: { _id: ctx.session.auth.sub }, checkout_date: Date.now(), shipping: value } })
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
                 ctx.body = { _id: order.value._id }
                 await next()
             } catch (e) {
@@ -660,7 +665,7 @@ const api = new Router({ prefix: '/api' })
         }
     })
     .get('/onhand/:sku', async function (ctx, next) {
-        ctx.body = ctx.orderState.state.inventory.get(ctx.params.sku) || { onhand: 0 }
+        ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.productId === ctx.params.sku) || { qty: 0 }
         await next()
     })
     // curl -XPOST "http://localhost:3000/products" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'

@@ -20,20 +20,20 @@ interface DocStatus {
 }
 
 export enum OrderStage {
-    Draft,// = "Draft",
-    New,// = "New",
-    InventoryAllocated,// = "Validated",
-    PickingReady,// = "PickingReady",
+    Draft,
+    New,
+    InventoryAllocated,
+    PickingReady,
     PickingAccepted,
-    PickingComplete,// = "PickingComplete",
-    Shipped,// = "Shipped",
-    Complete// = "Complete",
+    PickingComplete,
+    Shipped,
+    Complete
 }
 
 
-import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../util/flux'
-import { StateConnection } from '../util/stateConnection'
-export { StateUpdates } from '../util/flux'
+import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../common/flux'
+import { StateConnection } from '../common/stateConnection'
+export { StateUpdates } from '../common/flux'
 
 // Mutate state in a Consistant, Safe, recorded mannore
 export interface OrderAction {
@@ -44,12 +44,13 @@ export interface OrderAction {
     trigger?: any;
 }
 export enum OrderActionType {
-    New = 'orders/New',
-    NewInventryComplete = 'inventry/New',
+    OrdersNew = 'orders/New',
     StatusUpdate = 'orders/StatusUpdate',
     PickingProcess = 'orders/PickingProcess',
-    AllocateInventory = 'orders/AllocateInventory',
-    Complete = 'orders/Complete'
+    OrdersProcessLineItems = 'orders/OrdersProcessLineItems',
+    Complete = 'orders/Complete',
+    InventryNew = 'inventry/New',
+    InventoryAllocate = 'inventory/Allocate'
 }
 
 interface OrderReducerState {
@@ -62,14 +63,14 @@ function orderReducer(): ReducerWithPassin<OrderReducerState, OrderAction> {
 
     return {
         sliceKey: 'orders',
-        passInSlice: 'inventory_complete',
+        passInSlice: 'inventory',
         initState: { items: [], order_sequence: 0 } as OrderReducerState,
         fn: async function (connection, state: OrderReducerState = { items: [], order_sequence: 0 }, action: OrderAction, passInSlice): Promise<ReducerReturnWithSlice> {
 
 
             const { spec, id, status } = action
             switch (action.type) {
-                case 'orders/New':
+                case OrderActionType.OrdersNew:
                     const required_props = ['items']
                     if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true) && Array.isArray(spec.items) && spec.items.length > 0) {
                         if (state.items.findIndex(w => w.id === id) < 0) {
@@ -91,7 +92,7 @@ function orderReducer(): ReducerWithPassin<OrderReducerState, OrderAction> {
                     return [[{ failed: false }, [
                         { method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status } }
                     ]]]
-                case 'orders/AllocateInventory':
+                case OrderActionType.OrdersProcessLineItems:
 
                     const idx = state.items.findIndex(w => w.id === id)
                     let order_update: OrderStatus = { failed: false, stage: OrderStage.InventoryAllocated }
@@ -109,8 +110,8 @@ function orderReducer(): ReducerWithPassin<OrderReducerState, OrderAction> {
                                         sku = i.item._id.toHexString(),
                                         required_qty = i.qty
 
-                                    const [inv_failed, inv_update] = await inventoryReducer(connection, inventoryState, { type: OrderActionType.AllocateInventory, spec: { sku, required_qty } })
-                                    if (!inv_failed) {
+                                    const [{ failed }, inv_update] = await inventoryReducer(connection, inventoryState, { type: OrderActionType.InventoryAllocate, spec: { sku, required_qty } })
+                                    if (!failed) {
                                         inventory_updates = inventory_updates.concat(inv_update)
                                     } else {
                                         order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, Insufficnet stock sku=${sku}` }
@@ -163,10 +164,10 @@ interface FactoryReducerState {
     capacity_allocated: number;
 }
 
-function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, pickingCapacity = 5): ReducerWithPassin<FactoryReducerState, OrderAction> {
+function initPickingReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, pickingCapacity = 5): ReducerWithPassin<FactoryReducerState, OrderAction> {
 
     return {
-        sliceKey: 'factory',
+        sliceKey: 'picking',
         passInSlice: 'orders',
         initState: { items: [], capacity_allocated: 0 } as FactoryReducerState,
         fn: async function (connection, state: FactoryReducerState, action: OrderAction, passInSlice): Promise<ReducerReturnWithSlice> {
@@ -193,7 +194,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, pi
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - item.allocated_capacity
                             factory_updates.push({ method: UpdatesMethod.Merge, path: 'items', filter: { id: item.id }, doc: { stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } })
-                            const [[complete_failed, complete_updates]] = await orderReducer(connection, orderState, { type: 'orders/StatusUpdate', id: item.id, status: { stage: OrderStage.PickingComplete } })
+                            const [[{ failed }, complete_updates]] = await orderReducer(connection, orderState, { type: 'orders/StatusUpdate', id: item.id, status: { stage: OrderStage.PickingComplete } })
                             order_updates = order_updates.concat(complete_updates)
                         }
                         //statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
@@ -203,7 +204,7 @@ function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, pi
 
                     // new orders that are ready for the Factory
                     for (let wi of orderState.items.filter(i => i.status.stage === OrderStage.PickingReady)) {
-                        const [[accept_failed, accept_updates]] = await orderReducer(connection, orderState, { type: 'orders/StatusUpdate', id: wi.id, status: { stage: OrderStage.PickingAccepted } })
+                        const [[{ failed }, accept_updates]] = await orderReducer(connection, orderState, { type: 'orders/StatusUpdate', id: wi.id, status: { stage: OrderStage.PickingAccepted } })
                         order_updates = order_updates.concat(accept_updates)
 
                         if ((pickingCapacity - (state.capacity_allocated + capacity_allocated_update)) >= required_capacity) {
@@ -261,18 +262,19 @@ interface InventoryReducerState {
 function inventryReducer(): Reducer<InventoryReducerState, OrderAction> {
 
     return {
-        sliceKey: 'inventory_complete',
+        sliceKey: 'inventory',
         initState: { onhand: [], last_incoming_processed: { sequence: 0, continuation: null } } as InventoryReducerState,
         fn: async function (connection, state: InventoryReducerState, action: OrderAction): Promise<ReducerReturn> {
 
             const { spec, id, type } = action
             switch (type) {
-                case OrderActionType.NewInventryComplete:
+                case OrderActionType.InventryNew:
                     const { productId, qty } = spec
 
                     let inventory_updates: Array<StateUpdates> = []
                     if (action.trigger) {
-                        assert(Number.isInteger(action.trigger.sequence) && action.trigger.sequence === state.last_incoming_processed.sequence + 1, `inventryReducer, cannot apply incoming new Inventory sequrnce=${action.trigger.sequence}, last_incoming_processed=${state.last_incoming_processed.sequence}`)
+                        // require trigger sequence
+                        assert(Number.isInteger(action.trigger.sequence) && action.trigger.sequence === state.last_incoming_processed.sequence + 1, `inventryReducer, cannot apply incoming new trigger.sequence=${action.trigger.sequence}, last_incoming_processed=${state.last_incoming_processed.sequence}`)
                         inventory_updates.push({ method: UpdatesMethod.Inc, path: 'last_incoming_processed', doc: { sequence: 1 } })
 
                         if (action.trigger.continuation) {
@@ -283,16 +285,16 @@ function inventryReducer(): Reducer<InventoryReducerState, OrderAction> {
                     if (existing_idx >= 0) {
                         return [{ failed: false }, inventory_updates.concat({ method: UpdatesMethod.Inc, path: 'onhand', filter: { productId }, doc: { qty } })]
                     } else {
-                        return [{ failed: false }, inventory_updates.concat({ method: UpdatesMethod.Add, doc: spec })]
+                        return [{ failed: false }, inventory_updates.concat({ method: UpdatesMethod.Add, path: 'onhand', doc: spec })]
                     }
 
-                case OrderActionType.AllocateInventory:
+                case OrderActionType.InventoryAllocate:
                     const { sku, required_qty } = spec
                     const sku_idx = state.onhand.findIndex(i => i.productId === sku)
                     if (sku_idx >= 0) {
-                        if (state[sku_idx].qty >= required_qty) {
+                        if (state.onhand[sku_idx].qty >= required_qty) {
                             return [{ failed: false }, [
-                                { method: UpdatesMethod.Inc, filter: { product: sku }, doc: { qty: -required_qty } }
+                                { method: UpdatesMethod.Inc, path: 'onhand', filter: { productId: sku }, doc: { qty: -required_qty } }
                             ]]
                         } else {
                             return [{ failed: true }, null]
@@ -315,7 +317,7 @@ export class OrderStateManager extends StateManager {
     constructor(name: string, connection: StateConnection) {
         super(name, connection, [
             orderReducer(),
-            initFactoryReducer(),
+            initPickingReducer(),
             inventryReducer()
         ])
     }

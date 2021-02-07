@@ -274,7 +274,7 @@ export function AddToCart({ resource }) {
   useEffect(() => {
     _fetchit(`/api/onhand/${product._id}`).then(succ => {
       console.log(`success : ${JSON.stringify(succ)}`)
-      setInventory({ allow: succ.onhand > 0, message: succ.onhand > 0 ? `Stock: ${succ.onhand}` : "Sorry, no stock at the moment", state: succ.onhand > 5 ? MessageBarType.success : (succ.onhand > 0 ? MessageBarType.warning : MessageBarType.SevereWarning) })
+      setInventory({ allow: succ.qty > 0, message: succ.qty > 0 ? `Stock: ${succ.qty}` : "Sorry, no stock at the moment", state: succ.qty > 5 ? MessageBarType.success : (succ.qty > 0 ? MessageBarType.warning : MessageBarType.SevereWarning) })
     }, err => {
       setInventory({ message: `Error retreiving stock: ${err}, please try later`, state: MessageBarType.error, allow: false })
     })
