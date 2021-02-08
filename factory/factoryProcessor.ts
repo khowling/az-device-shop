@@ -102,7 +102,7 @@ async function factory_startup() {
     }, 5000)
 
 
-    const mwatch = mongoWatchProcessorTrigger(cs, 'inventory_spec', factoryProcessor, { "fullDocument.status": 'Required' })
+    const mwatch = mongoWatchProcessorTrigger(cs, 'inventory_spec', factoryProcessor, { "status": 'Required' })
 
     return { factoryProcessor, factoryState }
 }

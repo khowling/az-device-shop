@@ -43,16 +43,24 @@ export class StateConnection {
 
     async initFromDB(db, tenent) {
         this._db = db
-        this._tenent = tenent
+
+        if (!tenent) {
+            while (true) {
+                this._tenent = await this._db.collection("business").findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
+                if (this._tenent) break
+                console.warn('StateConnection: No "singleton001" document in "business" collection, waiting until initialised...')
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        } else {
+            this._tenent = tenent
+        }
+
         this._updateMutex = new Atomic()
         return this
     }
 
     async init() {
         const client = await MongoClient.connect(this.murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
-        this._db = client.db()
-        this._tenent = await this._db.collection("business").findOne({ _id: ObjectID("singleton001"), partition_key: "root" })
-        this._updateMutex = new Atomic()
-        return this
+        return await this.initFromDB(client.db(), null)
     }
 }

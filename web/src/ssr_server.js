@@ -4,11 +4,15 @@ import { RenderContext } from './GlobalContexts'
 import { App, AppRouteCfg } from './App'
 import { pathToRoute } from './components/router'
 
-function ssrRender(startURL, renderData) {
-    return renderToString(
+import { renderToStringAsync } from 'react-async-ssr'
+
+async function ssrRender(startURL, renderData) {
+
+    return await renderToStringAsync(
         <RenderContext.Provider value={renderData}>
             <App startUrl={startURL} />
-        </RenderContext.Provider>)
+        </RenderContext.Provider>
+    )
 }
 
 export {

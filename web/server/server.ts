@@ -86,6 +86,18 @@ const StoreDef = {
             'qty': Joi.number().required()
         })
     },
+    "inventory_complete": {
+        owner: true,
+        collection: "inventory_complete",
+    },
+    "factory_events": {
+        owner: true,
+        collection: "factory_events",
+    },
+    "order_events": {
+        owner: true,
+        collection: "order_events",
+    },
     "orders": {
         owner: true,
         status: {
@@ -128,7 +140,7 @@ const StoreDef = {
 }
 
 // Joi schema formatted as a 'projection' for find operations
-const StoreProjections = Object.keys(StoreDef).reduce((ac, c) => ({ ...ac, [c]: [...StoreDef[c].schema._ids._byKey.keys()].reduce((ac, a) => ({ ...ac, [a]: 1 }), {}) }), {})
+const StoreProjections = Object.keys(StoreDef).filter(k => StoreDef[k].schema !== undefined).reduce((ac, c) => ({ ...ac, [c]: [...StoreDef[c].schema._ids._byKey.keys()].reduce((ac, a) => ({ ...ac, [a]: 1 }), {}) }), {})
 
 
 
@@ -152,7 +164,7 @@ const FetchOperation = {
         const orders = await ctx.db.collection(StoreDef["orders"].collection).find({ owner: { _id: ctx.session.auth.sub }, status: { $gte: 30 }, partition_key: ctx.tenent.email }, { projection: StoreProjections["orders"] }).toArray()
 
         return orders.map(o => {
-            const orderState = ctx.orderState.stateStore.state.orders.items.find(os => o._id.equals(os.spec._id))
+            const orderState = ctx.orderState ? ctx.orderState.stateStore.state.orders.items.find(os => o._id.equals(os.spec._id)) : { status: { error: `orderState not initialied` } }
             return orderState ? { ...o, orderState: orderState.status } : o
         })
 
@@ -226,7 +238,11 @@ const FetchOperation = {
                 let fetch_promises: Array<Promise<any>> = []
                 for (let refstore of componentFetch.refstores) {
                     if (refstore.orderState) {
-                        fetch_promises.push(Promise.resolve(ctx.orderState.stateStore.state[refstore.store]))
+                        if (ctx.orderState) {
+                            fetch_promises.push(Promise.resolve(ctx.orderState.stateStore.state[refstore.store]))
+                        } else {
+                            console.error(`Got "refstore.orderState" request for compoent, but "ctx.orderState" not initialised`)
+                        }
                     } else {
                         console.log(`componentFetch: get refstore : ${JSON.stringify(refstore)}`)
                         if (!refstore.lookup_field) {
@@ -342,12 +358,9 @@ async function init() {
     // Init Settings (currently single tenent)
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectId("singleton001"), partition_key: "root" })
 
-    // Init order status
-    app.context.orderState = await order_state_startup(app.context)
-
     // Init Routes
     app.use(new Router()
-        .get(`${PUBLIC_PATH}/*`, serve_static)
+        .get(`${PUBLIC_PATH}/(.*)`, serve_static)
         .get(/^\/[^\/]*\./, serve_static)
         .routes())
 
@@ -357,6 +370,10 @@ async function init() {
 
     console.log(`Starting on 3000..`)
     app.listen(3000)
+
+    // Init order status (dont await, incase no tenent! )
+    app.context.orderState = await order_state_startup(app.context)
+
 }
 
 // TODO - I want to re-implement this so goes into client state cookie??
@@ -418,7 +435,7 @@ async function ssr(ctx, next) {
             // SEND
             ctx.response.type = 'text/html'
             ctx.body = fs.createReadStream(filePath)
-                .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${server_ssr.ssrRender(startURL, renderContext)}</div>`))
+                .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${await server_ssr.ssrRender(startURL, renderContext)}</div>`))
                 .pipe(stringReplaceStream('"SERVER_INITAL_DATA"', JSON.stringify(renderContext)))
         }
     }
@@ -665,7 +682,11 @@ const api = new Router({ prefix: '/api' })
         }
     })
     .get('/onhand/:sku', async function (ctx, next) {
-        ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.productId === ctx.params.sku) || { qty: 0 }
+        if (ctx.orderState) {
+            ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.productId === ctx.params.sku) || { qty: 0 }
+        } else {
+            ctx.throw(400, `/onhand : "orderState"  not initialised`)
+        }
         await next()
     })
     // curl -XPOST "http://localhost:3000/products" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'
@@ -835,6 +856,19 @@ const api = new Router({ prefix: '/api' })
                 console.log("Importing Products")
                 await ctx.db.collection(StoreDef["products"].collection).insertMany(newproducts)
 
+                if (ctx.request.body.inventory) {
+                    await ctx.db.collection(StoreDef["inventory"].collection).insertMany(newproducts.map(function (p) {
+                        return {
+                            partition_key: tenent.email,
+                            status: 'Required',
+                            productId: p._id,
+                            categoryId: p.category,
+                            warehouse: 'EMEA',
+                            qty: 10
+                        }
+                    }))
+                }
+
             }
 
             ctx.body = { status: 'success', description: 'done' }
@@ -845,7 +879,7 @@ const api = new Router({ prefix: '/api' })
         }
 
     })
-    .all('/*', async function (ctx, next) {
+    .all('/(.*)', async function (ctx, next) {
         if (!ctx._matchedRoute) {
             ctx.throw(404, `no api found ${ctx.request.url}`)
         }
