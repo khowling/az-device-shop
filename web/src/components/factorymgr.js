@@ -106,8 +106,8 @@ function stateReducer({ state, metadata }, action) {
             const statechanges = action.state
             const _control = statechanges._control
 
-            console.assert(_control && _control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
-            let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
+            console.assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
+            let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
             for (let stateKey of Object.keys(statechanges)) {
                 if (stateKey === '_control') continue

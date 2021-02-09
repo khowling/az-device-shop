@@ -1,4 +1,5 @@
 
+import { ObjectId } from 'mongodb'
 import { Processor, ProcessorOptions } from '../common/processor'
 import {
     StateUpdates, WorkItemActionType, WorkItemAction,
@@ -14,7 +15,9 @@ async function validateRequest({ connection, trigger, flow_id }, next: (action: 
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
-        spec = await connection.db.collection("inventory_spec").findOne({ _id: trigger.doc_id, partition_key: connection.tenent.email })
+        const mongo_spec = await connection.db.collection("inventory_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: connection.tenent.email })
+        // remove the ObjectId from 'productId'
+        spec = { ...mongo_spec, ...(mongo_spec.productId && { productId: mongo_spec.productId.toHexString() }) }
     }
 
     await next({ type: WorkItemActionType.New, id: flow_id, spec }, { update_ctx: { spec } } as ProcessorOptions)

@@ -31,7 +31,7 @@ export async function mongoWatchProcessorTrigger(cs: StateConnection, watchColle
         // doc.opertionType == "insert"
         // doc.ns.coll == "Collection"
         // doc.documentKey == A document that contains the _id of the document created or modified 
-        await processor.initiateWorkflow({ trigger: { doc_id: doc.documentKey._id } }, { continuation: { startAfter: doc._id } })
+        await processor.initiateWorkflow({ trigger: { doc_id: doc.documentKey._id.toHexString() } }, { continuation: { startAfter: doc._id } })
     })
 
 }
@@ -65,7 +65,7 @@ export async function mongoCollectionDependency(cs: StateConnection, stateManage
     ).on('change', async doc => {
         //const { _id, partition_key, sequence, ...spec } = doc.fullDocument
         console.log(`mongoCollectionDependency, got doc _id=${JSON.stringify(doc._id)}`)
-        await stateManager.dispatch({ type: actiontype, id: doc._id.toHexString(), spec: doc, trigger: { ...(doc.sequence && { sequence: doc.sequence }), continuation: { startAfter: doc._id } } })
+        await stateManager.dispatch({ type: actiontype, id: doc.fullDocument._id.toHexString(), spec: doc.fullDocument, trigger: { ...(doc.sequence && { sequence: doc.sequence }), continuation: { startAfter: doc._id } } })
     })
 
 }

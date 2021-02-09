@@ -72,7 +72,11 @@ function orderReducer(): ReducerWithPassin<OrderReducerState, OrderAction> {
             switch (action.type) {
                 case OrderActionType.OrdersNew:
                     const required_props = ['items']
-                    if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true) && Array.isArray(spec.items) && spec.items.length > 0) {
+                    const required_items_props = ['productId', 'qty']
+                    if (required_props.reduce((a, p) => a && spec.hasOwnProperty(p), true)
+                        && Array.isArray(spec.items) && spec.items.length > 0
+                        && required_items_props.reduce((a, ip) => a && spec.items.reduce((ia, i) => ia && i.hasOwnProperty(ip), true), true)
+                    ) {
                         if (state.items.findIndex(w => w.id === id) < 0) {
                             return [[{ failed: false }, [
                                 { method: UpdatesMethod.Inc, doc: { order_sequence: 1 } },
@@ -104,21 +108,13 @@ function orderReducer(): ReducerWithPassin<OrderReducerState, OrderAction> {
 
                         if (order_spec.items && order_spec.items.length > 0) {
 
-                            for (let i of order_spec.items) {
-                                if (i.item._id) {
-                                    const
-                                        sku = i.item._id.toHexString(),
-                                        required_qty = i.qty
+                            for (let spec of order_spec.items) {
 
-                                    const [{ failed }, inv_update] = await inventoryReducer(connection, inventoryState, { type: OrderActionType.InventoryAllocate, spec: { sku, required_qty } })
-                                    if (!failed) {
-                                        inventory_updates = inventory_updates.concat(inv_update)
-                                    } else {
-                                        order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, Insufficnet stock sku=${sku}` }
-                                        break
-                                    }
+                                const [{ failed }, inv_update] = await inventoryReducer(connection, inventoryState, { type: OrderActionType.InventoryAllocate, spec })
+                                if (!failed) {
+                                    inventory_updates = inventory_updates.concat(inv_update)
                                 } else {
-                                    order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, Malformed lineitem` }
+                                    order_update = { ...order_update, failed: true, message: `Inventory Allocation Failed, Insufficnet stock productId=${spec.productId}` }
                                     break
                                 }
                             }
@@ -268,7 +264,7 @@ function inventryReducer(): Reducer<InventoryReducerState, OrderAction> {
 
             const { spec, id, type } = action
             switch (type) {
-                case OrderActionType.InventryNew:
+                case OrderActionType.InventryNew: {
                     const { productId, qty } = spec
 
                     let inventory_updates: Array<StateUpdates> = []
@@ -287,14 +283,14 @@ function inventryReducer(): Reducer<InventoryReducerState, OrderAction> {
                     } else {
                         return [{ failed: false }, inventory_updates.concat({ method: UpdatesMethod.Add, path: 'onhand', doc: spec })]
                     }
-
-                case OrderActionType.InventoryAllocate:
-                    const { sku, required_qty } = spec
-                    const sku_idx = state.onhand.findIndex(i => i.productId === sku)
+                }
+                case OrderActionType.InventoryAllocate: {
+                    const { productId, qty } = spec
+                    const sku_idx = state.onhand.findIndex(i => i.productId === productId)
                     if (sku_idx >= 0) {
-                        if (state.onhand[sku_idx].qty >= required_qty) {
+                        if (state.onhand[sku_idx].qty >= qty) {
                             return [{ failed: false }, [
-                                { method: UpdatesMethod.Inc, path: 'onhand', filter: { productId: sku }, doc: { qty: -required_qty } }
+                                { method: UpdatesMethod.Inc, path: 'onhand', filter: { productId }, doc: { qty: -qty } }
                             ]]
                         } else {
                             return [{ failed: true }, null]
@@ -302,7 +298,7 @@ function inventryReducer(): Reducer<InventoryReducerState, OrderAction> {
                     } else {
                         return [{ failed: true }, null]
                     }
-
+                }
                 default:
                     // action not for this reducer, so no updates
                     return null

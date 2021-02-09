@@ -372,7 +372,9 @@ async function init() {
     app.listen(3000)
 
     // Init order status (dont await, incase no tenent! )
-    app.context.orderState = await order_state_startup(app.context)
+    order_state_startup(app.context).then(val => {
+        app.context.orderState = val
+    })
 
 }
 

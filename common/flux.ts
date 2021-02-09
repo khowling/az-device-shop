@@ -54,11 +54,14 @@ class JSStateStore implements StateStore {
 
     apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void {
 
+        const state = this._state
         const _control: StateUpdateControl = statechanges._control as StateUpdateControl
-        assert(_control && _control.head_sequence === this._state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this._state._control.head_sequence}`)
-        let newstate = { _control: { head_sequence: this._state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
-        console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${this._state._control.head_sequence}`)
+
+        assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
+        let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
+
+        console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
         for (let stateKey of Object.keys(statechanges)) {
             if (stateKey === '_control') continue

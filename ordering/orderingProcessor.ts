@@ -1,3 +1,4 @@
+import { ObjectId } from 'mongodb'
 import { Processor, ProcessorOptions } from '../common/processor'
 import {
     StateUpdates, OrderActionType,
@@ -14,7 +15,8 @@ async function validateOrder({ connection, trigger, flow_id }, next) {
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
-        spec = await connection.db.collection("orders_spec").findOne({ _id: trigger.doc_id, partition_key: connection.tenent.email })
+        const mongo_spec = await connection.db.collection("orders_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: connection.tenent.email })
+        spec = { ...mongo_spec, ...(mongo_spec.items && { items: mongo_spec.items.map(i => { return { ...i, ...(i.item && i.item._id && { productId: i.item._id.toHexString() }) } }) }) }
     }
 
     await next({ type: OrderActionType.OrdersNew, id: flow_id, spec }, { update_ctx: { spec } } as ProcessorOptions)
