@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: az-device-shop-web
+  labels:
+    app: az-device-shop-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: az-device-shop-web
+  template:
+    metadata:
+      labels:
+        app: az-device-shop-web
+    spec:
+      containers:
+        - name: az-device-shop-web
+          image: khcommon.azurecr.io/az-device-shop-web:0.1.0
+          env:
+            - name: USE_COSMOS
+              value: "false"
+            - name: STORAGE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: STORAGE_ACCOUNT
+            - name: STORAGE_CONTAINER
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: STORAGE_CONTAINER
+            - name: STORAGE_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: STORAGE_MASTER_KEY
+            - name: B2C_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: B2C_CLIENT_ID
+            - name: B2C_TENANT
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: B2C_TENANT
+            - name: B2C_SIGNIN_POLICY
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: B2C_SIGNIN_POLICY
+            - name: B2C_RESETPWD_POLICY
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: B2C_RESETPWD_POLICY
+            - name: B2C_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: B2C_CLIENT_SECRET
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: MONGO_DB
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: az-device-shop-web-service
+  labels:
+    app: az-device-shop-web
+spec:
+  selector:
+    app: az-device-shop-web
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: NodePort
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: az-device-shop-web-ingress
+  labels:
+    app: az-device-shop-web
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/issuer: "letsencrypt-prod"
+    kubernetes.io/tls-acme: "true"
+spec:
+  tls:
+    - hosts:
+        - az-shop.labhome.biz
+      secretName: tls-secret
+  rules:
+    - host: az-shop.labhome.biz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: az-device-shop-web-service
+                port:
+                  name: http

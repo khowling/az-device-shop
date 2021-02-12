@@ -1,10 +1,9 @@
 {
-  "name": "ecom-react-web",
+  "name": "az-device-shop-web",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@babel/plugin-transform-modules-commonjs": "latest",
-    "@hapi/joi": "latest",
+    "joi": "^17.4.0",
     "jwk-to-pem": "latest",
     "jws": "latest",
     "koa": "latest",
@@ -16,7 +15,10 @@
     "react-async-ssr": "^0.7.2",
     "react-dom": "^16",
     "react-scripts": "latest",
-    "string-replace-stream": "latest"
+    "string-replace-stream": "latest",
+    "@fluentui/react": "latest",
+    "@uifabric/fluent-theme": "latest",
+    "@uifabric/react-cards": "latest"
   },
   "scripts": {
     "start": "PORT=8000 REACT_APP_SERVER_URL=http://localhost:3000 react-scripts start",
@@ -44,18 +46,17 @@
     "@babel/cli": "latest",
     "@babel/core": "latest",
     "@babel/plugin-transform-function-name": "latest",
+    "@babel/plugin-transform-modules-commonjs": "latest",
     "@babel/plugin-transform-runtime": "latest",
     "@babel/preset-env": "latest",
     "@babel/preset-react": "latest",
     "@babel/register": "latest",
     "@types/react-dom": "^16",
-    "@fluentui/react": "latest",
-    "@uifabric/fluent-theme": "latest",
-    "@uifabric/react-cards": "latest",
     "copy-webpack-plugin": "^6",
     "css-loader": "latest",
     "html-webpack-plugin": "^4",
     "immutability-helper": "latest",
+    "typescript": "^4.1.3",
     "webpack-cli": "latest"
   },
   "proxy": "http://localhost:3000"

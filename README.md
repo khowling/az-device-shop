@@ -111,3 +111,67 @@ in mongo cli, run:  >  rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "lo
 ```
 mongoimport --db dbdev --collection products --jsonArray --file ./testing/testdata_products.json
 ```
+
+## Deploy to AKS
+
+### Deploy Mongo
+
+```
+AZSHOP_NS=az-device-shop
+AZSHOP_DBUSERNAME=az-shop
+AZSHOP_DBNAME=az-shop
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+kubectl create ns $AZSHOP_NS
+
+helm install mongo-demo bitnami/mongodb --namespace  $AZSHOP_NS \
+ --set architecture="replicaset" \
+ --set persistence.storageClass="managed-premium" \
+ --set auth.username=${AZSHOP_DBUSERNAME},auth.database=${AZSHOP_DBNAME}
+
+AZSHOP_DBPASSWD=$(kubectl get secret --namespace $AZSHOP_NS mongo-demo-mongodb -o jsonpath="{.data.mongodb-password}" | base64 --decode)
+
+export MONGO_URL="mongodb://${AZSHOP_DBUSERNAME}:${AZSHOP_DBPASSWD}@mongo-demo-mongodb-0.mongo-demo-mongodb-headless.az-device-shop.svc.cluster.local:27017,mongo-demo-mongodb-1.mongo-demo-mongodb-headless.az-device-shop.svc.cluster.local:27017/${AZSHOP_DBUSERNAME}?replicaSet=rs0"
+
+```
+
+### Deploy App
+
+```
+STORAGE_ACCOUNT="<value>"
+STORAGE_CONTAINER="<value>"
+STORAGE_MASTER_KEY="<value>"
+B2C_CLIENT_ID="<value>"
+B2C_TENANT="<value>"
+B2C_SIGNIN_POLICY="<value>"
+B2C_RESETPWD_POLICY="<value>"
+B2C_CLIENT_SECRET="<value>"
+USE_COSMOS="false"
+
+## Get Values from local file (not in repo)
+source ./.env
+
+## Create Secret
+kubectl create secret generic az-shop-secret -n ${AZSHOP_NS} \
+  --from-literal=STORAGE_ACCOUNT=${STORAGE_ACCOUNT} \
+  --from-literal=STORAGE_CONTAINER=${STORAGE_CONTAINER} \
+  --from-literal=STORAGE_MASTER_KEY=${STORAGE_MASTER_KEY} \
+  --from-literal=B2C_CLIENT_ID=${B2C_CLIENT_ID} \
+  --from-literal=B2C_TENANT=${B2C_TENANT} \
+  --from-literal=B2C_SIGNIN_POLICY=${B2C_SIGNIN_POLICY} \
+  --from-literal=B2C_RESETPWD_POLICY=${B2C_RESETPWD_POLICY} \
+  --from-literal=B2C_CLIENT_SECRET=${B2C_CLIENT_SECRET} \
+  --from-literal=MONGO_DB=${MONGO_URL} \
+  --from-literal=USE_COSMOS=${USE_COSMOS}
+
+## Deploy App
+
+kubectl apply -f web/deployment.yml -n ${AZSHOP_NS}
+```
+
+## Teardown
+
+```
+helm uninstall mongo-demo --namespace  az-device-shop
+```

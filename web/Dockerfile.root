@@ -2,16 +2,16 @@
 FROM node:12 AS Build
 
 # Create app directory
-WORKDIR /usr/src/app
+WORKDIR /usr/src/app/web
 
 # Install app dependencies
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
 # where available (npm@5+)
-COPY package*.json ./
+COPY web/package*.json ./
 RUN npm i
 
 # Copy the rest of the application
-COPY . .
+COPY web/ ./
 
 # Creates assets in ./build
 ENV NODE_ENV=production
@@ -19,6 +19,15 @@ RUN npx webpack --config webpack.config.js
 
 # compile React JSX in 'src' into 'lib' for SSR
 RUN npx babel --config-file ./babel.config.json --out-dir lib ./src
+
+# Required for imports for tsc compile
+RUN mkdir ../common
+COPY common/* ../common/
+
+RUN mkdir ../ordering
+COPY ordering/* ../ordering/
+
+
 
 # Compile server Typescript
 RUN cd ./server && \
@@ -28,17 +37,17 @@ RUN cd ./server && \
 FROM node:12
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY web/package*.json ./
 RUN npm i --production
 
 # Copy compiled assets
-COPY --from=build /usr/src/app/build build
+COPY --from=build /usr/src/app/web/build build
 
 # Copy compiled typescript server
-COPY --from=build /usr/src/app/server/out server/out
+COPY --from=build /usr/src/app/web/server/out server/out
 
 # not using @babel/register to automatically compile files on the fly.
-COPY --from=build /usr/src/app/lib lib
+COPY --from=build /usr/src/app/web/lib lib
 
 EXPOSE 3000
 CMD [ "node", "server/out/web/server/server" ]

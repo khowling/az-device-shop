@@ -8,7 +8,7 @@ const
     bodyParser = require('koa-bodyparser'),
     // Simple session middleware for Koa. Defaults to cookie-based sessions and supports external stores
     session = require('koa-session'),
-    Joi = require('@hapi/joi')
+    Joi = require('joi')
 
 // Auth & SAS require
 const
@@ -262,9 +262,10 @@ const FetchOperation = {
 
 async function dbInit() {
     // ensure url encoded
-    const murl = new URL(MongoURL as string)
-    console.log(`connecting with ${murl.toString()}`)
-    const client = await MongoClient.connect(murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
+    //const murl = new URL(MongoURL as string)
+    //console.log(`connecting with ${murl.toString()}`)
+    console.log(`connecting with ${MongoURL}`)
+    const client = await MongoClient.connect(MongoURL, { useNewUrlParser: true, useUnifiedTopology: true })
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     const _db = client.db()
     // If Cosmos, need to pre-create the collections, becuse it enforces a partitioning strategy.
@@ -401,8 +402,11 @@ import fetch from './server_fetch'
 import { AzBlobWritable, createServiceSAS } from './AzBlobWritable'
 
 // all requires after this will use babel transpile, using 'babel.config.json'
+/*
 require("@babel/register")()
 const server_ssr = require('../../../../src/ssr_server')
+*/
+const server_ssr = require('../../../../lib/ssr_server')
 
 // ssr middleware (ensure this this the LAST middleware to be used)
 async function ssr(ctx, next) {
