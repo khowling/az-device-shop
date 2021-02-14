@@ -11,8 +11,8 @@ export async function mongoWatchProcessorTrigger(cs: StateConnection, watchColle
 
     // No oplog continuation, so instead of starting the watch from the current position, read the collection from the sequence (or the start of the file)
     if (!processor.processorState.last_incoming_processed.continuation) {
-        await readCollectionfromSequence(cs, watchCollection, processor.processorState.last_incoming_processed.sequence, filter, async function (doc, continuation) {
-            await processor.initiateWorkflow({ trigger: { doc_id: doc._id } }, continuation ? { continuation } : null)
+        await readCollectionfromSequence(cs, watchCollection, processor.processorState.last_incoming_processed.sequence, filter, async function (doc, isLast: boolean) {
+            await processor.initiateWorkflow({ trigger: { doc_id: doc._id } }, isLast ? { continuation: { startAtOperationTime: doc._ts } } : null)
         })
     }
 
@@ -46,8 +46,8 @@ export async function mongoCollectionDependency(cs: StateConnection, stateManage
 
     // No oplog continuation, so instead of starting the watch from the current position, read the collection from the sequence (or the start of the file)
     if (!last_incoming_processed.continuation) {
-        await readCollectionfromSequence(cs, collection, last_incoming_processed.sequence, null, async function (doc, continuation) {
-            await stateManager.dispatch({ type: actiontype, id: doc._id.toHexString(), spec: doc, trigger: { ...(doc.sequence && { sequence: doc.sequence }), ...(continuation && { continuation }) } })
+        await readCollectionfromSequence(cs, collection, last_incoming_processed.sequence, null, async function (doc, isLast: boolean) {
+            await stateManager.dispatch({ type: actiontype, id: doc._id.toHexString(), spec: doc, trigger: { ...(doc.sequence && { sequence: doc.sequence }), ...(isLast && { continuation: { startAtOperationTime: doc._ts } }) } })
         })
     }
 
@@ -75,8 +75,8 @@ async function readCollectionfromSequence({ db, tenent }: StateConnection, colle
     console.log(`readCollectionfromSequence:  No continuation for "${collection}" so read all existing records from restored last_incoming_processed.sequence>${sequence ? sequence : 'none'} before starting new watch`)
 
     // get db time, so we know where to continue the watch
-    const admin = db.admin()
-    const continuation = { startAtOperationTime: (await admin.replSetGetStatus()).lastStableCheckpointTimestamp } // rs.status()
+    //const admin = db.admin()
+    //const continuation = { startAtOperationTime: (await admin.replSetGetStatus()).lastStableCheckpointTimestamp } // rs.status()
 
     if (sequence) {
         await db.collection(collection).createIndex({ sequence: 1 })
@@ -91,7 +91,7 @@ async function readCollectionfromSequence({ db, tenent }: StateConnection, colle
     while (gotRecords) {
         const doc /*{ _id, partition_key, sequence, ...spec }*/ = await cursor.next()
         const isLast = !await cursor.hasNext()
-        callback(doc, isLast ? continuation : null)
+        callback(doc, isLast)
         //await stateManager.dispatch({ type: actiontype, id: _id.toHexString(), spec, trigger: { sequence, ...(isLast && { continuation }) } })
         if (isLast) {
             break

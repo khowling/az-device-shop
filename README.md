@@ -112,15 +112,25 @@ in mongo cli, run:  >  rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "lo
 mongoimport --db dbdev --collection products --jsonArray --file ./testing/testdata_products.json
 ```
 
-## Deploy to AKS
+## Deploy App to Azure
+
+
+
+```
+APP_NAME=az-shop
+APP_HOST_URL="https://${APP_NAME}.labhome.biz"
+```
 
 ### Deploy Mongo
 
+NOTE: At the moment we are using mongo 4 API for the oplog, so installing the mongo chat, will modify to use Cosmos Mongo API once version4 is available.
+
 ```
-AZSHOP_NS=az-device-shop
+AZSHOP_NS=${APP_NAME}
 AZSHOP_DBUSERNAME=az-shop
 AZSHOP_DBNAME=az-shop
 
+# Get mongo chart
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
 kubectl create ns $AZSHOP_NS
@@ -132,28 +142,77 @@ helm install mongo-demo bitnami/mongodb --namespace  $AZSHOP_NS \
 
 AZSHOP_DBPASSWD=$(kubectl get secret --namespace $AZSHOP_NS mongo-demo-mongodb -o jsonpath="{.data.mongodb-password}" | base64 --decode)
 
-export MONGO_URL="mongodb://${AZSHOP_DBUSERNAME}:${AZSHOP_DBPASSWD}@mongo-demo-mongodb-0.mongo-demo-mongodb-headless.az-device-shop.svc.cluster.local:27017,mongo-demo-mongodb-1.mongo-demo-mongodb-headless.az-device-shop.svc.cluster.local:27017/${AZSHOP_DBUSERNAME}?replicaSet=rs0"
+export MONGO_URL="mongodb://${AZSHOP_DBUSERNAME}:${AZSHOP_DBPASSWD}@mongo-demo-mongodb-0.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017,mongo-demo-mongodb-1.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017/${AZSHOP_DBUSERNAME}?replicaSet=rs0"
 
 ```
 
-### Deploy App
+### Deploy Storage Account
+
+Used for catalog images
 
 ```
-STORAGE_ACCOUNT="<value>"
-STORAGE_CONTAINER="<value>"
-STORAGE_MASTER_KEY="<value>"
+# Create Storage Account
+AZSHOP_RG=${AZSHOP_NS}-rg
+STORAGE_ACCOUNT="azshopstorage"
+STORAGE_CONTAINER="images"
+
+az group create -n $AZSHOP_RG -l westeurope
+az storage account create -n $STORAGE_ACCOUNT -g $AZSHOP_RG -l westeurope --sku Standard_LRS
+
+STORAGE_MASTER_KEY=$(az storage account keys list -n $STORAGE_ACCOUNT -g $AZSHOP_RG --query "[0].value" -o tsv)
+az storage container create --public-access blob -n $STORAGE_CONTAINER --account-name $STORAGE_ACCOUNT --account-key $STORAGE_MASTER_KEY
+
+
+az storage cors add --methods GET HEAD MERGE OPTIONS POST PUT --allowed-headers 'x-ms-*,Access-Control*' --exposed-headers '*' --origins '*' --services b --account-name ${STORAGE_ACCOUNT} --account-key ${STORAGE_MASTER_KEY}
+
+```
+
+# Link to B2C
+
+Unfortunatly, Azure AD B2C cannot be provisioned using automation, so follow these manual steps:
+
+1. Create a B2C Tenent (using portal at https://portal.azure.com)
+
+```
+B2C_TENANT="<my_b2c_name_exclude_domain>"
+```
+
+2. Register a B2C App, select
+ * Account Type: Accounts in any identity provider or organizational directory
+ * Redirect URI : <Web> ${APP_HOST_URL}/connect/microsoft/callback
+ 
+```
 B2C_CLIENT_ID="<value>"
-B2C_TENANT="<value>"
+```
+
+3. In the App 'Certificates & Secrets', create a new Client secret
+```
+B2C_CLIENT_SECRET="<value>"
+```
+
+4. Create the login and signup flow
+ * Add Identity Providers as required ('Google' and 'Facebook')
+ * Create a new Sign up and Signin Flow
+
+```
 B2C_SIGNIN_POLICY="<value>"
 B2C_RESETPWD_POLICY="<value>"
-B2C_CLIENT_SECRET="<value>"
-USE_COSMOS="false"
+```
 
-## Get Values from local file (not in repo)
-source ./.env
+NOTE: if developing locally, place values in local .env file
+```
+
+```
+
+## Deploy app
+
+```
+## Get local B2C values from local file (not in repo)
+source ./web/.env
 
 ## Create Secret
 kubectl create secret generic az-shop-secret -n ${AZSHOP_NS} \
+  --from-literal=APP_HOST_URL=${APP_HOST_URL} \
   --from-literal=STORAGE_ACCOUNT=${STORAGE_ACCOUNT} \
   --from-literal=STORAGE_CONTAINER=${STORAGE_CONTAINER} \
   --from-literal=STORAGE_MASTER_KEY=${STORAGE_MASTER_KEY} \
@@ -163,12 +222,13 @@ kubectl create secret generic az-shop-secret -n ${AZSHOP_NS} \
   --from-literal=B2C_RESETPWD_POLICY=${B2C_RESETPWD_POLICY} \
   --from-literal=B2C_CLIENT_SECRET=${B2C_CLIENT_SECRET} \
   --from-literal=MONGO_DB=${MONGO_URL} \
-  --from-literal=USE_COSMOS=${USE_COSMOS}
+  --from-literal=USE_COSMOS="false"
 
 ## Deploy App
 
 kubectl apply -f web/deployment.yml -n ${AZSHOP_NS}
 ```
+
 
 ## Teardown
 

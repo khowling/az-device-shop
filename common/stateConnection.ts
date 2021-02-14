@@ -2,7 +2,7 @@ import { Atomic, AtomicInterface } from './atomic'
 const { MongoClient, ObjectID } = require('mongodb')
 
 export class StateConnection {
-    private murl: URL;
+    private murl: string;
     private _sequence: number;
     private _collection: string;
     private _db: any;
@@ -11,7 +11,7 @@ export class StateConnection {
     }
     private _updateMutex: AtomicInterface
 
-    constructor(murl: URL, collection: string) {
+    constructor(murl: string, collection: string) {
         this.murl = murl
         this._collection = collection
         this._sequence = 0
@@ -60,7 +60,7 @@ export class StateConnection {
     }
 
     async init() {
-        const client = await MongoClient.connect(this.murl.toString(), { useNewUrlParser: true, useUnifiedTopology: true })
+        const client = await MongoClient.connect(this.murl, { useNewUrlParser: true, useUnifiedTopology: true })
         return await this.initFromDB(client.db(), null)
     }
 }

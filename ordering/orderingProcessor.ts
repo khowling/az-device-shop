@@ -56,7 +56,7 @@ async function orderingProcessor() {
 
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     console.log(`orderingProcessor (1):  Create "StateConnection" and "OrderStateManager" and "Processor"`)
-    const cs = await new StateConnection(new URL(MongoURL), 'order_events').init()
+    const cs = await new StateConnection(MongoURL, 'order_events').init()
     const orderState = new OrderStateManager('ordemea_v01', cs)
     const orderProcessor = new Processor('pemea_v01', cs, { statePlugin: orderState })
     // add connection to ctx, to allow middleware access, (maybe not required!)

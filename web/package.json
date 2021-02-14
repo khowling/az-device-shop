@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@fluentui/react": "latest",
+    "@uifabric/fluent-theme": "latest",
+    "@uifabric/react-cards": "latest",
     "joi": "^17.4.0",
     "jwk-to-pem": "latest",
     "jws": "latest",
@@ -15,10 +18,8 @@
     "react-async-ssr": "^0.7.2",
     "react-dom": "^16",
     "react-scripts": "latest",
-    "string-replace-stream": "latest",
-    "@fluentui/react": "latest",
-    "@uifabric/fluent-theme": "latest",
-    "@uifabric/react-cards": "latest"
+    "rocksdb": "^4.1.0",
+    "string-replace-stream": "latest"
   },
   "scripts": {
     "start": "PORT=8000 REACT_APP_SERVER_URL=http://localhost:3000 react-scripts start",

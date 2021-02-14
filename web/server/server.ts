@@ -17,6 +17,7 @@ const
     crypto = require('crypto')
 
 
+const app_host_url = process.env.APP_HOST_URL
 const client_id = process.env.B2C_CLIENT_ID
 const b2c_tenant = process.env.B2C_TENANT
 const signin_policy = process.env.B2C_SIGNIN_POLICY
@@ -25,7 +26,7 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 
 
 // Mongo require
-const { MongoClient, ObjectID, ObjectId } = require('mongodb'),
+const { MongoClient, Timestamp, ObjectID, ObjectId } = require('mongodb'),
     MongoURL = process.env.MONGO_DB,
     session_collection_name = 'koa-sessions',
     USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
@@ -454,12 +455,12 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
     .get('/', async function (ctx, next) {
         const nonce = ctx.session.auth_nonce = Math.random().toString(26).slice(2)
         //console.log(`login with surl=${ctx.query.surl}`)
-        ctx.redirect(`${app.context.openid_configuration.authorization_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent('http://localhost:3000/connect/microsoft/callback')}&scope=openid&response_type=code&nonce=${nonce}${ctx.query.surl ? "&state=" + encodeURIComponent(ctx.query.surl) : ""}`)
+        ctx.redirect(`${app.context.openid_configuration.authorization_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}&scope=openid&response_type=code&nonce=${nonce}${ctx.query.surl ? "&state=" + encodeURIComponent(ctx.query.surl) : ""}`)
         next()
     })
     .get('/logout', async function (ctx, next) {
         delete ctx.session.auth
-        ctx.redirect(`${app.context.openid_configuration.end_session_endpoint}?post_logout_redirect_uri=${encodeURIComponent('http://localhost:3000')}`)
+        ctx.redirect(`${app.context.openid_configuration.end_session_endpoint}?post_logout_redirect_uri=${encodeURIComponent(app_host_url || 'http://localhost:3000')}`)
         //ctx.redirect(ctx.query.surl || "/")
         next()
     })
@@ -469,7 +470,7 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
         if (ctx.query.code) {
             delete ctx.session.auth_nonce
             try {
-                const flow_body = `client_id=${client_id}&client_secret=${client_secret}&scope=openid&code=${encodeURIComponent(ctx.query.code)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(`http://localhost:3000/connect/microsoft/callback`)}`
+                const flow_body = `client_id=${client_id}&client_secret=${client_secret}&scope=openid&code=${encodeURIComponent(ctx.query.code)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}`
 
                 const { access_token, id_token } = await fetch(app.context.openid_configuration.token_endpoint, 'POST',
                     { 'content-type': 'application/x-www-form-urlencoded' }, flow_body)
@@ -529,7 +530,7 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
             //console.log(ctx.querystring)
             if (ctx.querystring.indexOf('=access_denied') > 0 && ctx.querystring.indexOf('=AADB2C90118') > 0) {
                 // &redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fconnect%2Fmicrosoft%2Fcallback&scope=openid&response_type=code&prompt=login
-                ctx.redirect(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/oauth2/v2.0/authorize?p=${passwd_reset_policy}&client_id=${client_id}&nonce=${nonce}&scope=openid&response_type=code&redirect_uri=${encodeURIComponent(`http://localhost:3000/connect/microsoft/callback`)}`)
+                ctx.redirect(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/oauth2/v2.0/authorize?p=${passwd_reset_policy}&client_id=${client_id}&nonce=${nonce}&scope=openid&response_type=code&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}`)
             } else {
                 console.error("/connect/microsoft/callback : no code")
                 ctx.throw(401, "/connect/microsoft/callback : no code")
@@ -583,7 +584,7 @@ async function store(ctx, storename, doc, update_opts: any = {}) {
     if (_id) {
         return await ctx.db.collection(store.collection).updateOne({ _id: ObjectID(_id), partition_key: (partition_key && update_opts.upsert) ? partition_key : ctx.tenent.email }, { $set: value }, update_opts)
     } else {
-        return await ctx.db.collection(store.collection).insertOne({ ...value, _id: ObjectID(), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenent.email })
+        return await ctx.db.collection(store.collection).insertOne({ ...value, _id: ObjectID(), _ts: new Timestamp(), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenent.email })
     }
 }
 
@@ -628,7 +629,7 @@ const api = new Router({ prefix: '/api' })
             try {
                 const { value, error } = Joi.object({ 'shipping': Joi.string().valid('A', 'B').required() }).validate(ctx.request.body, { allowUnknown: true })
 
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenent.email }, { $set: { _ts: new Timestamp(), status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
                 ctx.body = { _id: order.value._id }
                 await next()
             } catch (e) {
@@ -865,6 +866,7 @@ const api = new Router({ prefix: '/api' })
                 if (ctx.request.body.inventory) {
                     await ctx.db.collection(StoreDef["inventory"].collection).insertMany(newproducts.map(function (p) {
                         return {
+                            _ts: new Timestamp(), // Empty timestamp will be replaced by the server to the current server time
                             partition_key: tenent.email,
                             status: 'Required',
                             productId: p._id,

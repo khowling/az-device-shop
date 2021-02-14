@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: az-device-shop-factory
+  labels:
+    app: az-device-shop-factory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: az-device-shop-factory
+  template:
+    metadata:
+      labels:
+        app: az-device-shop-factory
+    spec:
+      containers:
+        - name: az-device-shop-factory
+          image: khcommon.azurecr.io/az-device-shop/factory:0.1.0
+          env:
+            - name: APP_HOST_URL
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: APP_HOST_URL
+            - name: USE_COSMOS
+              value: "false"
+            - name: STORAGE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: STORAGE_ACCOUNT
+            - name: STORAGE_CONTAINER
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: STORAGE_CONTAINER
+            - name: STORAGE_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: STORAGE_MASTER_KEY
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: az-shop-secret
+                  key: MONGO_DB
+          ports:
+            - containerPort: 9091
+          imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: az-device-shop-factory-service
+  labels:
+    app: az-device-shop-factory
+spec:
+  selector:
+    app: az-device-shop-factory
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 9091
+  type: NodePort

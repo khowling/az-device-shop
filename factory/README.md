@@ -25,33 +25,25 @@ Event-based work scheduling
 
 ## Events
 
-- WorkItem Creation (from web)
-  - emit  {Status: 'New' Kind: 'WorkItem'}
+
+### Build
 
 
-- factory scheduling service
-    - mastering
-        - factory emplyees
-        - factory capacity
-    - watching for 
-        (1) new capacity / employees
-        (2) New WorkItems, Completed WorkItems
-    - action
-        (1) check for New WorkItems
-        (2)  -  Check factory capacity / engineers avaiablility
-            -  if available
-                    - allocate engineers and factory capacity & emit {Status: 'InProgress' Kind: 'WorkItem'}
+```
+export ACR_NAME=
+```
 
- - warehouse service
-     - watching for 
-        (1)  - emit workitem finished 
-    - action
-        - start shipping clock.
-            - when job clock finishes, 
-            - allocate Warehouse Location code, emit - WarehouseGoodsIn
+### Build & Run
 
+```
+docker build -t ${ACR_NAME}.azurecr.io/az-device-shop/factory:0.1.0 -f Dockerfile.root ../
 
-- ProgressController
- - watching for 
-        (1) New WorkItems, 
-        Completed WorkItems
+docker run --env-file ./.env -d -p 9091:9091 ${$ACR_NAME}.azurecr.io/az-device-shop/factory:0.1.0 
+```
+
+### Build and push to ACR
+
+or
+```
+az acr build --registry $ACR_NAME --image az-device-shop/factory:0.1.0 -f Dockerfile.root ../
+```

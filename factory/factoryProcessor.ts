@@ -53,7 +53,7 @@ import { mongoWatchProcessorTrigger } from '../common/processorActions'
 async function factory_startup() {
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     console.log(`factory_startup (1):  Initilise Connection`)
-    const cs = await new StateConnection(new URL(MongoURL), 'factory_events').init()
+    const cs = await new StateConnection(MongoURL, 'factory_events').init()
 
 
     console.log(`factory_startup (2):  create factory state manager "factoryState"`)

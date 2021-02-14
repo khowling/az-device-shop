@@ -1,0 +1,35 @@
+# First stage: compile things.
+FROM node:12 AS Build
+
+# Create app directory
+WORKDIR /usr/src/app/ordering
+
+# Install app dependencies
+# A wildcard is used to ensure both package.json AND package-lock.json are copied
+# where available (npm@5+)
+COPY ordering/package*.json ./
+RUN npm i
+
+# Copy the rest of the application
+COPY ordering/ ./
+
+# Required for imports for tsc compile
+RUN mkdir ../common
+COPY common/* ../common/
+
+
+# Compile server Typescript
+RUN npx tsc  --build ./tsconfig.json
+
+# Second stage: run things.
+FROM node:12
+WORKDIR /usr/src/app
+
+COPY ordering/package*.json ./
+RUN npm i --production
+
+# Copy compiled typescript server
+COPY --from=build /usr/src/app/ordering/out out
+
+EXPOSE 9090
+CMD [ "node", "out/ordering/orderingProcessor" ]

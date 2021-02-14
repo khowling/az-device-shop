@@ -11,8 +11,8 @@ export async function order_state_startup({ db, tenent }) {
     const orderState = new OrderStateManager('ordemea_v01', cs)
 
     // get db time, so we know where to continue the watch
-    const admin = db.admin()
-    const continuation = { startAtOperationTime: (await admin.replSetGetStatus()).lastStableCheckpointTimestamp } // rs.status()
+    //const admin = db.admin()
+    //const continuation = { startAtOperationTime: (await admin.replSetGetStatus()).lastStableCheckpointTimestamp } // rs.status()
 
 
     const chkdir = `${process.env.FILEPATH || '.'}/web_checkpoint`
@@ -25,14 +25,15 @@ export async function order_state_startup({ db, tenent }) {
         orderState.stateStore
     ])
 
-    console.log(`orderingFollower (5):  start watch "${cs.collection}" (filter watch to sequence>${cs.sequence}) continuation=${continuation}`)
+    console.log(`orderingFollower (5):  start watch "${cs.collection}" (filter watch to sequence>${cs.sequence}) continuation=${/*continuation*/null}`)
 
+    const continuation = cs.sequence && { startAtOperationTime: await db.collection(cs.collection).findOne({ sequence: cs.sequence })._ts }
     var inventoryStreamWatcher = cs.db.collection(cs.collection).watch(
         [
             { $match: { $and: [{ 'operationType': 'insert' }, { 'fullDocument.partition_key': cs.tenent.email }, { 'fullDocument.sequence': { $gt: cs.sequence } }] } },
             { $project: { '_id': 1, 'fullDocument': 1, 'ns': 1, 'documentKey': 1 } }
         ],
-        { fullDocument: 'updateLookup', ...continuation }
+        { fullDocument: 'updateLookup', ...(continuation && { ...continuation }) }
     ).on('change', data => {
         //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
 

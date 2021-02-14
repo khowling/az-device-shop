@@ -1,5 +1,6 @@
 const assert = require('assert')
 const Emitter = require('events')
+const { Timestamp } = require('mongodb')
 
 
 export interface ProcessorOptions {
@@ -222,6 +223,7 @@ export class Processor extends EventEmitter {
         // write events
         const msg = {
             sequence: cs.sequence + 1,
+            _ts: new Timestamp(), // Emptry timestamp will be replaced by the server to the current server time
             partition_key: cs.tenent.email,
             ...(stateChanges && { [this._statePlugin.name]: stateChanges }),
             [this.name]: changes
