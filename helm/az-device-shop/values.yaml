@@ -1,0 +1,21 @@
+# Default values for az-device-shop.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+global:
+  registryHost: ""
+  env:
+    MONGO_DB: ""
+    STORAGE_ACCOUNT: ""
+    STORAGE_CONTAINER: ""
+    STORAGE_MASTER_KEY: ""
+    APP_HOST_URL: ""
+
+az-device-shop-web:
+  env:
+    B2C_RESETPWD_POLICY: ""
+    B2C_TENANT: ""
+    B2C_CLIENT_SECRET: ""
+    B2C_SIGNIN_POLICY: ""
+    B2C_CLIENT_ID: ""

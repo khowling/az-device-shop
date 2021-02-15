@@ -5,10 +5,11 @@ metadata:
   labels:
     app: az-device-shop-factory
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: az-device-shop-factory
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

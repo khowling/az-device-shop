@@ -142,7 +142,8 @@ helm install mongo-demo bitnami/mongodb --namespace  $AZSHOP_NS \
 
 AZSHOP_DBPASSWD=$(kubectl get secret --namespace $AZSHOP_NS mongo-demo-mongodb -o jsonpath="{.data.mongodb-password}" | base64 --decode)
 
-export MONGO_URL="mongodb://${AZSHOP_DBUSERNAME}:${AZSHOP_DBPASSWD}@mongo-demo-mongodb-0.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017,mongo-demo-mongodb-1.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017/${AZSHOP_DBUSERNAME}?replicaSet=rs0"
+##  Need to escape the comma for the helm set cli :(
+export MONGO_URL="mongodb://${AZSHOP_DBUSERNAME}:${AZSHOP_DBPASSWD}@mongo-demo-mongodb-0.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017\,mongo-demo-mongodb-1.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017/${AZSHOP_DBUSERNAME}?replicaSet=rs0"
 
 ```
 
@@ -207,31 +208,29 @@ NOTE: if developing locally, place values in local .env file
 ## Deploy app
 
 ```
+ACR_NAME=<>
+
 ## Get local B2C values from local file (not in repo)
 source ./web/.env
 
-## Create Secret
-kubectl create secret generic az-shop-secret -n ${AZSHOP_NS} \
-  --from-literal=APP_HOST_URL=${APP_HOST_URL} \
-  --from-literal=STORAGE_ACCOUNT=${STORAGE_ACCOUNT} \
-  --from-literal=STORAGE_CONTAINER=${STORAGE_CONTAINER} \
-  --from-literal=STORAGE_MASTER_KEY=${STORAGE_MASTER_KEY} \
-  --from-literal=B2C_CLIENT_ID=${B2C_CLIENT_ID} \
-  --from-literal=B2C_TENANT=${B2C_TENANT} \
-  --from-literal=B2C_SIGNIN_POLICY=${B2C_SIGNIN_POLICY} \
-  --from-literal=B2C_RESETPWD_POLICY=${B2C_RESETPWD_POLICY} \
-  --from-literal=B2C_CLIENT_SECRET=${B2C_CLIENT_SECRET} \
-  --from-literal=MONGO_DB=${MONGO_URL} \
-  --from-literal=USE_COSMOS="false"
+helm install ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
+  --set global.registryHost="${ACR_NAME}.azurecr.io/" \
+  --set global.env.MONGO_DB="${MONGO_URL}" \
+  --set global.env.STORAGE_ACCOUNT="${STORAGE_ACCOUNT}" \
+  --set global.env.STORAGE_CONTAINER="${STORAGE_CONTAINER}" \
+  --set global.env.STORAGE_MASTER_KEY="${STORAGE_MASTER_KEY}" \
+  --set global.env.APP_HOST_URL="${APP_HOST_URL}" \
+  --set az-device-shop-web.env.B2C_RESETPWD_POLICY="${B2C_RESETPWD_POLICY}" \
+  --set az-device-shop-web.env.B2C_TENANT="${B2C_TENANT}" \
+  --set az-device-shop-web.env.B2C_CLIENT_SECRET="${B2C_CLIENT_SECRET}" \
+  --set az-device-shop-web.env.B2C_SIGNIN_POLICY="${B2C_SIGNIN_POLICY}" \
+  --set az-device-shop-web.env.B2C_CLIENT_ID="${B2C_CLIENT_ID}"
 
-## Deploy App
-
-kubectl apply -f web/deployment.yml -n ${AZSHOP_NS}
 ```
-
 
 ## Teardown
 
 ```
-helm uninstall mongo-demo --namespace  az-device-shop
+helm uninstall mongo-demo --namespace  $AZSHOP_NS
+helm uninstall ${APP_NAME} --namespace  $AZSHOP_NS
 ```
