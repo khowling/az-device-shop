@@ -37,7 +37,14 @@ export async function _fetchit(url, method = 'GET', headers = {}, body = null, c
   return new Promise((resolve, reject) => {
 
     //console.log('fetch')
-    let opts = { method }
+    let opts = {
+      method,
+      ...(process.env.REACT_APP_SERVER_URL && {
+        mode: 'cors',
+        credentials: 'include'
+      })
+    }
+
     if (body) {
       if (typeof body === 'object' && !headers['x-ms-blob-content-type']) {
         opts.body = JSON.stringify(body)
@@ -54,8 +61,9 @@ export async function _fetchit(url, method = 'GET', headers = {}, body = null, c
         }
       }
     }
+    console.log(opts)
 
-    fetch(url, opts).then(async (res) => {
+    fetch((process.env.REACT_APP_SERVER_URL || '') + url, opts).then(async (res) => {
       //console.log (`fetch status ${r.status}`)
       if (!res.ok) {
         console.log(`non 200 err : ${res.status}`)

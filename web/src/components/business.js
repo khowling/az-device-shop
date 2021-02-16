@@ -79,79 +79,78 @@ export function StartBusiness() {
             <EditImage result_image={input.image} onChange={_onChange} />
           </Stack.Item>
 
-          <Stack.Item>
-            <Label >Choose your product catalogue:</Label>
-          </Stack.Item>
 
-          <Stack.Item>
-            <Stack horizontal tokens={{ childrenGap: 30 }}>
+          <Label >Choose your product catalogue:</Label>
 
-              <Card
-                aria-label="Clickable vertical card with image bleeding at the top of the card"
-                onClick={() => _onChange({ target: { name: "catalog" } }, "bike")}
-                tokens={{ childrenMargin: 12 }}
-              >
-                <Card.Item>
-                  <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'bike', text: 'Getting started cycling product calalogue', styles: { root: { fontWeight: input.catalog === 'bike' ? '500' : 'normal' } } }]} />
-                </Card.Item>
-                <Card.Item>
-                  <TextField disabled value="https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json" />
-                </Card.Item>
-                <Card.Item styles={{ root: { height: "160px" } }}>
-                  <Image imageFit={ImageFit.centerContain} styles={{ root: { height: "100%" } }} src="https://freesvg.org/img/clipartjunky218-Cyclist-on-Bike.png" />
-                </Card.Item>
-                <Card.Section>
-                  <Label >Getting started cycling product calalogue</Label>
-                </Card.Section>
+          <Stack horizontal style={{ marginTop: "5px" }} tokens={{ childrenGap: 30 }}>
 
-                <Card.Section horizontal tokens={{ childrenGap: 10 }}>
-                  <Text>12 products</Text>
-                  <Text>3 categories</Text>
-                </Card.Section>
+            <Card
+              aria-label="Clickable vertical card with image bleeding at the top of the card"
+              onClick={() => _onChange({ target: { name: "catalog" } }, "bike")}
+              tokens={{ childrenMargin: 12 }}
+            >
+              <Card.Item>
+                <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'bike', text: 'Getting started cycling product calalogue', styles: { root: { fontWeight: input.catalog === 'bike' ? '500' : 'normal' } } }]} />
+              </Card.Item>
+              <Card.Item>
+                <TextField disabled value="https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json" />
+              </Card.Item>
+              <Card.Item styles={{ root: { height: "160px" } }}>
+                <Image imageFit={ImageFit.centerContain} styles={{ root: { height: "100%" } }} src="https://freesvg.org/img/clipartjunky218-Cyclist-on-Bike.png" />
+              </Card.Item>
+              <Card.Section>
+                <Label >Getting started cycling product calalogue</Label>
+              </Card.Section>
 
-                <Card.Section>
-                  <Checkbox label="Create Inventry Workorders" checked={input.inventory && input.catalog === 'bike'} onChange={(e, v) => _onChange({ target: { name: "inventory" } }, v)} />
-                </Card.Section>
+              <Card.Section horizontal tokens={{ childrenGap: 10 }}>
+                <Text>12 products</Text>
+                <Text>3 categories</Text>
+              </Card.Section>
 
-              </Card>
+              <Card.Section>
+                <Checkbox label="Create Inventry Workorders" checked={input.inventory && input.catalog === 'bike'} onChange={(e, v) => _onChange({ target: { name: "inventory" } }, v)} />
+              </Card.Section>
 
-              <Card
-                aria-label="Clickable vertical card with image bleeding at the top of the card"
-                onClick={() => _onChange({ target: { name: "catalog" } }, "none")}
-                tokens={{ childrenMargin: 12 }}
-              >
-                <Card.Item>
-                  <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'none', text: 'I will create my own categories/products', styles: { root: { fontWeight: input.catalog === 'none' ? '500' : 'normal' } } }]} />
-                </Card.Item>
+            </Card>
+
+            <Card
+              aria-label="Clickable vertical card with image bleeding at the top of the card"
+              onClick={() => _onChange({ target: { name: "catalog" } }, "none")}
+              tokens={{ childrenMargin: 12 }}
+            >
+              <Card.Item>
+                <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'none', text: 'I will create my own categories/products', styles: { root: { fontWeight: input.catalog === 'none' ? '500' : 'normal' } } }]} />
+              </Card.Item>
 
 
-                <Card.Item styles={{ root: { height: "205px" } }}>
-                  <FontIcon iconName="Manufacturing" className={iconClass} />
-                </Card.Item>
+              <Card.Item styles={{ root: { height: "205px" } }}>
+                <FontIcon iconName="Manufacturing" className={iconClass} />
+              </Card.Item>
 
-                <Card.Section>
-                  <Label>I will create my own categories/products</Label>
-                </Card.Section>
+              <Card.Section>
+                <Label>I will create my own categories/products</Label>
+              </Card.Section>
 
-                <Card.Item grow={1}>
-                  <span />
-                </Card.Item>
-                <Card.Section horizontal tokens={{ childrenGap: 10 }}>
-                  <Text>0 products</Text>
-                  <Text>0 categories</Text>
-                </Card.Section>
-                <Card.Section>
-                  <Checkbox label="Create Inventry Workorders" disabled={true} />
-                </Card.Section>
+              <Card.Item grow={1}>
+                <span />
+              </Card.Item>
+              <Card.Section horizontal tokens={{ childrenGap: 10 }}>
+                <Text>0 products</Text>
+                <Text>0 categories</Text>
+              </Card.Section>
+              <Card.Section>
+                <Checkbox label="Create Inventry Workorders" disabled={true} />
+              </Card.Section>
 
-              </Card>
-            </Stack>
+            </Card>
+          </Stack>
 
-          </Stack.Item>
+
+          <Label >Initialise your tenent:</Label>
 
           <Stack.Item styles={{ root: { margin: '200px 0' } }}>
             {state.state === 'reset' ?
-              <PrimaryButton text={`Initialise My Business`} onClick={_createBusiness} allowDisabledFocus disabled={Object.entries(validation).reduce((a, c) => a || c[1], null)} />
+              <PrimaryButton text={`Initialise (Warning: Will override all current tenent data)`} onClick={_createBusiness} allowDisabledFocus disabled={Object.entries(validation).reduce((a, c) => a || c[1], null)} />
               : state.state === 'resetting' ?
                 <Spinner label="Please Wait, will take a few seonds..." ariaLive="assertive" labelPosition="right" />
                 : state.state === 'error' ?
@@ -186,7 +185,7 @@ export function StartBusiness() {
 
           </Stack.Item>
         </Stack>
-        <Image imageFit={ImageFit.CenterContain} width={'400px'} src="https://3er1viui9wo30pkxh1v2nh4w-wpengine.netdna-ssl.com/wp-content/uploads/2014/09/Satya_smiling-print-1024x683.jpg" />
+        <Image imageFit={ImageFit.CenterContain} width={'500px'} src="https://3er1viui9wo30pkxh1v2nh4w-wpengine.netdna-ssl.com/wp-content/uploads/2014/09/Satya_smiling-print-1024x683.jpg" />
 
       </Stack>
     </Stack>

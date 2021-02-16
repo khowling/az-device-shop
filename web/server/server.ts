@@ -4,6 +4,7 @@ const fs = require('fs')
 // Web require
 const
     Koa = require('koa'),
+    cors = require('@koa/cors'),
     Router = require('koa-router'),
     bodyParser = require('koa-bodyparser'),
     // Simple session middleware for Koa. Defaults to cookie-based sessions and supports external stores
@@ -28,7 +29,6 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 // Mongo require
 const { MongoClient, Timestamp, ObjectID, ObjectId } = require('mongodb'),
     MongoURL = process.env.MONGO_DB,
-    session_collection_name = 'koa-sessions',
     USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
 
 // Store Metadata
@@ -133,7 +133,7 @@ const StoreDef = {
         })
     },
     "session": {
-        collection: session_collection_name,
+        collection: "koa_sessions",
         schema: Joi.object({
             //partition_key: Joi.string().trim().required()
         })
@@ -177,7 +177,7 @@ const FetchOperation = {
 
         let find_query = { ...query, partition_key: ctx.tenent.email }
         if (store.onwer) {
-            if (!ctx.session.auth.sub) throw `${store} requires signin`
+            if (!ctx.session.auth) throw `${store} requires signin`
             find_query["owner._id"] = ctx.session.auth.sub
         }
 
@@ -205,7 +205,7 @@ const FetchOperation = {
 
         let find_query = { ...query, partition_key: ctx.tenent.email }
         if (store.onwer) {
-            if (!ctx.session.auth.sub) throw `${store} requires signin`
+            if (!ctx.session.auth) throw `${store} requires signin`
             find_query["owner._id"] = ctx.session.auth.sub
         }
 
@@ -318,14 +318,16 @@ async function serve_static(ctx, next) {
 
 
 
-// Init Web
-const app = new Koa();
-app.use(bodyParser())
 
-import { OrderStateManager } from '../../ordering/orderingState'
 import { order_state_startup } from './orderingFollower'
+const app = new Koa();
 
 async function init() {
+
+    // Init Web
+
+    app.use(bodyParser())
+
     // Init DB
     const db = app.context.db = await dbInit()
 
@@ -333,18 +335,19 @@ async function init() {
     app.keys = ['secret']
     app.use(session({
         maxAge: 86400000,
+        //secure: false, // DEVELOPMENT ONLY!
         store: {
             get: async function (key) {
-                //console.log(`session get ${key}`)
-                return await db.collection(session_collection_name).findOne({ _id: key, partition_key: "session" })
+                console.log(`session get ${key}`)
+                return await db.collection(StoreDef["session"].collection).findOne({ _id: key, partition_key: "session" })
             },
             set: async function (key, sess, maxAge, { rolling, changed }) {
                 //console.log(`session set ${key} ${JSON.stringify(sess)}`)
-                await db.collection(session_collection_name).replaceOne({ _id: key, partition_key: "session" }, { ...sess, ...{ _id: key, partition_key: "session" } }, { upsert: true })
+                await db.collection(StoreDef["session"].collection).replaceOne({ _id: key, partition_key: "session" }, { ...sess, ...{ _id: key, partition_key: "session" } }, { upsert: true })
             },
             destroy: async function (key) {
                 //console.log(`session destroy ${key}`)
-                await db.collection(session_collection_name).deleteOne({ _id: key, partition_key: "session" })
+                await db.collection(StoreDef["session"].collection).deleteOne({ _id: key, partition_key: "session" })
             }
         }
     }, app))
@@ -359,6 +362,9 @@ async function init() {
 
     // Init Settings (currently single tenent)
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ _id: ObjectId("singleton001"), partition_key: "root" })
+
+    // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud (using REACT_APP_SERVER_URL)
+    app.use(cors({ credentials: true }))
 
     // Init Routes
     app.use(new Router()
@@ -455,12 +461,12 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
     .get('/', async function (ctx, next) {
         const nonce = ctx.session.auth_nonce = Math.random().toString(26).slice(2)
         //console.log(`login with surl=${ctx.query.surl}`)
-        ctx.redirect(`${app.context.openid_configuration.authorization_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}&scope=openid&response_type=code&nonce=${nonce}${ctx.query.surl ? "&state=" + encodeURIComponent(ctx.query.surl) : ""}`)
+        ctx.redirect(`${ctx.openid_configuration.authorization_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}&scope=openid&response_type=code&nonce=${nonce}${ctx.query.surl ? "&state=" + encodeURIComponent(ctx.query.surl) : ""}`)
         next()
     })
     .get('/logout', async function (ctx, next) {
         delete ctx.session.auth
-        ctx.redirect(`${app.context.openid_configuration.end_session_endpoint}?post_logout_redirect_uri=${encodeURIComponent(app_host_url || 'http://localhost:3000')}`)
+        ctx.redirect(`${ctx.openid_configuration.end_session_endpoint}?post_logout_redirect_uri=${encodeURIComponent(app_host_url || 'http://localhost:3000')}`)
         //ctx.redirect(ctx.query.surl || "/")
         next()
     })
@@ -472,14 +478,14 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
             try {
                 const flow_body = `client_id=${client_id}&client_secret=${client_secret}&scope=openid&code=${encodeURIComponent(ctx.query.code)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}`
 
-                const { access_token, id_token } = await fetch(app.context.openid_configuration.token_endpoint, 'POST',
+                const { access_token, id_token } = await fetch(ctx.openid_configuration.token_endpoint, 'POST',
                     { 'content-type': 'application/x-www-form-urlencoded' }, flow_body)
 
                 // Validated the signature of the ID token
                 // https://docs.microsoft.com/en-us/azure/active-directory-b2c/active-directory-b2c-reference-oidc#validate-the-id-token
                 const [head, payload, sig] = id_token.split('.').map((t, i) => i < 2 ? JSON.parse(Buffer.from(t, 'base64').toString()) : t)
                 //console.log(head); console.log(payload)
-                const token_signing_key = app.context.jwks[head.kid]
+                const token_signing_key = ctx.jwks[head.kid]
                 const pem = jwkToPem(token_signing_key)
 
                 ctx.assert(token_signing_key, 500, `Token signing key not found ${head.kid}`)
@@ -562,13 +568,6 @@ async function ensureInit(ctx, next) {
         await next()
 }
 
-/*
-async function corsForStorage(ctx, next) {
-    ctx.set('Access-Control-Allow-Headers', '*')
-    ctx.set('Access-Control-Allow-origin', '*')
-    await next()
-}
-*/
 
 async function store(ctx, storename, doc, update_opts: any = {}) {
     const { _id, partition_key, ...body } = doc
@@ -766,12 +765,20 @@ const api = new Router({ prefix: '/api' })
         if (!ctx.request.body) throw `no body`
 
         try {
+
+
+            if (ctx.tenent) {
+                console.log(`/createtenent: tear down current tenent: ${ctx.tenent.email}`)
+                for (let coll of Object.keys(StoreDef).filter(c => StoreDef[c].collection).map(c => StoreDef[c].collection)) {
+                    console.log(`/createtenent: tear down collection=${coll}`)
+                    await ctx.db.collection(coll).deleteMany({})
+                }
+            }
+
+
             const tenent = { ...ctx.request.body, _id: "singleton001", partition_key: "root" }
-            app.context.tenent = tenent
-
             const tenent_res = await store(ctx, "business", tenent, { upsert: true })
-
-
+            app.context.tenent = tenent
 
             if (ctx.request.body.catalog === 'bike') {
 
@@ -881,6 +888,8 @@ const api = new Router({ prefix: '/api' })
 
             ctx.body = { status: 'success', description: 'done' }
             await next()
+
+
         } catch (e) {
             ctx.throw(400, e)
             await next()

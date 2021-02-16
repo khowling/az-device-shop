@@ -87,10 +87,12 @@ async function orderingProcessor() {
         return false
     })
 
-    const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
-        orderState.stateStore,
-        orderProcessor.stateStore
-    ])
+    if (false) {
+        const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
+            orderState.stateStore,
+            orderProcessor.stateStore
+        ])
+    }
 
 
     console.log(`orderingProcessor (6): starting picking control loop (5 seconds)`)
@@ -139,7 +141,10 @@ function ws_server_startup({ orderProcessor, orderState }) {
     const httpServer = http.createServer(app.callback()).listen(port)
     */ ////////////////////////////////////////////
 
-    const httpServer = http.createServer().listen(port)
+    const httpServer = http.createServer(function probes(req, res) {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('okay');
+    }).listen(port)
     console.log(`ws_server_startup: listening to port ${port}`)
 
     // Web Socket Server
@@ -151,7 +156,7 @@ function ws_server_startup({ orderProcessor, orderState }) {
     const ws_server_clients: WS_ServerClientType = new Map()
 
     wss.on('connection', function connection(ws) {
-
+        console.log(`websocket connection`)
         const client_id = ws_server_clients.size
         ws_server_clients.set(client_id, ws)
 

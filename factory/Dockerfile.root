@@ -1,5 +1,5 @@
 # First stage: compile things.
-FROM node:12 AS Build
+FROM node:14 AS Build
 
 # Create app directory
 WORKDIR /usr/src/app/factory
@@ -8,6 +8,7 @@ WORKDIR /usr/src/app/factory
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
 # where available (npm@5+)
 COPY factory/package*.json ./
+RUN npm install -g npm
 RUN npm i
 
 # Copy the rest of the application
@@ -22,10 +23,11 @@ COPY common/* ../common/
 RUN npx tsc  --build ./tsconfig.json
 
 # Second stage: run things.
-FROM node:12
+FROM node:14
 WORKDIR /usr/src/app
 
 COPY factory/package*.json ./
+RUN npm install -g npm
 RUN npm i --production
 
 # Copy compiled typescript server

@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "@fluentui/react": "latest",
-    "@uifabric/fluent-theme": "latest",
+    "@koa/cors": "^3.1.0",
     "@uifabric/react-cards": "latest",
     "joi": "^17.4.0",
     "jwk-to-pem": "latest",

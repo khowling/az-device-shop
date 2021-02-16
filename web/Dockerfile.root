@@ -1,5 +1,5 @@
 # First stage: compile things.
-FROM node:12 AS Build
+FROM node:14 AS Build
 
 # Create app directory
 WORKDIR /usr/src/app/web
@@ -8,6 +8,7 @@ WORKDIR /usr/src/app/web
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
 # where available (npm@5+)
 COPY web/package*.json ./
+RUN npm install -g npm
 RUN npm i
 
 # Copy the rest of the application
@@ -34,10 +35,11 @@ RUN cd ./server && \
     npx tsc  --build ./tsconfig.json
 
 # Second stage: run things.
-FROM node:12
+FROM node:14
 WORKDIR /usr/src/app
 
 COPY web/package*.json ./
+RUN npm install -g npm
 RUN npm i --production
 
 # Copy compiled assets

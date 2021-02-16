@@ -92,11 +92,12 @@ async function factory_startup() {
         return false
     })
 
-    const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
-        factoryState.stateStore,
-        factoryProcessor.stateStore
-    ])
-
+    if (false) {
+        const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
+            factoryState.stateStore,
+            factoryProcessor.stateStore
+        ])
+    }
 
     console.log(`factory_startup (8): Starting Interval to run "FactoryProcess" action (5 seconds)`)
     const factInterval = setInterval(async function () {
@@ -157,11 +158,10 @@ function ws_server_startup({ factoryProcessor, factoryState }) {
                 status: 'tbc',
             }))
         } else {
-            res.writeHead(404, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({
-                status: 'nack',
-                error: `not found`
-            }))
+
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('probe ok');
+
         }
     }
 
@@ -177,7 +177,7 @@ function ws_server_startup({ factoryProcessor, factoryState }) {
     });
 
     wss.on('connection', function connection(ws) {
-
+        console.log(`websocket connection`)
         const client_id = ws_server_clients.size
         ws_server_clients.set(client_id, ws)
 

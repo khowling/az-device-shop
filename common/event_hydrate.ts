@@ -4,9 +4,9 @@ const fs = require('fs')
 import { StateStore } from './flux'
 import { StateConnection } from './stateConnection'
 
-export async function restoreState(sc: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
+export async function restoreState(sc: StateConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
 
-    const last_checkpoint = await restoreLatestSnapshot(sc, chkdir, stateStores)
+    const last_checkpoint = enableCheckpointing ? await restoreLatestSnapshot(sc, chkdir, stateStores) : 0
     sc.sequence = await rollForwardState(sc, last_checkpoint, stateStores)
     return last_checkpoint
 }

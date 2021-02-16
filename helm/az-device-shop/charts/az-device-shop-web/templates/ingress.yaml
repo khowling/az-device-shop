@@ -1,6 +1,8 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "az-device-shop-web.fullname" . -}}
 {{- $svcPort := .Values.service.port -}}
+{{- $factoryService := printf "%s-%s" $.Release.Name "az-device-shop-factory" | trunc 63 | trimSuffix "-" }}
+{{- $orderingService := printf "%s-%s" $.Release.Name "az-device-shop-ordering" | trunc 63 | trimSuffix "-" }}
 {{- if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
 apiVersion: networking.k8s.io/v1
 {{- else -}}
@@ -31,14 +33,26 @@ spec:
     - host: {{ .host }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ . }}
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  name: http
-          {{- end }}
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $fullName }}
+              port:
+                name: http
+        - path: /ws/factory/
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $factoryService }}
+              port:
+                name: http
+        - path: /ws/ordering/
+          pathType: Prefix
+          backend:
+            service:
+              name: {{ $orderingService }}
+              port:
+                name: http
     {{- end }}
   {{- end }}
