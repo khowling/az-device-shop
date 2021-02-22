@@ -1,9 +1,5 @@
 name: deploy
-on:
-  push:
-    paths:
-      - "web/**"
-      - "common/**"
+on: [push]
 env:
   REGISTRY_NAME: khcommon
   CLUSTER_NAME: az-k8s-9137
