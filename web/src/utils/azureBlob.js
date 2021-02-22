@@ -2,13 +2,13 @@ import { _fetchit } from './fetch'
 
 const BLOCK_SIZE = 4 * 1024 * 1024
 
-export function putBlob(file, evtFn) {
+export function putBlob(file, root, evtFn) {
 
   const filename = file.name, filetype = file.type
   return new Promise((acc, rej) => {
 
     console.log(`uploading file ${filename}, size: ${file.size.toLocaleString()}, blocksz: ${BLOCK_SIZE}`)
-    _fetchit('/api/file', 'PUT', {}, { filename }).then(({ container_url, sas, pathname }) => {
+    _fetchit('/api/file', 'PUT', {}, { filename, root }).then(({ container_url, sas, pathname }) => {
       const startt = new Date().getTime()
       const reader = new FileReader()
       let new_index

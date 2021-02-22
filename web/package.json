@@ -13,7 +13,7 @@
     "koa-bodyparser": "latest",
     "koa-router": "latest",
     "koa-session": "latest",
-    "mongodb": "latest",
+    "mongodb": "^3.6.3",
     "react": "^16",
     "react-async-ssr": "^0.7.2",
     "react-dom": "^16",

@@ -76,7 +76,7 @@ export function StartBusiness() {
 
           <Stack.Item styles={{ root: { maxWidth: '500px' } }}>
             <Label>Store Logo (on nav bar)</Label>
-            <EditImage result_image={input.image} onChange={_onChange} />
+            <EditImage result_image={input.image} root={true} onChange={_onChange} />
           </Stack.Item>
 
 

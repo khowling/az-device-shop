@@ -36,10 +36,11 @@ export const _suspenseFetch = (operation, recordid) => {
 export async function _fetchit(url, method = 'GET', headers = {}, body = null, chunkfn) {
   return new Promise((resolve, reject) => {
 
+    const absolute = url.indexOf('://') > 0
     //console.log('fetch')
     let opts = {
       method,
-      ...(process.env.REACT_APP_SERVER_URL && {
+      ...((process.env.REACT_APP_SERVER_URL || absolute) && {
         mode: 'cors',
         credentials: 'include'
       })
@@ -62,8 +63,7 @@ export async function _fetchit(url, method = 'GET', headers = {}, body = null, c
       }
     }
     console.log(opts)
-
-    fetch((process.env.REACT_APP_SERVER_URL || '') + url, opts).then(async (res) => {
+    fetch(absolute ? url : (process.env.REACT_APP_SERVER_URL || '') + url, opts).then(async (res) => {
       //console.log (`fetch status ${r.status}`)
       if (!res.ok) {
         console.log(`non 200 err : ${res.status}`)

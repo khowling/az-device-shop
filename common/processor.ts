@@ -224,7 +224,7 @@ export class Processor extends EventEmitter {
         const msg = {
             sequence: cs.sequence + 1,
             _ts: new Timestamp(), // Emptry timestamp will be replaced by the server to the current server time
-            partition_key: cs.tenent.email,
+            partition_key: cs.tenentKey,
             ...(stateChanges && { [this._statePlugin.name]: stateChanges }),
             [this.name]: changes
         }

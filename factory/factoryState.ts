@@ -242,9 +242,9 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
                 case 'inventry/New':
                     const result = await connection.db.collection("inventory_complete").insertOne({
                         sequence: state.inventry_sequence + 1,
-                        partition_key: connection.tenent.email,
+                        partition_key: connection.tenentKey,
                         inventoryId: 'INV' + String(state.inventry_sequence).padStart(5, '0'),
-                        ...spec
+                        spec
                     })
                     if (result && result.insertedCount === 1) {
                         return [{ failed: false }, [

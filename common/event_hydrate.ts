@@ -36,7 +36,7 @@ async function rollForwardState(cs: StateConnection, from_sequence: number, stat
 
     await cs.db.collection(cs.collection).createIndex({ sequence: 1 })
     const cursor = await cs.db.collection(cs.collection).aggregate([
-        { $match: { $and: [{ "partition_key": cs.tenent.email }, { sequence: { $gte: from_sequence } }] } },
+        { $match: { $and: [{ "partition_key": cs.tenentKey }, { sequence: { $gte: from_sequence } }] } },
         { $sort: { "sequence": 1 /* assending */ } }
     ])
 
@@ -57,7 +57,7 @@ async function rollForwardState(cs: StateConnection, from_sequence: number, stat
 
 
 async function restoreLatestSnapshot(cs: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
-    const dir = `${chkdir}/${cs.tenent.email}`
+    const dir = `${chkdir}/${cs.tenentKey}`
     await fs.promises.mkdir(dir, { recursive: true })
     let latestfile = { fileseq: null, filedate: null, filename: null }
     const checkpoints = await fs.promises.readdir(dir)
@@ -99,7 +99,7 @@ async function restoreLatestSnapshot(cs: StateConnection, chkdir: string, stateS
 export async function snapshotState(cs: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<any> {
     const now = new Date()
     let release = await cs.mutex.aquire()
-    const filename = `${chkdir}/${cs.tenent.email}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${cs.sequence}.json`
+    const filename = `${chkdir}/${cs.tenentKey}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${cs.sequence}.json`
     console.log(`writing movement ${filename}`)
 
     await fs.promises.writeFile(filename, JSON.stringify({
