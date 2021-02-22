@@ -24,8 +24,8 @@ jobs:
       # Container build and push to a Azure Container registry (ACR)
       - working-directory: ./web
         run: |
-          docker build ../ -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }} -f Dockerfile.root 
-          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
+          docker build ../ -t ${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }} -f Dockerfile.root 
+          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }}
 
       # Set the target Azure Kubernetes Service (AKS) cluster.
       - uses: azure/aks-set-context@v1
