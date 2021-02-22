@@ -1,0 +1,44 @@
+name: web
+on:
+  push:
+    paths:
+      - "web/**"
+      - "common/**"
+env:
+  REGISTRY_NAME: khcommon
+  CLUSTER_NAME: az-k8s-9137
+  CLUSTER_RESOURCE_GROUP: az-k8s-9137-rg
+  NAMESPACE: az-shop
+  APP_NAME: az-shop
+
+jobs:
+  build-web:
+    environment: labhome.biz
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@main
+
+      - name: Docker Registory Login
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.REGISTRY_NAME }}.azurecr.io
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      # Container build and push to a Azure Container registry (ACR)
+      - name: Docker Build and Push
+        working-directory: ./web
+        run: |
+          docker build ../ -t ${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }} -f Dockerfile.root 
+          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }}
+
+      - shell: bash
+        run: |
+          echo "${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }}" > web-tag.txt
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v2
+        with:
+          name: web-tag
+          path: output/web-tag.txt

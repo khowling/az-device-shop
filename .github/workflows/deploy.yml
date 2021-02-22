@@ -1,5 +1,9 @@
-name: action
-on: [push]
+name: deploy
+on:
+  push:
+    paths:
+      - "web/**"
+      - "common/**"
 env:
   REGISTRY_NAME: khcommon
   CLUSTER_NAME: az-k8s-9137
@@ -8,24 +12,15 @@ env:
   APP_NAME: az-shop
 
 jobs:
-  build:
+  helm-deploy:
     environment: labhome.biz
+    needs: build-web
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@main
-
-      # Connect to Azure Container registry (ACR)
-      - uses: azure/docker-login@v1
+      - name: Download math result for job 1
+        uses: actions/download-artifact@v2
         with:
-          login-server: ${{ env.REGISTRY_NAME }}.azurecr.io
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      # Container build and push to a Azure Container registry (ACR)
-      - working-directory: ./web
-        run: |
-          docker build ../ -t ${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }} -f Dockerfile.root 
-          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }}
+          name: web-tag
 
       # Set the target Azure Kubernetes Service (AKS) cluster.
       - uses: azure/aks-set-context@v1
@@ -36,6 +31,7 @@ jobs:
 
       # Create namespace if doesn't exist
       - run: |
+          tag=`cat output/web-tag.txt`
           kubectl create namespace ${{ env.NAMESPACE }} --dry-run -o json | kubectl apply -f -
           helm upgrade ${{ env.APP_NAME }} ./helm/az-device-shop --reuse-values -n ${{ env.NAMESPACE }} \
-            --set az-device-shop-web.image.tag=${{ github.sha }}
+            --set az-device-shop-web.image.tag=$tag
