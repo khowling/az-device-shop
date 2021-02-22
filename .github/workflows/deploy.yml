@@ -1,5 +1,5 @@
 name: deploy
-on: [push]
+on: [push, workflow_dispatch]
 env:
   REGISTRY_NAME: khcommon
   CLUSTER_NAME: az-k8s-9137
