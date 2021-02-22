@@ -23,7 +23,8 @@ jobs:
 
       # Container build and push to a Azure Container registry (ACR)
       - run: |
-          docker build . -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
+          cd web
+          docker build . -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }} -f Dockerfile.root ../
           docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
 
       # Set the target Azure Kubernetes Service (AKS) cluster.
@@ -36,4 +37,5 @@ jobs:
       # Create namespace if doesn't exist
       - run: |
           kubectl create namespace ${{ env.NAMESPACE }} --dry-run -o json | kubectl apply -f -
-          helm upgrade ${{ env.APP_NAME }} ./helm/az-device-shop --reuse-values -n ${{ env.NAMESPACE }}
+          helm upgrade ${{ env.APP_NAME }} ./helm/az-device-shop --reuse-values -n ${{ env.NAMESPACE }} \
+            --set az-device-shop-web.image.tag=${{ github.sha }}
