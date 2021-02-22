@@ -22,8 +22,8 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       # Container build and push to a Azure Container registry (ACR)
-      - run: |
-          cd web
+      - working-directory: ./web
+        run: |
           docker build . -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }} -f Dockerfile.root ../
           docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
 
