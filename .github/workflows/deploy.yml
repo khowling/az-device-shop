@@ -27,7 +27,8 @@ jobs:
 
       # Create namespace if doesn't exist
       - run: |
-          tag=`cat output/web-tag.txt`
+          tag=`cat web-tag.txt`
+          echo "Latest build tag=${tag}"
           kubectl create namespace ${{ env.NAMESPACE }} --dry-run -o json | kubectl apply -f -
           helm upgrade ${{ env.APP_NAME }} ./helm/az-device-shop --reuse-values -n ${{ env.NAMESPACE }} \
             --set az-device-shop-web.image.tag=$tag

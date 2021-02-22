@@ -43,8 +43,8 @@ jobs:
         run: |
           echo "${{ env.REGISTRY_NAME }}.azurecr.io/az-device-shop/web:${{ github.sha }}" > web-tag.txt
 
-      - name: Archive code coverage results
+      - name: Upload Docker Tag
         uses: actions/upload-artifact@v2
         with:
           name: web-tag
-          path: output/web-tag.txt
+          path: web-tag.txt
