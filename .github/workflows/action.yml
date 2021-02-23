@@ -1,11 +1,11 @@
 name: action
 on: [push]
 env:
-  REGISTRY_NAME: { registry-name }
-  CLUSTER_NAME: { cluster-name }
-  CLUSTER_RESOURCE_GROUP: { resource-group-name }
-  NAMESPACE: { namespace-name }
-  APP_NAME: { app-name }
+  REGISTRY_NAME: khcommon
+  CLUSTER_NAME: az-k8s-9137
+  CLUSTER_RESOURCE_GROUP: az-k8s-9137-rg
+  NAMESPACE: az-shop
+  APP_NAME: az-shop
 
 jobs:
   build:
