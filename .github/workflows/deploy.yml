@@ -10,7 +10,7 @@ env:
 jobs:
   helm-deploy:
     environment: labhome.biz
-    needs: build-web
+#    needs: build-web
     runs-on: ubuntu-latest
     steps:
       - name: Download math result for job 1
