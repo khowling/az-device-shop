@@ -1,4 +1,4 @@
-name: web
+name: buildanddeploy
 on:
   workflow_dispatch:
     inputs:
