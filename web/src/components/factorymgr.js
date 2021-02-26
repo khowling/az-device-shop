@@ -227,7 +227,7 @@ export function Inventory({ resource }) {
 
         function ws_connect() {
             try {
-                const ws_url = process.env.REACT_APP_SERVER_URL ? `ws://${window.location.hostname}:9091/path` : `wss://${window.location.hostname}/ws/factory/`
+                const ws_url = process.env.REACT_APP_FACTORY_PORT ? `ws://${window.location.hostname}:${process.env.REACT_APP_FACTORY_PORT}/path` : `wss://${window.location.hostname}/ws/factory/`
                 setMessage({ type: MessageBarType.info, msg: `Trying to Connect (${ws_url})....` })
                 // async!
                 ws = new WebSocket(ws_url)

@@ -164,7 +164,7 @@ STORAGE_MASTER_KEY=$(az storage account keys list -n $STORAGE_ACCOUNT -g $AZSHOP
 az storage container create --public-access blob -n $STORAGE_CONTAINER --account-name $STORAGE_ACCOUNT --account-key $STORAGE_MASTER_KEY
 
 
-az storage cors add --methods GET HEAD MERGE OPTIONS POST PUT --allowed-headers 'x-ms-*,Access-Control*' --exposed-headers '*' --origins '*' --services b --account-name ${STORAGE_ACCOUNT} --account-key ${STORAGE_MASTER_KEY}
+az storage cors add --methods GET HEAD MERGE OPTIONS POST PUT --allowed-headers 'x-ms-*,Access-Control*' --exposed-headers '*' --origins ${APP_HOST_URL} --services b --account-name ${STORAGE_ACCOUNT} --account-key ${STORAGE_MASTER_KEY}
 
 ```
 

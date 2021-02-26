@@ -14,9 +14,9 @@ RUN npm i
 # Copy the rest of the application
 COPY web/ ./
 
-# Creates assets in ./build
+# Creates assets in ./dist
 ENV NODE_ENV=production
-RUN npx webpack --config webpack.config.js
+RUN npx webpack --config config/webpack.eject.config.js
 
 # compile React JSX in 'src' into 'lib' for SSR
 RUN npx babel --config-file ./babel.config.json --out-dir lib ./src
@@ -43,7 +43,7 @@ RUN npm install -g npm
 RUN npm i --production
 
 # Copy compiled assets
-COPY --from=build /usr/src/app/web/build build
+COPY --from=build /usr/src/app/web/dist dist
 
 # Copy compiled typescript server
 COPY --from=build /usr/src/app/web/server/out server/out

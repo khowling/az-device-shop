@@ -147,7 +147,7 @@ export function OrderMgr({ resource }) {
         function ws_connect() {
 
             try {
-                const ws_url = process.env.REACT_APP_SERVER_URL ? `ws://${window.location.hostname}:9090/path` : `wss://${window.location.hostname}/ws/ordering/`
+                const ws_url = process.env.REACT_APP_ORDERING_PORT ? `ws://${window.location.hostname}:${process.env.REACT_APP_ORDERING_PORT}/path` : `wss://${window.location.hostname}/ws/ordering/`
                 setMessage({ type: MessageBarType.info, msg: `Trying to Connect (${ws_url})....` })
                 // async!
                 ws = new WebSocket(ws_url)
