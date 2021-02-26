@@ -301,7 +301,7 @@ async function dbInit() {
 
 // Serve Static files
 const PUBLIC_PATH = "/static"
-const BUILD_PATH = "./dist"
+const BUILD_PATH = process.env.NODE_ENV === 'production' ? './build' : './dist'
 async function serve_static(ctx, next) {
 
     const filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.request.url)

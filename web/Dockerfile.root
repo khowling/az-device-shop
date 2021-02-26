@@ -14,7 +14,7 @@ RUN npm i
 # Copy the rest of the application
 COPY web/ ./
 
-# Creates assets in ./dist
+# Creates assets in ./build
 ENV NODE_ENV=production
 RUN npx webpack --config config/webpack.eject.config.js
 
@@ -43,13 +43,15 @@ RUN npm install -g npm
 RUN npm i --production
 
 # Copy compiled assets
-COPY --from=build /usr/src/app/web/dist dist
+COPY --from=build /usr/src/app/web/build build
 
 # Copy compiled typescript server
 COPY --from=build /usr/src/app/web/server/out server/out
 
 # not using @babel/register to automatically compile files on the fly.
 COPY --from=build /usr/src/app/web/lib lib
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 CMD [ "node", "server/out/web/server/server" ]
