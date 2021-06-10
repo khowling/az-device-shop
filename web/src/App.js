@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import Html from './Html'
 import { Router } from './components/router'
 import { Nav } from './components/page'
 import { Panes, Panes3x } from './components/store'
@@ -14,8 +15,7 @@ import { GlobalsContext } from './GlobalContexts'
 import { _fetchit } from './utils/fetch'
 
 //import './App.css';
-import { initializeIcons } from '@uifabric/icons';
-import { Fabric } from '@fluentui/react'
+import { initializeIcons } from '@fluentui/font-icons-mdl2';
 
 initializeIcons();
 
@@ -140,16 +140,18 @@ export const GlobalsProviderWrapper = ({ children }) => {
 };
 
 export function App({ startUrl }) {
-  console.warn(`**Render App startUrl=${startUrl.pathname}`)
+  console.log(`App: startUrl=${startUrl.pathname}`)
 
   return (
-    <Fabric>
-      <main id="mainContent" data-grid="container">
-        <GlobalsProviderWrapper>
-          <Nav />
-          <Router startUrl={startUrl} cfg={AppRouteCfg} />
-        </GlobalsProviderWrapper>
-      </main>
-    </Fabric>
+    <GlobalsProviderWrapper>
+      <Html title="React18">
+        <main id="mainContent" data-grid="container">
+          <Suspense fallback={<div>wait</div>}>
+            <Nav />
+            <Router startUrl={startUrl} cfg={AppRouteCfg} />
+          </Suspense>
+        </main>
+      </Html>
+    </GlobalsProviderWrapper>
   )
 }

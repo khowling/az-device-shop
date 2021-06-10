@@ -86,7 +86,7 @@ export function navTo(route, urlid, props) {
 
 // convert parts of the url into route key, recordid and props
 export function pathToRoute({ pathname, search, hash }) {
-  console.log(`pathToRoute pathname=${pathname} search=${search}`)
+  console.log(`Router: pathToRoute pathname=${pathname} search=${search}`)
   const propsparam = search && search.match(/A?props=([^&]+)&*/i),
     url_props = propsparam ? propsparam[1] : null,
     withoutleadingslash = pathname.slice(1),
@@ -103,9 +103,14 @@ const listeners = [];
 // =====================================     My Super Simple Router 
 // Params: cfg = routing configration (AppRouteCfg)
 export function Router({ startUrl, cfg }) {
-  console.log(`Render Router, startUrl=${JSON.stringify(startUrl)}`)
+
   // renderRoute : route that needs to be rendered (default is the startURL)
-  const { ssrContext, serverInitialData } = useContext(RenderContext)
+
+  const ctx = useContext(RenderContext)
+  const { ssrContext, serverInitialData } = ctx ? ctx.read() : { ssrContext: 'spa' }
+
+  console.log(`Router: render startUrl=${JSON.stringify(startUrl)}, ssrContext=${ssrContext}`)
+
   const [itemsInCart] = useContext(GlobalsContext)
   const [renderRoute, setRenderRoute] = useState({ firstRoute: ssrContext, ...pathToRoute(startUrl) })
 
@@ -147,7 +152,7 @@ export function Router({ startUrl, cfg }) {
       }
     }
   }
-  console.log(`Render useRouter,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
+  console.log(`Router: return <RouterRender>,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
   return <RouterRender renderRoute={renderRoute} routecfg={routecfg} serverInitialData={serverInitialData} />
 }
 
@@ -157,24 +162,30 @@ const RouterRender = React.memo(({ routecfg, renderRoute, serverInitialData }) =
 
   const { component, componentFetch, routeProps = {} } = routecfg
 
-  console.log(`Render RouterRender,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
   if (!component) {
     console.error(`useRouter()  error, unknown route ${renderRoute.routekey}`)
     return `404 - error, unknown route ${renderRoute.routekey}`
   } else {
+
     let resource
     if (componentFetch) {
       if (renderRoute.firstRoute && renderRoute.firstRoute === "server") {
+        console.log(`RouterRender : fetching data from serverInitialData, so _suspenseWrap, serverInitialDat${JSON.stringify(serverInitialData)}`)
         resource = _suspenseWrap(serverInitialData)
       } else {
+        console.log(`RouterRender : fetching data from componentFetch, so _suspenseFetch`)
         resource = _suspenseFetch('componentFetch' + renderRoute.routekey, renderRoute.urlid)
       }
     }
-    if (resource) return (
-      <React.Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
-        { React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
+    if (resource) {
+      console.log(`RouterRender : fetching data from server, so Suspense`)
+      return <React.Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
+        {React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
       </React.Suspense>
-    )
-    else return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
+
+    } else {
+      console.log(`RouterRender : no Suspense, just render`)
+      return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
+    }
   }
 })

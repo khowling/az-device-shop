@@ -3,19 +3,16 @@ import { Link } from './router.js'
 import { EditImage } from '../utils/common'
 import { _fetchit /*, _suspenseFetch, _suspenseWrap */ } from '../utils/fetch'
 
-import { Card } from '@uifabric/react-cards'
-import { Text, Image, FontIcon, ImageFit, mergeStyles, TextField, Stack, PrimaryButton, Label, Checkbox, Spinner, ChoiceGroup, Separator } from '@fluentui/react'
-
-import { initializeIcons } from '@uifabric/icons';
-initializeIcons();
+//import { Card } from '@fluentui/react-cards'
+import { DocumentCardTitle, DocumentCard, DocumentCardImage, DocumentCardPreview, DocumentCardDetails, DocumentCardActivity, Text, Image, FontIcon, ImageFit, mergeStyles, TextField, Stack, PrimaryButton, Label, Checkbox, Spinner, ChoiceGroup, Separator } from '@fluentui/react'
 
 
 const iconClass = mergeStyles({
   fontSize: 110,
-  height: 100,
+  //height: 50,
   //width: 150,
   color: 'grey',
-  margin: '65px 80px',
+  //margin: '15px 50px',
 });
 
 export function StartBusiness() {
@@ -84,65 +81,50 @@ export function StartBusiness() {
 
           <Stack horizontal style={{ marginTop: "5px" }} tokens={{ childrenGap: 30 }}>
 
-            <Card
-              aria-label="Clickable vertical card with image bleeding at the top of the card"
+            <DocumentCard
               onClick={() => _onChange({ target: { name: "catalog" } }, "bike")}
               tokens={{ childrenMargin: 12 }}
             >
-              <Card.Item>
-                <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'bike', text: 'Getting started cycling product calalogue', styles: { root: { fontWeight: input.catalog === 'bike' ? '500' : 'normal' } } }]} />
-              </Card.Item>
-              <Card.Item>
-                <TextField disabled value="https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json" />
-              </Card.Item>
-              <Card.Item styles={{ root: { height: "160px" } }}>
-                <Image imageFit={ImageFit.centerContain} styles={{ root: { height: "100%" } }} src="https://freesvg.org/img/clipartjunky218-Cyclist-on-Bike.png" />
-              </Card.Item>
-              <Card.Section>
-                <Label >Getting started cycling product calalogue</Label>
-              </Card.Section>
 
-              <Card.Section horizontal tokens={{ childrenGap: 10 }}>
-                <Text>12 products</Text>
-                <Text>3 categories</Text>
-              </Card.Section>
+              <DocumentCardImage imageSrc="https://freesvg.org/img/clipartjunky218-Cyclist-on-Bike.png" height={150} imageFit={ImageFit.centerContain} />
 
-              <Card.Section>
+              <DocumentCardDetails styles={{ root: { padding: "8px 16px", position: "relative" } }}>
+                <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'bike', text: 'Cycling product calalogue', styles: { root: { fontWeight: input.catalog === 'bike' ? '500' : 'normal' } } }]} />
+              </DocumentCardDetails>
+
+              <DocumentCardTitle title="Getting started cycling product calalogue" showAsSecondaryTitle shouldTruncate />
+
+              <DocumentCardDetails styles={{ root: { padding: "8px 16px", position: "relative" } }}>
+
                 <Checkbox label="Create Inventry Workorders" checked={input.inventory && input.catalog === 'bike'} onChange={(e, v) => _onChange({ target: { name: "inventory" } }, v)} />
-              </Card.Section>
+              </DocumentCardDetails>
 
-            </Card>
+              <DocumentCardActivity activity="Modified March, 2021" people={[{ name: 'Keith Howling', profileImageSrc: '', initials: 'KH' }]} />
 
-            <Card
-              aria-label="Clickable vertical card with image bleeding at the top of the card"
+            </DocumentCard>
+
+            <DocumentCard
               onClick={() => _onChange({ target: { name: "catalog" } }, "none")}
               tokens={{ childrenMargin: 12 }}
             >
-              <Card.Item>
-                <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'none', text: 'I will create my own categories/products', styles: { root: { fontWeight: input.catalog === 'none' ? '500' : 'normal' } } }]} />
-              </Card.Item>
+
+              <DocumentCardPreview previewImages={[{
+                previewIconProps: {
+                  iconName: 'Manufacturing', className: iconClass
+                }, height: 150
+              },]} />
+
+              <DocumentCardDetails styles={{ root: { padding: "8px 16px", position: "relative" } }}>
+                <ChoiceGroup selectedKey={input.catalog} options={[{ key: 'none', text: 'Empty Catalogue', styles: { root: { fontWeight: input.catalog === 'none' ? '500' : 'normal' } } }]} />
+              </DocumentCardDetails>
+
+              <DocumentCardTitle title="I will create my own Products" showAsSecondaryTitle shouldTruncate />
+              <DocumentCardDetails styles={{ root: { marginTop: "30px" } }} />
 
 
-              <Card.Item styles={{ root: { height: "205px" } }}>
-                <FontIcon iconName="Manufacturing" className={iconClass} />
-              </Card.Item>
+              <DocumentCardActivity activity="Modified March, 2021" people={[{ name: 'Keith Howling', profileImageSrc: '', initials: 'KH' }]} />
+            </DocumentCard>
 
-              <Card.Section>
-                <Label>I will create my own categories/products</Label>
-              </Card.Section>
-
-              <Card.Item grow={1}>
-                <span />
-              </Card.Item>
-              <Card.Section horizontal tokens={{ childrenGap: 10 }}>
-                <Text>0 products</Text>
-                <Text>0 categories</Text>
-              </Card.Section>
-              <Card.Section>
-                <Checkbox label="Create Inventry Workorders" disabled={true} />
-              </Card.Section>
-
-            </Card>
           </Stack>
 
 

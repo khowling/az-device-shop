@@ -301,10 +301,10 @@ async function dbInit() {
 
 // Serve Static files
 const PUBLIC_PATH = "/static"
-const BUILD_PATH = process.env.NODE_ENV === 'production' ? './build' : './dist'
+const BUILD_PATH = './build' //process.env.NODE_ENV === 'production' ? './build' : './dist'
 async function serve_static(ctx, next) {
 
-    const filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.request.url)
+    const filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.captures[0])
     console.log(`serve_static: request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
 
     if (fs.existsSync(filePath)) {
@@ -370,7 +370,7 @@ async function init() {
     // Init Routes
     app.use(new Router()
         .get(`${PUBLIC_PATH}/(.*)`, serve_static)
-        .get(/^\/[^\/]*\./, serve_static)
+        //    .get(/^\/[^\/]*\./, serve_static)
         .routes())
 
     app.use(authroutes)
@@ -424,7 +424,7 @@ async function ssr(ctx, next) {
 
         // Get Iniitial Data
         const urlsplit = ctx.request.url.split('?', 2),
-            startURL = { pathname: urlsplit[0], search: urlsplit.length > 1 ? urlsplit[1] : null },
+            startURL = { pathname: urlsplit[0], search: urlsplit.length > 1 ? urlsplit[1] : "", hash: "" },
             { routekey, urlid } = server_ssr.pathToRoute(startURL),
             { requireAuth, componentFetch } = server_ssr.AppRouteCfg[routekey] || {}
 
@@ -433,24 +433,63 @@ async function ssr(ctx, next) {
         } else if (requireAuth && !ctx.session.auth) {
             ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.href)}`)
         } else {
-            const renderContext: any = { ssrContext: "server" }
-
-            if (componentFetch) {
-                let initfetchfn = FetchOperation.componentFetch(ctx, componentFetch, urlid)
-
-                // Parallel fetch
-                const [serverInitialData, session] = await Promise.all([initfetchfn, getSession(ctx)])
-                renderContext.serverInitialData = serverInitialData
-                renderContext.session = session
-            } else {
-                renderContext.session = await getSession(ctx)
+            /*
+            const renderContext: any = {
+                ssrContext: "server",
+                reqUrl: ctx.request.href
             }
 
-            // SEND
+            if (componentFetch) {
+                //let initfetchfn = FetchOperation.componentFetch(ctx, componentFetch, urlid)
+
+                // Parallel fetch
+                //const [serverInitialData, session] = await Promise.all([initfetchfn, getSession(ctx)])
+
+                renderContext.serverInitialData = await FetchOperation.componentFetch(ctx, componentFetch, urlid)
+            }
+            //renderContext.session = session
+            //} else {
+            //    renderContext.session = await getSession(ctx)
+            //}
+            */
+            function createServerData(ctx, componentFetch, urlid) {
+                const renderContext: any = {
+                    ssrContext: "server",
+                    reqUrl: ctx.request.href
+                }
+
+                if (!componentFetch) {
+                    return {
+                        read() { return renderContext }
+                    }
+                } else {
+                    let done = false, result = null;
+                    let suspender = renderContext.serverInitialData = FetchOperation.componentFetch(ctx, componentFetch, urlid).then(res => {
+                        done = true;
+                        renderContext.serverInitialData = res
+                    })
+                    return {
+                        read() {
+                            if (!done) {
+                                throw suspender
+                            }
+                            return renderContext
+                        }
+                    }
+                }
+
+            }
+
+            // https://koajs.com/#context
+            // ctx.response = A Koa Response object.
+            // ctx.res = Node's response object.
+            await server_ssr.ssrRender(startURL, createServerData(ctx, componentFetch, urlid), ctx)
+            /*
             ctx.response.type = 'text/html'
             ctx.body = fs.createReadStream(filePath)
                 .pipe(stringReplaceStream('<div id="root"></div>', `<div id="root">${await server_ssr.ssrRender(startURL, renderContext)}</div>`))
                 .pipe(stringReplaceStream('"SERVER_INITAL_DATA"', JSON.stringify(renderContext)))
+            */
         }
     }
     next()

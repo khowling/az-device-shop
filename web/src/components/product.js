@@ -156,6 +156,7 @@ export function ManageProducts({ resource }) {
   const { inventory } = result.refstores || {}
 
   function openNewItem(type, editid) {
+    console.log('openNewItem')
     const refstores = type === 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
     setPanel({ open: true, type, resource: editid ? _suspenseFetch('store/products', editid) : _suspenseWrap({}), refstores })
   }

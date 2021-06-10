@@ -7,6 +7,7 @@ import { _suspenseFetch } from '../utils/fetch'
 import { MyCart } from './cart'
 
 import { CommandBarButton, Text, Panel, PanelType } from '@fluentui/react'
+import { RenderContext } from '../GlobalContexts'
 
 const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
 
@@ -30,7 +31,11 @@ export function Nav() {
   const [itemsInCart, setItemsInCart] = useContext(GlobalsContext)
   const session = itemsInCart.session
 
-  console.log(`Render Nav`)
+  const ctx = useContext(RenderContext)
+  const { reqUrl } = ctx ? ctx.read() : { reqUrl: null }
+
+
+  console.log(`Render Nav session=${JSON.stringify(session)} itemsInCart=${JSON.stringify(itemsInCart)}`)
 
   function openNewItem() {
     setItemsInCart({ ...itemsInCart, open: true })
@@ -112,9 +117,11 @@ export function Nav() {
 
 
             :
-            <a href={(process.env.REACT_APP_SERVER_URL || '') + '/connect/microsoft' + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.href)}` : '')} className="c-call-to-action c-glyph" style={{ padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent" }}>
-              <span>Login</span>
-            </a>
+            <Suspense fallback={<span></span>}>
+              <a href={(process.env.REACT_APP_SERVER_URL || '') + '/connect/microsoft' + (typeof window !== 'undefined' ? `?surl=${encodeURIComponent(window.location.href)}` : `?surl=${encodeURIComponent(reqUrl)}`)} className="c-call-to-action c-glyph" style={{ padding: "11px 12px 13px", border: "2px solid transparent", color: "#0067b8", background: "transparent" }}>
+                <span>Login</span>
+              </a>
+            </Suspense>
           }
 
           <CommandBarButton

@@ -16,5 +16,12 @@ import React from 'react'
 //        cart_items: numbrt
 //    }
 
-export const RenderContext = React.createContext({})
+export const RenderContext = React.createContext({
+    read() {
+        return {
+            ssrContext: "spa",
+            reqUrl: "/"
+        }
+    }
+})
 export const GlobalsContext = React.createContext([{ count: 0 }, () => { }])
