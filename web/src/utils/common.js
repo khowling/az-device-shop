@@ -90,9 +90,9 @@ export function AdditionalDetails() {
                             <p id="content-toggle-target" data-f-expanded="false">
                                 <strong>Permissions</strong>
                                 <br />Uses your location
-                          <br />Uses your webcam
-                          <br />Uses your microphone
-                          <br />
+                                <br />Uses your webcam
+                                <br />Uses your microphone
+                                <br />
                             </p>
                             <button data-f-more="Show more" data-f-less="Show less" data-f-show="3">Show more</button>
                         </div>
@@ -212,7 +212,7 @@ export function EditImage({ result_image, root = false, onChange }) {
             <Toggle key="image_Toggle" label="Image location" inlineLabel onText="external Url" offText="File Upload" defaultChecked={imageTypeUrl} onChange={(e, val) => { console.log(`setImageTypeUrl ${val}`); setImageTypeUrl(val) }} />
             <input key="image_input" type="file" ref={fileInputRef} name="file" style={{ display: "none" }} accept="image/*" onChange={_fileuploadhtml5} />
 
-            { validImage &&
+            {validImage &&
                 <a key="image_a" href={previewsrc} target="_won">
                     <MyImage width="250" src={previewsrc} alt="" />
                 </a>

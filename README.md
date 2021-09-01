@@ -1,16 +1,18 @@
 
 
-## Cloud Native - Azure Reference Application 
+# Cloud Native - Azure Reference Application 
 
  _Work in progress_
 
 Ecommerce - Azure Example application highlighting the following architectural patterns
 
- :heavy_check_mark:  Open-source, Open-protocols, cross-cloud compatible (Mongodb API, Nodejs, Open ID Connect, Kubernetes)  
+ :heavy_check_mark:  Cloud agnostic, open-source, open-protocols
  :heavy_check_mark:  Server-side rendering for site performance and SEO  
- :heavy_check_mark:  Stateless Microservices, with all state managed by Cloud provider SLA backed services  
- :heavy_check_mark: Complete with DevOps Toolchain & real-time Monitoring  
+ :heavy_check_mark:  Microservices with CRUD and Event Sourcing patterns. 
+ :heavy_check_mark:  Cloud provider SLA backed persistance services  
+ :heavy_check_mark:  Complete with devops toolchain, real-time Monitoring and analytics  
 
+![frontpage](docs/frontpage.png)
 
 ## Target Architecture
 
@@ -57,7 +59,36 @@ _To be completed_
 mongoimport --uri=$MONGO_DB -c products --mode upsert --file=./testing/testdata.json
 ```
 
-### Provision Cloud Infra & Services
+## Provision Cloud Infra & Services
+
+
+### Provisioning a cluster
+
+Use the [AKS helper](https://azure.github.io/Aks-Construction) to provision your cluster, and configure the helper as follows:
+
+Select you preferences for:
+  * __Operations Principles__
+  * __Security Principles__
+
+Now, to configure the TLS Ingress, go into the __Addon Details__ tab
+
+  In the section __Securely Expose your applications via Layer 7 HTTP(S) proxies__, select the following options, providing all the require information
+
+  * __Create FQDN URLs for your applications using external-dns__
+  * __Automatically Issue Certificates for HTTPS using cert-manager__
+
+
+  __NOTE:__ In the section __CSI Secrets : Store Kubernetes Secrets in Azure Keyvault, using AKS Managed Identity__,  ensure the following option is selected: __Yes, provision a new Azure KeyVault & enable Secrets Store CSI Driver__.  Also, __Enable KeyVault Integration for TLS Certificates__ is selected, this will integrate Application Gateway access to KeyVault,  and 
+
+
+Now, under the __Deploy__ tab, execute the commands to provision your complete environment. __NOTE__: Once complete, please relember to run the script on the __Post Configuration__ tab to complete the deployment.
+
+
+###  Provision the Application dependencies
+
+APPGROUP=az-shop-001
+az group create -l westeurope -n $APPGROUP
+az deployment group create -g az-k8s-hedw-rg  --template-file ./deploy/az-device.bicep  --parameters name=azdevshop001
 
 ##  Create Storage Account - for eventhub checkpointing, and ecommerce media
 create 'Private' container for 'checkpointing'

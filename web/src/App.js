@@ -9,15 +9,12 @@ import { ManageProducts, Product } from './components/product'
 import { StartBusiness } from './components/business'
 import { Inventory } from './components/factorymgr'
 import { OrderMgr } from './components/ordermgr'
+import { ThemeProvider } from '@fluentui/react';
 
-
-import { GlobalsContext } from './GlobalContexts'
+import { AuthContext, TenentContext, CartCountContext, CartOpenContext, RenderContext } from './GlobalContexts'
 import { _fetchit } from './utils/fetch'
 
-//import './App.css';
-import { initializeIcons } from '@fluentui/font-icons-mdl2';
 
-initializeIcons();
 
 
 export const AppRouteCfg = {
@@ -121,37 +118,76 @@ export const AppRouteCfg = {
 
 
 // Expose Global State, allowing items deep in the Router component tree to modify Nav!
-export const GlobalsProviderWrapper = ({ children }) => {
-  const [itemsInCart, setItemsInCart] = useState({ count: 0, open: false })
+export const SessionProviderWrapper = ({ children }) => {
+
+  const [auth, setAuth] = useState()
+  const [cartCount, setCartCount] = useState(0)
+  const [cartOpen, setCartOpen] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
       const session = await _fetchit('/api/session_status')
-      setItemsInCart(i => { return { ...i, session } })
+      console.log(`SessionProviderWrapper: useEffect session=${JSON.stringify(session)}`)
+      setAuth(session.auth)
+      const newCartCount = session.cart_items || 0
+      newCartCount !== cartCount && setCartCount()
     }
     fetchData()
   }, [])
 
+  console.log(`SessionProviderWrapper: Render cartCount=${cartCount} cartOpen=${cartOpen} auth=${JSON.stringify(auth)}`)
   return (
-    <GlobalsContext.Provider value={[itemsInCart, setItemsInCart]}>
-      {children}
-    </GlobalsContext.Provider>
+    <AuthContext.Provider value={auth}>
+      <CartCountContext.Provider value={[cartCount, setCartCount]}>
+        <CartOpenContext.Provider value={[cartOpen, setCartOpen]}>
+          {children}
+        </CartOpenContext.Provider>
+      </CartCountContext.Provider>
+    </AuthContext.Provider>
   );
 };
 
-export function App({ startUrl }) {
+export function App({ startUrl, hydrate_data, hydrate_tenent }) {
   console.log(`App: startUrl=${startUrl.pathname}`)
 
   return (
-    <GlobalsProviderWrapper>
-      <Html title="React18">
-        <main id="mainContent" data-grid="container">
-          <Suspense fallback={<div>wait</div>}>
-            <Nav />
-            <Router startUrl={startUrl} cfg={AppRouteCfg} />
-          </Suspense>
-        </main>
+    <SessionProviderWrapper>
+      <Html title="React18" hydrate_data={hydrate_data} hydrate_tenent={hydrate_tenent}>
+        <ThemeProvider>
+          <main id="mainContent" data-grid="container">
+            <TenentContext.Consumer>
+              {tenent => {
+                console.log(`tenent=${tenent}`); return (
+                  <AuthContext.Consumer>
+                    {auth => {
+                      console.log(`auth=${auth}`); return (
+                        <CartCountContext.Consumer>
+                          {cartCountContext => {
+                            console.log(`cartCountContext=${cartCountContext[0]}`); return (
+                              <Nav tenent={tenent} auth={auth} cartCount={cartCountContext[0]} />
+                            )
+                          }}
+                        </CartCountContext.Consumer>
+                      )
+                    }}
+                  </AuthContext.Consumer>
+                )
+              }}
+            </TenentContext.Consumer>
+
+            <Suspense fallback={<div>wait route</div>}>
+              <RenderContext.Consumer>
+                {renderContext => {
+                  const { ssrContext, reqUrl, serverInitialData } = renderContext.read()
+                  return <Router ssrContext={ssrContext} reqUrl={reqUrl} serverInitialData={serverInitialData} startUrl={startUrl} cfg={AppRouteCfg} />
+                }}
+              </RenderContext.Consumer>
+            </Suspense>
+
+          </main>
+        </ThemeProvider>
       </Html>
-    </GlobalsProviderWrapper>
+    </SessionProviderWrapper>
+
   )
 }

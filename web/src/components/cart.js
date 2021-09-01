@@ -3,9 +3,9 @@ import { Alert, MyImage } from '../utils/common'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link, navTo } from './router.js'
-import { GlobalsContext } from '../GlobalContexts'
-
-import { DefaultButton, Breadcrumb, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, getTheme, getFocusStyle } from '@fluentui/react'
+import { CartCountContext, CartOpenContext } from '../GlobalContexts'
+import { SSRBreadcrumb } from './page.js'
+import { DefaultButton, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, mergeStyles, getTheme, getFocusStyle } from '@fluentui/react'
 
 const theme = getTheme();
 
@@ -61,7 +61,7 @@ function Summary({ cart, checkout, dismissPanel }) {
   const [state, setState] = useState({ state: "ready" })
   const [shipping, setShipping] = useState('A')
 
-  const [itemsInCart, setItemsInCart] = useContext(GlobalsContext)
+  const [cartCount, setCartCount] = useContext(CartCountContext)
 
 
 
@@ -72,7 +72,7 @@ function Summary({ cart, checkout, dismissPanel }) {
     _fetchit('/api/checkout', 'PUT', {}, { shipping }).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
       setState({ state: "created-success", response: succ })
-      setItemsInCart({ ...itemsInCart, count: 0 })
+      setCartCount(0)
       // Poll for status
 
       //navTo("ManageOrders")
@@ -92,7 +92,7 @@ function Summary({ cart, checkout, dismissPanel }) {
         </Text>
       </Stack.Item>
 
-      { checkout ? [
+      {checkout ? [
         <Stack.Item key="address">
           <Label block={true}>Delivery Address:</Label>
           <Text style={{ marginLeft: "40px" }} block={true}>999 The Good Street</Text>
@@ -132,7 +132,7 @@ function Summary({ cart, checkout, dismissPanel }) {
                     <div className="c-glyph glyph-info" aria-label="Information message"></div>
                     <h1 className="c-heading">Order Created</h1>
                     <p className="c-paragraph">Click here to see your order status
-                    <span className="c-group">
+                      <span className="c-group">
                         <Link route="/myorders" className="c-action-trigger" role="button" component="ManageOrders">My Orders</Link>
                       </span>
                     </p>
@@ -166,13 +166,13 @@ export function MyCart({ dismissPanel, panel, resource, checkout }) {
   console.log(`Render MyCart (${status})`)
   const [cart, setCart] = useState(result.data)
 
-  const [cartItemsAdded, setCartItemsAdded] = useContext(GlobalsContext)
+  const [cartCount, setCartCount] = useContext(CartCountContext)
 
   async function _removeitem(cartline) {
     console.log(cartline)
     try {
       await _fetchit('/api/cartdelete/' + cartline, 'PUT')
-      setCartItemsAdded({ ...cartItemsAdded, count: cartItemsAdded.count - 1 })
+      setCartCount(cartCount - 1)
       const newcart = await _fetchit('/api/componentFetch/mycart')
       console.log(newcart.data)
       setCart(newcart.data)
@@ -245,24 +245,36 @@ export function MyCart({ dismissPanel, panel, resource, checkout }) {
   )
 }
 
+
+const AddToCartDescStyle = {
+  root: {
+    width: '300px'
+  }
+}
+
 export function AddToCart({ resource }) {
 
   const [optColor, setOptColor] = useState()
   const [state, setState] = useState({ state: "enterdetails" })
   const [inventory, setInventory] = useState({ message: "Please wait...", state: MessageBarType.info, allow: false })
 
-  const { status, result } = resource.read()
-  const product = result.data
-  const category = result.refstores.products.Category[0]
 
-  const [itemsInCart, setItemsInCart] = useContext(GlobalsContext)
+  const { status, result } = resource.read()
+  const { data, refstores } = result
+  const product = data
+  const category = refstores.products['Category'][0]
+  console.log(`AddToCart: status=${status}, product._id=${product._id}, category._id=${category._id} product.heading=${product.heading}, category.heading=${category.heading}`)
+
+
+  const [, setCartOpen] = useContext(CartOpenContext)
 
   function addorder() {
     setState({ state: "adding" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
     _fetchit('/api/cartadd', 'POST', {}, { item: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
-      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${itemsInCart.count}`)
-      setItemsInCart({ ...itemsInCart, count: itemsInCart.count + 1 })
+      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartCount.count}`)
+      const [cartCount, setCartCount] = useContext(CartCountContext)
+      setCartCount(cartCount + 1)
       setState({ state: "added", response: succ })
 
     }, err => {
@@ -285,19 +297,20 @@ export function AddToCart({ resource }) {
   else return (
     <Stack>
 
-      <Breadcrumb
+      <SSRBreadcrumb
         items={[
-          { text: 'Home', key: 'home', /*href: '/', */ onClick: () => navTo('/') },
-          { text: category.heading, key: category._id, /*href: `/shop/${category._id}`, */ onClick: () => navTo('/shop', category._id) },
-          { text: product.heading, key: product._id, /*href: `/a2c/${product._id}`, */ onClick: () => navTo('/a2c', product._id) }]} />
+          { text: 'Home', key: 'home', route: '/' },
+          { text: category.heading, key: category._id, route: '/shop', urlid: category._id },
+          { text: product.heading, key: product._id, route: '/a2c', urlid: product._id }
+        ]} />
 
       <Stack horizontal wrap tokens={{ childrenGap: 15 }} >
         <Stack.Item styles={{ root: { background: theme.palette.themeSecondar } }} grow={1}>
 
-          <MyImage image={product.image} style={{ "width": "100%", "maxWidth": "400px" }} />
+          <MyImage image={product.image} width="400px" />
 
         </Stack.Item>
-        <Stack.Item styles={{ root: { background: theme.palette.themeSecondar, width: '300px' } }} grow={1} >
+        <Stack.Item styles={AddToCartDescStyle} grow={1} >
           <Stack tokens={{ childrenGap: 15 }}>
             <Stack.Item>
               <strong className="c-badge f-small f-highlight">{product.badge}</strong>
@@ -368,7 +381,7 @@ export function AddToCart({ resource }) {
                         <h1 className="c-heading">Items Added</h1>
                         <p className="c-paragraph">Click to open your Cart
                           <span className="c-group">
-                            <DefaultButton /*route="/mycart"*/ onClick={() => setItemsInCart({ ...itemsInCart, open: true })} className="c-call-to-action c-glyph" style={{ padding: 3, border: 0, color: "#0067b8", background: "transparent" }} text="Cart" />
+                            <DefaultButton /*route="/mycart"*/ onClick={() => setCartOpen(true)} className="c-call-to-action c-glyph" style={{ padding: 3, border: 0, color: "#0067b8", background: "transparent" }} text="Cart" />
 
                           </span>
                         </p>

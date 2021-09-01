@@ -155,6 +155,8 @@ export function ManageProducts({ resource }) {
 
   const { inventory } = result.refstores || {}
 
+  console.log('ManageProducts')
+
   function openNewItem(type, editid) {
     console.log('openNewItem')
     const refstores = type === 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
@@ -164,9 +166,12 @@ export function ManageProducts({ resource }) {
     setPanel({ open: false })
   }
 
-  return (
-    <Stack>
-      <Suspense fallback={<span></span>}>
+  if (false) return <div></div>
+  else
+    return (
+      <Stack>
+
+
         <Panel
           headerText={"Create " + panel.type}
           isOpen={panel.open}
@@ -175,149 +180,154 @@ export function ManageProducts({ resource }) {
           customWidth='360px'
           closeButtonAriaLabel="Close">
           {panel.open &&
-            <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
+            <Suspense fallback={<span></span>}>
+              <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
+            </Suspense>
           }
         </Panel>
-      </Suspense>
-      <DetailsList
-        columns={[
-          {
-            key: 'heading',
-            name: 'Categories',
-            fieldName: 'heading',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 100, maxWidth: 250
-          },
-          {
-            key: 'description',
-            name: 'Description',
-            fieldName: 'description',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 350, maxWidth: 500
-          },
-          {
-            key: 'position',
-            name: 'Position',
-            fieldName: 'position',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 100, maxWidth: 250
-          },
-          {
-            key: 'image',
-            name: 'Image',
-            fieldName: 'image',
-            minWidth: 50, maxWidth: 50,
-            onRender: (item) => {
-              return <MyImage image={item.image} height={35} alt="no pic" />;
-            }
-          }
-        ]}
-        compact={false}
-        items={result.data.Category || []}
-        //onItemInvoked={(i) => openNewItem("Category", i._id)}
-        onActiveItemChanged={(i) => openNewItem("Category", i._id)}
-        selectionMode={SelectionMode.single}
-        setKey="none"
-        layoutMode={DetailsListLayoutMode.justified}
-        isHeaderVisible={true}
-      />
 
-      <PrimaryButton
-        text='Create New Category'
-        iconProps={{ iconName: 'Add' }}
-        onClick={() => openNewItem("Category")}
-      />
 
-      <DetailsList
-        columns={[
-          {
-            key: 'heading',
-            name: 'Products',
-            fieldName: 'heading',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 50,
-            maxWidth: 250
-          },
-          {
-            key: 'category',
-            name: 'Category',
-            fieldName: 'category',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 25,
-            maxWidth: 150,
-            onRender: (item) => {
-              return <Text variant="medium">{result.data.Category.find(i => item.category === i._id).heading}</Text>;
+        <DetailsList
+          columns={[
+            {
+              key: 'heading',
+              name: 'Categories',
+              fieldName: 'heading',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 100, maxWidth: 250
+            },
+            {
+              key: 'description',
+              name: 'Description',
+              fieldName: 'description',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 350, maxWidth: 500
+            },
+            {
+              key: 'position',
+              name: 'Position',
+              fieldName: 'position',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 100, maxWidth: 250
+            },
+            {
+              key: 'image',
+              name: 'Image',
+              fieldName: 'image',
+              minWidth: 50, maxWidth: 50,
+              onRender: (item) => {
+                return <MyImage image={item.image} height={35} alt="no pic" />;
+              }
             }
-          },
-          {
-            key: 'description',
-            name: 'Description',
-            fieldName: 'description',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 150,
-            maxWidth: 500
-          },
-          {
-            key: 'image',
-            name: 'Image',
-            fieldName: 'image',
-            minWidth: 75,
-            maxWidth: 150,
-            onRender: (item) => {
-              return <MyImage image={item.image} height={40} alt="no pic" />;
-            }
-          },
-          {
-            key: 'price',
-            name: 'Price',
-            fieldName: 'price',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 50,
-            maxWidth: 60
-          },
-          {
-            key: 'features',
-            name: 'Features',
-            fieldName: 'features',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 150,
-            maxWidth: 500,
-            onRender: (item) => {
-              return (
-                <div>{item.features && item.features.map((i) =>
-                  <div>{i.name} : {JSON.stringify(i.values)}</div>
-                )}
-                </div>
-              )
-            }
-          },
-          {
-            key: 'badge',
-            name: 'On hand',
-            fieldName: 'badge',
-            className: classNames.fileIconHeaderIcon,
-            minWidth: 100,
-            maxWidth: 100,
-            onRender: (item) => {
-              const onhand = inventory && inventory.onhand.find(i => i.productId === item._id)
-              return <Text variant="medium">{onhand ? onhand.qty : '0'}</Text>;
-            }
-          },
-        ]}
-        compact={false}
-        items={result.data.Product || []}
-        onActiveItemChanged={(i) => openNewItem("Product", i._id)}
-        selectionMode={SelectionMode.single}
-        layoutMode={DetailsListLayoutMode.justified}
-        isHeaderVisible={true}
-      />
+          ]}
+          compact={false}
+          items={result.data.Category || []}
+          onItemInvoked={(i) => openNewItem("Category", i._id)}
+          //onActiveItemChanged={(i) => openNewItem("Category", i._id)}
+          selectionMode={SelectionMode.none}
+          setKey="none"
+          layoutMode={DetailsListLayoutMode.justified}
+          isHeaderVisible={true}
+        />
 
-      <PrimaryButton
-        text='Create New Product'
-        iconProps={{ iconName: 'Add' }}
-        onClick={() => openNewItem("Product")}
-      />
-    </Stack>
-  )
+        <PrimaryButton
+          text='Create New Category'
+          iconProps={{ iconName: 'Add' }}
+          onClick={() => openNewItem("Category")}
+        />
+
+        <DetailsList
+          columns={[
+            {
+              key: 'heading',
+              name: 'Products',
+              fieldName: 'heading',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 50,
+              maxWidth: 250
+            },
+            {
+              key: 'category',
+              name: 'Category',
+              fieldName: 'category',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 25,
+              maxWidth: 150,
+              onRender: (item) => {
+                console.log(`ManageProducts: Category: ${item.category}`)
+                return <Text variant="medium">{result.data.Category.find(i => item.category === i._id).heading}</Text>;
+              }
+            },
+            {
+              key: 'description',
+              name: 'Description',
+              fieldName: 'description',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 150,
+              maxWidth: 500
+            },
+            {
+              key: 'image',
+              name: 'Image',
+              fieldName: 'image',
+              minWidth: 75,
+              maxWidth: 150,
+              onRender: (item) => {
+                return <MyImage image={item.image} height={40} alt="no pic" />;
+              }
+            },
+            {
+              key: 'price',
+              name: 'Price',
+              fieldName: 'price',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 50,
+              maxWidth: 60
+            },
+            {
+              key: 'features',
+              name: 'Features',
+              fieldName: 'features',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 150,
+              maxWidth: 500,
+              onRender: (item) => {
+                return (
+                  <div>{item.features && item.features.map((i) =>
+                    <div>{i.name} : {JSON.stringify(i.values)}</div>
+                  )}
+                  </div>
+                )
+              }
+            },
+            {
+              key: 'badge',
+              name: 'On hand',
+              fieldName: 'badge',
+              className: classNames.fileIconHeaderIcon,
+              minWidth: 100,
+              maxWidth: 100,
+              onRender: (item) => {
+                const onhand = inventory && inventory.onhand.find(i => i.productId === item._id)
+                return <Text variant="medium">{onhand ? onhand.qty : '0'}</Text>;
+              }
+            },
+          ]}
+          compact={false}
+          items={result.data.Product || []}
+          onItemInvoked={(i) => openNewItem("Product", i._id)}
+          //onActiveItemChanged={(i) => openNewItem("Product", i._id)}
+          selectionMode={SelectionMode.none}
+          layoutMode={DetailsListLayoutMode.justified}
+          isHeaderVisible={true}
+        />
+
+        <PrimaryButton
+          text='Create New Product'
+          iconProps={{ iconName: 'Add' }}
+          onClick={() => openNewItem("Product")}
+        />
+      </Stack>
+    )
 }
 

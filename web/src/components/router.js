@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext /*, Suspense */ } from 'react'
 import { _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { RenderContext, GlobalsContext } from '../GlobalContexts'
+import { RenderContext, SessionContext } from '../GlobalContexts'
 
 import { Spinner, SpinnerSize } from '@fluentui/react';
 
@@ -43,7 +43,7 @@ export function Link({ route, urlid, props, children, ...rest }) {
 
   }
 
-  return (<a {...rest} onClick={handleClick} href={_encodeURL(route, urlid, props)}> { children}</a >)
+  return (<a {...rest} onClick={handleClick} href={_encodeURL(route, urlid, props)}> {children}</a >)
 }
 
 export function Redirect({ route, urlid, props }) {
@@ -86,7 +86,7 @@ export function navTo(route, urlid, props) {
 
 // convert parts of the url into route key, recordid and props
 export function pathToRoute({ pathname, search, hash }) {
-  console.log(`Router: pathToRoute pathname=${pathname} search=${search}`)
+  //console.log(`Router: pathToRoute pathname=${pathname} search=${search}`)
   const propsparam = search && search.match(/A?props=([^&]+)&*/i),
     url_props = propsparam ? propsparam[1] : null,
     withoutleadingslash = pathname.slice(1),
@@ -102,17 +102,19 @@ export function pathToRoute({ pathname, search, hash }) {
 const listeners = [];
 // =====================================     My Super Simple Router 
 // Params: cfg = routing configration (AppRouteCfg)
-export function Router({ startUrl, cfg }) {
+export function Router({ ssrContext, reqUrl, serverInitialData, startUrl, cfg }) {
 
-  // renderRoute : route that needs to be rendered (default is the startURL)
 
-  const ctx = useContext(RenderContext)
-  const { ssrContext, serverInitialData } = ctx ? ctx.read() : { ssrContext: 'spa' }
+  // This is the data from the Server
+  //const ctx = useContext(RenderContext)
+  //if (!ctx) return <div>no render context</div>
+  // This will throw a promise if data not ready, and Parent <Suspense> will fallback, and keep checking
+  //const { ssrContext, serverInitialData } = ctx.read()
 
-  console.log(`Router: render startUrl=${JSON.stringify(startUrl)}, ssrContext=${ssrContext}`)
+  console.log(`Router: startUrl=${JSON.stringify(startUrl)}, ssrContext=${ssrContext}`)
 
-  const [itemsInCart] = useContext(GlobalsContext)
-  const [renderRoute, setRenderRoute] = useState({ firstRoute: ssrContext, ...pathToRoute(startUrl) })
+  //const [cartCount] = useContext(SessionContext)
+  const [renderRoute, setRenderRoute] = useState({ ssrContext, ...pathToRoute(startUrl) })
 
   // Subscribe to <Link> & navTo events
   useEffect(() => {
@@ -143,8 +145,9 @@ export function Router({ startUrl, cfg }) {
   const routecfg = cfg[renderRoute.routekey] || {}
 
   // Check Autth!!
+  /*
   if (routecfg.requireAuth) {
-    if (!(itemsInCart.session && itemsInCart.session.auth)) {
+    if (!(cartCount.session && cartCount.session.auth)) {
       if (typeof window !== 'undefined') {
         if (!window.location.search.includes("login=ok")) { // stop a loop! because this will render BEFORE we get the results from getsession useEffect
           window.location.replace((process.env.REACT_APP_SERVER_URL || '') + `/connect/microsoft?surl=${encodeURIComponent(window.location.href)}`)
@@ -152,13 +155,12 @@ export function Router({ startUrl, cfg }) {
       }
     }
   }
-  console.log(`Router: return <RouterRender>,  firstRoute=${renderRoute.firstRoute} routekey=${renderRoute.routekey}`)
+  */
   return <RouterRender renderRoute={renderRoute} routecfg={routecfg} serverInitialData={serverInitialData} />
 }
 
 // MEMO - prevents rerender when the session gets updated - we only want the nav to get updated!
 const RouterRender = React.memo(({ routecfg, renderRoute, serverInitialData }) => {
-  console.log(`RouterRender : renderRoute=${renderRoute.routekey}`)
 
   const { component, componentFetch, routeProps = {} } = routecfg
 
@@ -169,22 +171,20 @@ const RouterRender = React.memo(({ routecfg, renderRoute, serverInitialData }) =
 
     let resource
     if (componentFetch) {
-      if (renderRoute.firstRoute && renderRoute.firstRoute === "server") {
-        console.log(`RouterRender : fetching data from serverInitialData, so _suspenseWrap, serverInitialDat${JSON.stringify(serverInitialData)}`)
+      if (renderRoute.ssrContext && (renderRoute.ssrContext === "server" || renderRoute.ssrContext === "hydrate")) {
+        console.log(`RouterRender : "${renderRoute.ssrContext}": fetching data from serverInitialData, so _suspenseWrap`)
         resource = _suspenseWrap(serverInitialData)
       } else {
-        console.log(`RouterRender : fetching data from componentFetch, so _suspenseFetch`)
+        console.log(`RouterRender : fetching data from componentFetch API, so _suspenseFetch`)
         resource = _suspenseFetch('componentFetch' + renderRoute.routekey, renderRoute.urlid)
       }
     }
     if (resource) {
-      console.log(`RouterRender : fetching data from server, so Suspense`)
       return <React.Suspense fallback={<Spinner size={SpinnerSize.large} styles={{ root: { marginTop: "100px" } }} label="Please Wait..." ariaLive="assertive" labelPosition="right" />}>
         {React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props, { resource }))}
       </React.Suspense>
 
     } else {
-      console.log(`RouterRender : no Suspense, just render`)
       return React.createElement(component, Object.assign({ key: renderRoute.routekey }, routeProps, renderRoute.props))
     }
   }

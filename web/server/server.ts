@@ -233,8 +233,9 @@ const FetchOperation = {
             if (componentFetch.query) {
                 query = { ...componentFetch.query, ...query }
             }
-            //console.log (`ssr componentFetch (${componentFetch.operation}): ${JSON.stringify(oppArgs)}`)]
+            console.log(`server.ts: componentFetch "${componentFetch.operation}(${componentFetch.store}, ${JSON.stringify(query)})"`);
             result.data = await FetchOperation[componentFetch.operation](ctx, componentFetch.store, query)
+            console.log(`server.ts: componentFetch done`)
             if (componentFetch.refstores && componentFetch.refstores.length > 0) {
                 let fetch_promises: Array<Promise<any>> = []
                 for (let refstore of componentFetch.refstores) {
@@ -300,11 +301,14 @@ async function dbInit() {
 
 
 // Serve Static files
-const PUBLIC_PATH = "/static"
 const BUILD_PATH = './build' //process.env.NODE_ENV === 'production' ? './build' : './dist'
+const PUBLIC_PATH = "./public"
 async function serve_static(ctx, next) {
 
-    const filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.captures[0])
+    const filePath = ctx.captures.length > 0 ?
+        path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.captures[0]) :
+        path.join(process.cwd() /* __dirname */, PUBLIC_PATH, ctx.path)
+
     console.log(`serve_static: request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
 
     if (fs.existsSync(filePath)) {
@@ -338,7 +342,7 @@ async function init() {
         //secure: false, // DEVELOPMENT ONLY!
         store: {
             get: async function (key) {
-                console.log(`session get ${key}`)
+                console.log(`server.ts: session get ${key}`)
                 return await db.collection(StoreDef["session"].collection).findOne({ _id: key, partition_key: "session" })
             },
             set: async function (key, sess, maxAge, { rolling, changed }) {
@@ -368,9 +372,11 @@ async function init() {
     app.use(cors({ credentials: true }))
 
     // Init Routes
+    const STATIC_URL_PREFIX = "/static"
     app.use(new Router()
-        .get(`${PUBLIC_PATH}/(.*)`, serve_static)
-        //    .get(/^\/[^\/]*\./, serve_static)
+        .get(`${STATIC_URL_PREFIX}/(.*)`, serve_static)
+        // This is for '/favicon.ico' '/manifest.json' '/robots.txt'
+        .get(/^\/[^\/]*\./, serve_static)
         .routes())
 
     app.use(authroutes)
@@ -396,7 +402,6 @@ async function getSession(ctx) {
         if (cart && cart.items_count) cart_items = cart.items_count
     }
     return {
-        tenent: ctx.tenent, // needed just for spa-mode, to redirect to '/init' if missing
         auth: ctx.session.auth ? { userid: ctx.session.auth.sub, given_name: ctx.session.auth.given_name } : undefined,
         cart_items
     }
@@ -452,38 +457,10 @@ async function ssr(ctx, next) {
             //    renderContext.session = await getSession(ctx)
             //}
             */
-            function createServerData(ctx, componentFetch, urlid) {
-                const renderContext: any = {
-                    ssrContext: "server",
-                    reqUrl: ctx.request.href
-                }
-
-                if (!componentFetch) {
-                    return {
-                        read() { return renderContext }
-                    }
-                } else {
-                    let done = false, result = null;
-                    let suspender = renderContext.serverInitialData = FetchOperation.componentFetch(ctx, componentFetch, urlid).then(res => {
-                        done = true;
-                        renderContext.serverInitialData = res
-                    })
-                    return {
-                        read() {
-                            if (!done) {
-                                throw suspender
-                            }
-                            return renderContext
-                        }
-                    }
-                }
-
-            }
-
             // https://koajs.com/#context
             // ctx.response = A Koa Response object.
             // ctx.res = Node's response object.
-            await server_ssr.ssrRender(startURL, createServerData(ctx, componentFetch, urlid), ctx)
+            await server_ssr.ssrRender(ctx, startURL, componentFetch && FetchOperation.componentFetch(ctx, componentFetch, urlid))
             /*
             ctx.response.type = 'text/html'
             ctx.body = fs.createReadStream(filePath)

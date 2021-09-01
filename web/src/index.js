@@ -8,12 +8,10 @@ import { RenderContext } from './GlobalContexts'
 
 const { pathname, search, hash } = window.location
 
-const root = createRoot(document.getElementById('root'));
+//const root = createRoot(document.getElementById('root'));
 
-root.render(
-    <RenderContext.Provider value={{ ssrContext: "spa" }}>
-        <App startUrl={{ pathname, search, hash }} />
-    </RenderContext.Provider>)
+const root = createRoot(document, { hydrate: false });
+root.render(<App startUrl={{ pathname, search, hash }} />)
 
 // If you want your app to work offline and load faster, you can change
 // unregister() to register() below. Note this comes with some pitfalls.

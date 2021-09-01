@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@fluentui/merge-styles": "^8.1.2",
     "@fluentui/react": "^8.17.1",
     "@koa/cors": "^3.1.0",
     "joi": "^17.4.0",
@@ -13,8 +14,8 @@
     "koa-router": "latest",
     "koa-session": "^6.2.0",
     "mongodb": "^3.6.9",
-    "react": "^18.0.0-alpha-e6be2d531",
-    "react-dom": "^18.0.0-alpha-e6be2d531",
+    "react": "^18.0.0-alpha-2bf2e76d3-20210826",
+    "react-dom": "^18.0.0-alpha-2bf2e76d3-20210826",
     "react-scripts": "^4.0.3",
     "rocksdb": "^4.1.0",
     "string-replace-stream": "latest"

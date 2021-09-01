@@ -2,7 +2,9 @@ import React /*, { useEffect }*/ from 'react';
 import { Link, navTo } from './router.js'
 import { MyImage } from '../utils/common'
 
-import { Stack, Breadcrumb } from '@fluentui/react'
+import { Stack } from '@fluentui/react'
+import { SSRBreadcrumb } from './page'
+
 
 export function Panes({ resource }) {
 
@@ -34,8 +36,8 @@ export function Panes({ resource }) {
                                 </div>
                                 <div className="c-rating" data-value="3" data-max="5" >
                                     <p className="x-screen-reader" id="sr_">Community rating:
-                            <span >3</span>out of
-                            <span >5</span>
+                                        <span >3</span>out of
+                                        <span >5</span>
                                     </p>
                                     <div aria-hidden="true"></div>
                                 </div>
@@ -68,8 +70,8 @@ export function Panes({ resource }) {
                                     </div>
                                     <div className="c-rating" >
                                         <p className="x-screen-reader" id="sr_">Community rating:
-                                <span >3</span>out of
-                                <span >5</span>
+                                            <span >3</span>out of
+                                            <span >5</span>
                                         </p>
                                         <div aria-hidden="true"></div>
                                     </div>
@@ -102,10 +104,10 @@ export function Panes3x({ resource }) {
 
             <Stack>
 
-                <Breadcrumb
+                <SSRBreadcrumb
                     items={[
-                        { text: 'Home', key: 'home', /* href: '/', */ onClick: () => navTo('/') },
-                        { text: category.heading, key: category._id, /* href: `/shop/${category._id}`,*/ onClick: () => navTo('/shop', category._id) }]} />
+                        { text: 'Home', key: 'home', router: '/' },
+                        { text: category.heading, key: category._id, route: '/shop', urlid: category._id }]} />
 
 
                 <div className="m-panes" data-grid="col-12">
@@ -127,8 +129,8 @@ export function Panes3x({ resource }) {
                                     </div>
                                     <div className="c-rating" >
                                         <p className="x-screen-reader" id="sr_">Community rating:
-                                <span >3</span>out of
-                                <span >5</span>
+                                            <span >3</span>out of
+                                            <span >5</span>
                                         </p>
                                         <div aria-hidden="true"></div>
                                     </div>
