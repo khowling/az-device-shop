@@ -1,25 +1,26 @@
 
 
-# Cloud Native - Azure Reference Application 
+# Cloud Native - Azure Example Application 
 
  _Work in progress_
 
-Ecommerce - Azure Example application highlighting the following architectural patterns
+Ecommerce - Example application highlighting the following architectural patterns
 
  :heavy_check_mark:  Cloud agnostic, open-source, open-protocols
-
  :heavy_check_mark:  Server-side rendering for site performance and SEO
-
  :heavy_check_mark:  Microservices with CRUD and Event Sourcing patterns
-
- :heavy_check_mark:  Cloud provider SLA backed persistance services
-
+ :heavy_check_mark:  Cloud provider SLA backed Messaging, Persistance, Identity, and Analytics services
  :heavy_check_mark:  Complete with devops toolchain, real-time Monitoring and analytics
   
+
+### Example frontpage
 
 ![frontpage](docs/frontpage.png)
 
 ## Target Architecture
+
+### High level Application Architecture
+
 
 ![portal-image](docs/arch.png)
 
