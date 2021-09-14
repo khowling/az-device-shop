@@ -271,7 +271,7 @@ async function dbInit() {
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     const _db = client.db()
     // If Cosmos, need to pre-create the collections, becuse it enforces a partitioning strategy.
-
+    /*
     for (let store of Object.keys(StoreDef)) {
         console.log(`ensuring partitioned collection created for [${store}]`)
         if (USE_COSMOS) {
@@ -296,6 +296,7 @@ async function dbInit() {
             //await _db.createCollection(StoreDef[store].collection)
         }
     }
+    */
     return _db
 }
 
@@ -305,14 +306,26 @@ const BUILD_PATH = './build' //process.env.NODE_ENV === 'production' ? './build'
 const PUBLIC_PATH = "./public"
 async function serve_static(ctx, next) {
 
-    const filePath = ctx.captures.length > 0 ?
-        path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.captures[0]) :
-        path.join(process.cwd() /* __dirname */, PUBLIC_PATH, ctx.path)
+    ctx.assert(ctx.captures.length === 2, 404, `${ctx.path} not found`)
 
-    console.log(`serve_static: request ${ctx.request.url}, serving static resource  filePath=${filePath}`)
+    const staticType = ctx.captures[0],
+        filePath = ctx.captures[1]
 
-    if (fs.existsSync(filePath)) {
-        ctx.response.body = fs.createReadStream(filePath)
+    let fsPath
+    if (staticType === 'static') {// webpacked assets (lives in ./build)
+        fsPath = path.join(process.cwd(), 'build', filePath)
+    } else if (staticType === 'public') {// public assets (lives in ./public)
+        fsPath = path.join(process.cwd(), 'public', filePath)
+    }
+    ctx.assert(fsPath, 404, `${ctx.path} not found`)
+
+    // path.join(process.cwd() /* __dirname */, BUILD_PATH, ctx.captures[0]) :
+    // path.join(process.cwd() /* __dirname */, PUBLIC_PATH, ctx.path)
+
+    console.log(`serve_static: request ${ctx.request.url}, serving static resource  fsPath=${fsPath}`)
+
+    if (fs.existsSync(fsPath)) {
+        ctx.response.body = fs.createReadStream(fsPath)
     } else {
         ctx.throw(404, `${ctx.request.url} not found`)
     }
@@ -368,23 +381,41 @@ async function init() {
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ type: "business", partition_key: "root" })
     app.context.tenentKey = app.context.tenent && app.context.tenent._id
 
+    app.context.businessWatcher = db.collection(StoreDef["business"].collection).watch([
+        { $match: { $and: [{ 'operationType': { $in: ['insert', 'update', 'replace'] } }, { 'fullDocument.partition_key': 'root' }, { 'fullDocument.type': 'business' }] } },
+        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+    ],
+        { fullDocument: "updateLookup" }
+    ).on('change', async change => {
+        console.log(`TENENT Change -  operationType=${change.operationType} key=${JSON.stringify(change.documentKey)}`)
+        if (!change.documentKey._id.equals(app.context.tenentKey)) {
+            console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
+            process.exit()
+        }
+    })
+
+
     // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud (using REACT_APP_SERVER_URL)
     app.use(cors({ credentials: true }))
 
     // Init Routes
-    const STATIC_URL_PREFIX = "/static"
+    //const STATIC_URL_PREFIX = "/static"
     app.use(new Router()
-        .get(`${STATIC_URL_PREFIX}/(.*)`, serve_static)
+        .get(`/(static)/(.*)`, serve_static)
+        .get(`/(public)/(.*)`, serve_static)
         // This is for '/favicon.ico' '/manifest.json' '/robots.txt'
-        .get(/^\/[^\/]*\./, serve_static)
+        //.get(/^\/[^\/]*\./, serve_static)
         .routes())
 
     app.use(authroutes)
     app.use(api)
+    app.use(healthz)
     app.use(ssr)
 
     console.log(`Starting on 3000..`)
     app.listen(3000)
+
+
 
     // Init order status (dont await, incase no tenent! )
     order_state_startup(app.context).then(val => {
@@ -472,7 +503,13 @@ async function ssr(ctx, next) {
     next()
 }
 
-
+// ----------------------------------------------------------- HealthZ
+const healthz = new Router({ prefix: "/healthz" })
+    .get('/', async function (ctx, next) {
+        ctx.body = { status: 'All Good' }
+        ctx.status = 200
+        next()
+    }).routes()
 // ----------------------------------------------------------- AUTH
 const authroutes = new Router({ prefix: "/connect/microsoft" })
     .get('/', async function (ctx, next) {
@@ -777,9 +814,18 @@ const api = new Router({ prefix: '/api' })
     .post('/createtenent', async function (ctx, next) {
         if (!ctx.request.body) throw new Error(`no body`)
 
+        const { value, error } = StoreDef["business"].schema.validate(ctx.request.body, { allowUnknown: false })
+        if (error) throw new Error(`document not valid: ${error}`)
+
         try {
+            // close the watch cursor, so the watch does not restart this process!, we explicitly close as this replica is creating the new tenent!
+            app.context.businessWatcher.close()
+            ctx.res.on('finish', () => {
+                console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
+                process.exit()
+            })
 
-
+            // clear down any old details
             if (ctx.tenentKey) {
                 console.log(`/createtenent: tear down current tenent: ${ctx.tenentKey}`)
                 for (let coll of Object.keys(StoreDef).filter(c => StoreDef[c].collection).map(c => StoreDef[c].collection)) {
@@ -788,12 +834,8 @@ const api = new Router({ prefix: '/api' })
                 }
             }
 
-            const { value, error } = StoreDef["business"].schema.validate(ctx.request.body, { allowUnknown: false })
-            if (error) throw new Error(`document not valid: ${error}`)
-
-            app.context.tenent = { ...value, type: "business", partition_key: "root" }
-            const tenent_res = await ctx.db.collection(StoreDef["business"].collection).insertOne(app.context.tenent)
-            app.context.tenentKey = tenent_res.insertedId
+            // Create new details.
+            const new_tenent = await ctx.db.collection(StoreDef["business"].collection).insertOne({ ...value, type: "business", partition_key: "root" })
 
             if (ctx.request.body.catalog === 'bike') {
 
@@ -807,7 +849,7 @@ const api = new Router({ prefix: '/api' })
                         const b64 = Buffer.from(images[pathname], 'base64'),
                             bstr = b64.toString('utf-8'),
                             file_stream = Readable.from(b64),
-                            new_blob_info = getFileSaS(app.context.tenentKey.toHexString(), pathname),
+                            new_blob_info = getFileSaS(new_tenent.insertedId.toHexString(), pathname),
                             blobStream = new AzBlobWritable(new_blob_info)
 
                         console.log(`Importing ${pathname} (${bstr.length})`)
@@ -842,7 +884,7 @@ const api = new Router({ prefix: '/api' })
                 const newcats = Category.map(function (c) {
                     console.log(`Processing catalog ${c.heading}`)
                     const old_id = c._id, new_id = ObjectID().toHexString()
-                    const newc = { ...c, _id: ObjectID(new_id), partition_key: app.context.tenentKey, creation: Date.now() }
+                    const newc = { ...c, _id: ObjectID(new_id), partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (c.image && c.image.pathname) {
                         newc.image = imagemap.get(c.image.pathname)
                         if (!newc.image) {
@@ -859,7 +901,7 @@ const api = new Router({ prefix: '/api' })
                 const newproducts = Product.map(function (p) {
                     console.log(`Processing product ${p.heading}`)
                     const old_id = p._id, new_id = ObjectID().toHexString()
-                    const newp = { ...p, _id: ObjectID(new_id), partition_key: app.context.tenentKey, creation: Date.now() }
+                    const newp = { ...p, _id: ObjectID(new_id), partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (p.category) {
                         newp.category = catmap.get(p.category)
                         if (!newp.category) {
@@ -882,7 +924,7 @@ const api = new Router({ prefix: '/api' })
                     await ctx.db.collection(StoreDef["inventory"].collection).insertMany(newproducts.map(function (p) {
                         return {
                             _ts: new Timestamp(), // Empty timestamp will be replaced by the server to the current server time
-                            partition_key: app.context.tenentKey,
+                            partition_key: new_tenent.insertedId,
                             status: 'Required',
                             productId: p._id,
                             categoryId: p.category,

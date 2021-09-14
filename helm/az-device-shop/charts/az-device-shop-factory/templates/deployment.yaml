@@ -1,3 +1,4 @@
+{{- if .Values.image.tab }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,7 +36,7 @@ spec:
             - name: APP_HOST_URL
               value: {{ required "env.APP_HOST_URL Value required" .Values.global.env.APP_HOST_URL | quote }}
             - name: USE_COSMOS
-              value: "false"
+              value: "true"
             - name: STORAGE_ACCOUNT
               value: {{ required "env.STORAGE_ACCOUNT Value required" .Values.global.env.STORAGE_ACCOUNT | quote}}
             - name: STORAGE_CONTAINER
@@ -76,3 +77,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end -}}

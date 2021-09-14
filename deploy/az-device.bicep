@@ -8,6 +8,48 @@ resource fnstore 'Microsoft.Storage/storageAccounts@2021-01-01' = {
   sku: {
     name: 'Standard_LRS'
   }
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: true
+  }
+}
+
+resource fnstoreBlob 'Microsoft.Storage/storageAccounts/blobServices@2021-04-01' = {
+  parent: fnstore
+  name: 'default'
+  properties: {
+    cors: {
+      corsRules: [
+        {
+          allowedHeaders: [
+            '*'
+          ]
+          allowedMethods: [
+            'GET'
+            'POST'
+            'OPTIONS'
+            'PUT'
+            'DELETE'
+          ]
+          allowedOrigins: [
+            'http://localhost:8000'
+          ]
+          exposedHeaders: [
+            '*'
+          ]
+          maxAgeInSeconds: 0
+        }
+      ]
+    }
+  }
+}
+
+resource fnstoreContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2021-04-01' = {
+  parent: fnstoreBlob
+  name: 'az-shop-images'
+  properties: {
+    publicAccess: 'Blob'
+  }
 }
 
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
@@ -32,12 +74,20 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
   }
 }
 
+@description('The shared throughput for the Mongo DB database')
+@minValue(400)
+@maxValue(1000000)
+param throughput int = 400
+
 resource mongoDB 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2021-06-15' = {
   parent: cosmosAccount
   name: 'az-shop'
   properties: {
     resource: {
       id: 'az-shop'
+    }
+    options: {
+      throughput: throughput
     }
   }
 }
@@ -64,3 +114,6 @@ resource mongoColl 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/colle
     }
   }
 }]
+
+output storageKey string = fnstore.listKeys().keys[0].value
+//output cosmosKey string = cosmosAccount.properties.connectionStrings

@@ -16,10 +16,10 @@ COPY web/ ./
 
 # Creates assets in ./build
 ENV NODE_ENV=production
-RUN npx webpack --config config/webpack.eject.config.js
+RUN npm run-script build_assets
 
 # compile React JSX in 'src' into 'lib' for SSR
-RUN npx babel --config-file ./babel.config.json --out-dir lib ./src
+RUN npm run-script build_lib
 
 # Required for imports for tsc compile
 RUN mkdir ../common

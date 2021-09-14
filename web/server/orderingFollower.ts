@@ -30,7 +30,8 @@ export async function order_state_startup({ db, tenent }) {
     const continuation = cs.sequence && { startAtOperationTime: await db.collection(cs.collection).findOne({ sequence: cs.sequence })._ts }
     var inventoryStreamWatcher = cs.db.collection(cs.collection).watch(
         [
-            { $match: { $and: [{ 'operationType': 'insert' }, { 'fullDocument.partition_key': cs.tenentKey }, { 'fullDocument.sequence': { $gt: cs.sequence } }] } },
+            // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
+            { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }, { 'fullDocument.sequence': { $gt: cs.sequence } }] } },
             { $project: { '_id': 1, 'fullDocument': 1, 'ns': 1, 'documentKey': 1 } }
         ],
         { fullDocument: 'updateLookup', ...(continuation && { ...continuation }) }

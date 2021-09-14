@@ -154,9 +154,9 @@ export function StartBusiness() {
                       <div>
                         <div className="c-glyph glyph-info" aria-label="Information message"></div>
                         <h1 className="c-heading">Done</h1>
-                        <p className="c-paragraph">Click here to open your Store
-                      <span className="c-group">
-                            <Link route="/" className="c-action-trigger" role="button" component="ManageOrders">Store</Link>
+                        <p className="c-paragraph">Click here to open your Store (may take a few seconds)
+                          <span className="c-group">
+                            <a className="c-action-trigger" href="/">Store</a>
 
                           </span>
                         </p>

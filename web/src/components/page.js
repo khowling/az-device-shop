@@ -154,40 +154,40 @@ export function Nav({ tenent, auth, cartCount }) {
 }
 
 const breadcrumbOl = {
-  "white-space": "nowrap",
+  "whiteSpace": "nowrap",
   "padding": "0px",
   "margin": "0px",
   "display": "flex",
-  "align-items": "stretch"
+  "alignItems": "stretch"
 }
 
 
 const breadcrumb = {
-  "font-size": "18px",
-  "font-weight": "400",
+  "fontSize": "18px",
+  "fontWeight": "400",
   "margin": "11px 0px 1px",
 }
 
 const breadcrumbLi = {
-  "list-style-type": "none",
+  "listStyleType": "none",
   "margin": "0px",
   "padding": "0px",
   "display": "flex",
   "position": "relative",
-  "align-items": "center"
+  "alignItems": "center"
 }
 
 const breadcrumbLabel = {
   "color": "rgb(96, 94, 92)",
   "padding": "0px 8px",
-  "line-height": "36px",
-  "font-weight": "400",
+  "lineHeight": "36px",
+  "fontWeight": "400",
 }
 
 const breadcrumbLast = {
   "color": "rgb(50, 49, 48)",
   "padding": "0px 8px",
-  "font-weight": "600",
+  "fontWeight": "600",
 }
 
 export function SSRBreadcrumb({ items }) {

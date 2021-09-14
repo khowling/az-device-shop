@@ -14,9 +14,20 @@ RUN npm i
 # Copy the rest of the application
 COPY ordering/ ./
 
+
+
+
+
+
+
+
 # Required for imports for tsc compile
 RUN mkdir ../common
 COPY common/* ../common/
+
+
+
+
 
 
 # Compile server Typescript

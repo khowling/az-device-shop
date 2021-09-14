@@ -20,7 +20,7 @@ export async function mongoWatchProcessorTrigger(cs: StateConnection, watchColle
     console.log(`mongoWatchProcessorTrigger for [${processor.name}]: Start watch "${watchCollection}" (filter watch to  sequence>${sequence}) continuation=${continuation} (if continuation undefined, start watch from now)`)
     return cs.db.collection(watchCollection).watch(
         [
-            { $match: { $and: [{ 'operationType': { $in: ['insert', 'update'] } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
+            { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
             , { $project: { 'ns': 1, 'documentKey': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
         { fullDocument: 'updateLookup', ...(continuation && { ...continuation }) }
@@ -56,7 +56,7 @@ export async function mongoCollectionDependency(cs: StateConnection, stateManage
     console.log(`mongoCollectionDependency for [${stateManager.name}]:  Start watch "${collection}" (filter watch to sequence>${sequence}) continuation=${continuation && JSON.stringify(continuation)} (if continuation undefined, start watch from now)`)
 
     var inventoryStreamWatcher = cs.db.collection(collection).watch([
-        { $match: { $and: [{ 'operationType': { $in: ['insert'] } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(sequence ? { 'fullDocument.sequence': { $gt: sequence } } as any : []) } },
+        { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(sequence ? { 'fullDocument.sequence': { $gt: sequence } } as any : []) } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
     ],
         { fullDocument: "updateLookup", ...(continuation && { ...continuation }) }

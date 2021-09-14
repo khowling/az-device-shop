@@ -155,7 +155,8 @@ mongoimport --db dbdev --collection products --jsonArray --file ./testing/testda
 
 ```
 APP_NAME=az-shop
-APP_HOST_URL="https://${APP_NAME}.labhome.biz"
+APP_DOMAIN=
+APP_HOST_URL="https://${APP_NAME}.${APP_DOMAIN}"
 ```
 
 ### Deploy Mongo

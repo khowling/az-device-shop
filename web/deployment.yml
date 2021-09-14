@@ -103,10 +103,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - az-shop.labhome.biz
+        - az-shop{{domain}}
       secretName: tls-secret
   rules:
-    - host: az-shop.labhome.biz
+    - host: az-shop{{domain}}
       http:
         paths:
           - path: /

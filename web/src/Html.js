@@ -5,8 +5,9 @@ export default function Html({ children, title, hydrate_data, hydrate_tenent }) 
         <html lang="en">
             <head>
                 <meta charSet="utf-8" />
+                <link rel="icon" href="/public/favicon.ico" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <link rel="manifest" href="/manifest.json" />
+                <link rel="manifest" href="/public/manifest.json" />
                 <link rel="stylesheet" type="text/css" href="https://assets.onestore.ms/cdnfiles/external/mwf/long/v1/v1.26.1/css/mwf-west-european-default.css" />
                 <title>{title}</title>
             </head>
