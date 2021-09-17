@@ -45,4 +45,4 @@ RUN npm i --production
 COPY --from=build /usr/src/app/ordering/out out
 
 EXPOSE 9090
-CMD [ "node", "out/ordering/orderingProcessor" ]
+CMD [ "node", "out/ordering/orderingStartup" ]

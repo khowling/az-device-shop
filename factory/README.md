@@ -5,6 +5,90 @@
 Event-based work scheduling
 
 
+### Internals
+
+factoryStartup
+
+ - factoryState (FactoryStateManager extends common/flux/StateManager)
+    - maintain current state of the factory (workitems)
+
+      - items: Array<WorkItemObject>;
+      - workitem_sequence: number;
+
+   - workItemsReducer:  operations to modify state
+     
+      - 'workItems/New'
+      - 'workItems/StatusUpdate'
+      - 'tidyUp'
+      - 'workItems/InventoryAvailable'
+
+
+ - factoryProcessor (common/Processor)
+
+    - triggered from 'inventory_spec' requests
+        - mongoWatchProcessorTrigger ()
+        - processor.initiateWorkflow({ trigger: doc._id}, { continuation: { resumeAfter: doc._id } })
+
+
+    - workflow for factory orders
+       - validateRequest
+       - inFactory
+       - moveToWarehouse
+       - publishInventory
+       - tidyUp
+
+
+
+
+
+common
+ - processor.ts
+   - Koa inspired workflow engine
+   - processorState (common/flux/ProcessorStateManager)
+      - maintains current state of workflow engine
+
+        - processor_sequence: number;  // lateset processor_sequence 
+        - flow_sequence: number;          // lateset flow_sequence 
+        - last_incoming_processed: {
+            - sequence: number;
+            - continuation: any;
+        -  }
+        - proc_map: Array<ProcessObject>
+
+
+
+
+   -  initiateWorkflow(new_ctx, trigger)
+      - new_ctx = the context to set for the workflow stages { trigger: { doc_id:xx}}
+      - trigger =  what triggered the worklow (allows re-starting) : { continuation: { resumeAfter: doc._id } }
+      - ProcessorStateManager.dispatch({type: ProcessActionType.New, options: {new_ctx}, trigger})
+         - flux.ts/StateManager/dispatch
+            - reduce {action} to [changes] on current state
+               - processor.ts/processorReducer()
+                 - assert trigger.sequence === state.last_incoming_processed.sequence + 1
+                 - trigger.sequence && change: Inc 'last_incoming_processed.sequence'
+                 - trigger.continuation && change: Set 'last_incoming_processed.continuation'
+                 
+            - cs.db.collection(cs.collection).insertOne({sequence: cs.sequence+1, [changes]}}) // Write to log write-ahead!
+            - this._stateStore.apply([changes]) // apply changes to local state
+
+            - flux/StateManager/apply
+
+               - assert _control.head_sequence === state._control.head_sequence
+               - 
+
+
+
+
+
+ - flux/StateManager
+  - apply(State changes)
+     - _control.head_sequence (ensures changes are applyed to state in order)
+
+
+
+
+
 ## Tech Objectives
 
 

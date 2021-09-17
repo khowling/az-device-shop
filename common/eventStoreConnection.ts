@@ -6,7 +6,7 @@ interface Tenent {
     _id: typeof ObjectID;
     email: string;
 }
-export class StateConnection extends EventEmitter {
+export class EventStoreConnection extends EventEmitter {
     private murl: string;
     private _sequence: number;
     private _collection: string;
@@ -57,7 +57,7 @@ export class StateConnection extends EventEmitter {
             while (true) {
                 this._tenent = await this._db.collection("business").findOne({ type: "business", partition_key: "root" })
                 if (this._tenent) break
-                console.warn('StateConnection: No type="business" document in "business" collection, waiting until initialised...')
+                console.warn('EventStoreConnection: No type="business" document in "business" collection, waiting until initialised...')
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
         } else {

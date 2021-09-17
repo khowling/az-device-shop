@@ -34,4 +34,4 @@ RUN npm i --production
 COPY --from=build /usr/src/app/factory/out out
 
 EXPOSE 9091
-CMD [ "node", "out/factory/factoryProcessor" ]
+CMD [ "node", "out/factory/factoryStartup" ]

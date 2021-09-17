@@ -2,9 +2,9 @@ const assert = require('assert')
 const fs = require('fs')
 
 import { StateStore } from './flux'
-import { StateConnection } from './stateConnection'
+import { EventStoreConnection } from './eventStoreConnection'
 
-export async function restoreState(sc: StateConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
+export async function restoreState(sc: EventStoreConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
 
     const last_checkpoint = enableCheckpointing ? await restoreLatestSnapshot(sc, chkdir, stateStores) : 0
     sc.sequence = await rollForwardState(sc, last_checkpoint, stateStores)
@@ -12,7 +12,7 @@ export async function restoreState(sc: StateConnection, chkdir: string, stateSto
 }
 
 
-export function startCheckpointing(cs: StateConnection, chkdir: string, chkpntAtSeq: number, stateStores: StateStore[], loopMins: number = 10, loopChanges: number = 100): NodeJS.Timeout {
+export function startCheckpointing(cs: EventStoreConnection, chkdir: string, chkpntAtSeq: number, stateStores: StateStore[], loopMins: number = 10, loopChanges: number = 100): NodeJS.Timeout {
 
     let last_checkpoint = chkpntAtSeq
 
@@ -27,7 +27,7 @@ export function startCheckpointing(cs: StateConnection, chkdir: string, chkpntAt
     }, 1000 * 60 * loopMins, cs, chkdir)
 }
 
-async function rollForwardState(cs: StateConnection, from_sequence: number, stateStores: StateStore[]): Promise<number> {
+async function rollForwardState(cs: EventStoreConnection, from_sequence: number, stateStores: StateStore[]): Promise<number> {
 
     let processed_seq = from_sequence
     console.log(`rollForwardState: reading "${cs.collection}" from database from_sequence#=${from_sequence}`)
@@ -56,7 +56,7 @@ async function rollForwardState(cs: StateConnection, from_sequence: number, stat
 }
 
 
-async function restoreLatestSnapshot(cs: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
+async function restoreLatestSnapshot(cs: EventStoreConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
     const dir = `${chkdir}/${cs.tenentKey}`
     await fs.promises.mkdir(dir, { recursive: true })
     let latestfile = { fileseq: null, filedate: null, filename: null }
@@ -96,7 +96,7 @@ async function restoreLatestSnapshot(cs: StateConnection, chkdir: string, stateS
     }
 }
 
-export async function snapshotState(cs: StateConnection, chkdir: string, stateStores: StateStore[]): Promise<any> {
+export async function snapshotState(cs: EventStoreConnection, chkdir: string, stateStores: StateStore[]): Promise<any> {
     const now = new Date()
     let release = await cs.mutex.aquire()
     const filename = `${chkdir}/${cs.tenentKey}/${now.getFullYear()}-${('0' + (now.getMonth() + 1)).slice(-2)}-${('0' + now.getDate()).slice(-2)}-${('0' + now.getHours()).slice(-2)}-${('0' + now.getMinutes()).slice(-2)}-${('0' + now.getSeconds()).slice(-2)}--${cs.sequence}.json`

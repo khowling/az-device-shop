@@ -819,9 +819,11 @@ const api = new Router({ prefix: '/api' })
 
         try {
             // close the watch cursor, so the watch does not restart this process!, we explicitly close as this replica is creating the new tenent!
-            app.context.businessWatcher.close()
+            console.log(`/createtenent: Starting - close the business watch cursor`)
+            await app.context.businessWatcher.close()
+
             ctx.res.on('finish', () => {
-                console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
+                console.error(`/createtenent finished: TENENT RESET - Server needs to be restarted.  Ending process`)
                 process.exit()
             })
 
@@ -852,7 +854,7 @@ const api = new Router({ prefix: '/api' })
                             new_blob_info = getFileSaS(new_tenent.insertedId.toHexString(), pathname),
                             blobStream = new AzBlobWritable(new_blob_info)
 
-                        console.log(`Importing ${pathname} (${bstr.length})`)
+                        console.log(`/createtenent: Importing ${pathname} (${bstr.length})`)
 
                         await new Promise(function (resolve, reject) {
                             let error
@@ -867,8 +869,8 @@ const api = new Router({ prefix: '/api' })
                             })
 
                             blobStream.on('error', (e) => {
-                                console.error(`/createtenent blobStream error: ${e}`)
-                                reject(`/createtenent blobStream error : ${e}`)
+                                console.error(`/createtenent: blobStream error: ${e}`)
+                                reject(`/createtenent: blobStream error : ${e}`)
                             })
 
                         })
@@ -882,42 +884,42 @@ const api = new Router({ prefix: '/api' })
 
                 const catmap = new Map()
                 const newcats = Category.map(function (c) {
-                    console.log(`Processing catalog ${c.heading}`)
+                    console.log(`/createtenent: Processing catalog ${c.heading}`)
                     const old_id = c._id, new_id = ObjectID().toHexString()
                     const newc = { ...c, _id: ObjectID(new_id), partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (c.image && c.image.pathname) {
                         newc.image = imagemap.get(c.image.pathname)
                         if (!newc.image) {
-                            console.error(`Cannot find image pathname ${c.image.pathname}`)
+                            console.error(`/createtenent: Cannot find image pathname ${c.image.pathname}`)
                         }
                     }
                     catmap.set(old_id, new_id)
                     return newc
                 })
 
-                console.log(`Loading Categories : ${JSON.stringify(newcats)}`)
+                console.log(`/createtenent: Loading Categories : ${JSON.stringify(newcats)}`)
                 await ctx.db.collection(StoreDef["products"].collection).insertMany(newcats)
 
                 const newproducts = Product.map(function (p) {
-                    console.log(`Processing product ${p.heading}`)
+                    console.log(`/createtenent: Processing product ${p.heading}`)
                     const old_id = p._id, new_id = ObjectID().toHexString()
                     const newp = { ...p, _id: ObjectID(new_id), partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (p.category) {
                         newp.category = catmap.get(p.category)
                         if (!newp.category) {
-                            console.error(`Cannot find category ${p.category}`)
+                            console.error(`/createtenent: Cannot find category ${p.category}`)
                         }
                     }
                     if (p.image && p.image.pathname) {
                         newp.image = imagemap.get(p.image.pathname)
                         if (!newp.image) {
-                            console.error(`Cannot find image pathname ${p.image.pathname}`)
+                            console.error(`/createtenent: Cannot find image pathname ${p.image.pathname}`)
                         }
                     }
                     return newp
                 })
 
-                console.log("Importing Products")
+                console.log("/createtenent: Importing Products")
                 await ctx.db.collection(StoreDef["products"].collection).insertMany(newproducts)
 
                 if (ctx.request.body.inventory) {
@@ -936,11 +938,13 @@ const api = new Router({ prefix: '/api' })
 
             }
 
+            console.log("/createtenent: Finished")
             ctx.body = { status: 'success', description: 'done' }
             await next()
 
 
         } catch (e) {
+            console.log(`/createtenent: ERROR ${JSON.stringify(e)}`)
             ctx.throw(400, e)
             await next()
         }

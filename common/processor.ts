@@ -12,7 +12,7 @@ export interface ProcessorOptions {
     }
 }
 
-import { StateConnection } from './stateConnection'
+import { EventStoreConnection } from './eventStoreConnection'
 import { StateStore, StateManager, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer, StateUpdates } from './flux'
 import { EventEmitter } from 'events'
 
@@ -32,13 +32,17 @@ enum ProcessActionType {
 }
 
 interface ProcessReducerState {
-    processor_sequence: number;     // lateset processor_sequence # (one for each workflow event)
-    flow_sequence: number;          // lateset flow_sequence # (one for each workflow)
+    // lateset processor_sequence # (one for each workflow event)
+    processor_sequence: number;
+    // lateset flow_sequence # (one for each workflow)
+    flow_sequence: number;
+    proc_map: Array<ProcessObject>
+
+    // Track the last item that triggered the latest workflow
     last_incoming_processed: {
         sequence: number;
         continuation: any;
     }
-    proc_map: Array<ProcessObject>
 }
 
 interface ProcessObject {
@@ -55,7 +59,7 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
 
     return {
         sliceKey: 'processor',
-        initState: { flow_sequence: 0, last_incoming_processed: { sequence: 0, continuation: null }, proc_map: [] } as ProcessReducerState,
+        initState: { flow_sequence: 0, last_incoming_processed: {}, proc_map: [] } as ProcessReducerState,
         fn: async function (connection, state: ProcessReducerState, action: ProcessAction): Promise<ReducerReturn> {
             const { type, flow_id, function_idx, complete, trigger } = action
             // split 'action.options.update_ctx' out of event, and aggritate into state 'context_object'
@@ -64,6 +68,10 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
             switch (type) {
                 case ProcessActionType.New:
                     let updates: Array<StateUpdates> = []
+                    /* KH - Dont need to assert on trigger sequence/order values here, 
+                       Order needs to be managed by the processes calling the 'initiateWorkflow'
+                       Just need to store last trigger in state to allow for pointer for re-starts
+                    
                     if (trigger) {
                         if (Number.isInteger(trigger.sequence)) {
                             assert(trigger.sequence === state.last_incoming_processed.sequence + 1, `processorReducer, cannot apply incoming new trigger.sequence=${trigger.sequence}, last_incoming_processed=${state.last_incoming_processed.sequence}`)
@@ -72,6 +80,10 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
                         if (trigger.continuation) {
                             updates.push({ method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: { continuation: trigger.continuation } })
                         }
+                    }
+                    */
+                    if (trigger) {
+                        updates.push({ method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: trigger })
                     }
 
                     const new_flow_id = `WF${state.flow_sequence}`
@@ -107,7 +119,7 @@ function processorReducer(): Reducer<ProcessReducerState, ProcessAction> {
 
 class ProcessorStateManager extends StateManager {
 
-    constructor(name: string, connection: StateConnection) {
+    constructor(name: string, connection: EventStoreConnection) {
         super(name, connection, [
             processorReducer()
         ])
@@ -123,11 +135,11 @@ export class Processor extends EventEmitter {
 
     private _statePlugin: StateManagerInterface
     private _stateManager: ProcessorStateManager
-    private _connection: StateConnection
+    private _connection: EventStoreConnection
     private _context: any
     private _middleware: Array<() => any> = []
 
-    constructor(name: string, connection: StateConnection, opts: any = {}) {
+    constructor(name: string, connection: EventStoreConnection, opts: any = {}) {
         super()
         this._name = name
         this._connection = connection

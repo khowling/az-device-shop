@@ -31,7 +31,7 @@ export enum WorkItemStage {
 
 
 import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../common/flux'
-import { StateConnection } from '../common/stateConnection'
+import { EventStoreConnection } from '../common/eventStoreConnection'
 export { StateUpdates } from '../common/flux'
 
 // Mutate state in a Consistant, Safe, recorded mannore
@@ -264,7 +264,7 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
 
 export class FactoryStateManager extends StateManager {
 
-    constructor(name: string, connection: StateConnection) {
+    constructor(name: string, connection: EventStoreConnection) {
         super(name, connection, [
             workItemsReducer(),
             initFactoryReducer(),

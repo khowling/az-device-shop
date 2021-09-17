@@ -205,17 +205,17 @@ export interface StateManagerInterface {
 }
 
 import { EventEmitter } from 'events'
-import { StateConnection } from './stateConnection'
+import { EventStoreConnection } from './eventStoreConnection'
 
 export class StateManager extends EventEmitter implements StateManagerInterface {
 
     private _name
     private _stateStore: StateStore
-    private _connection: StateConnection
+    private _connection: EventStoreConnection
     // A reducer that invokes every reducer inside the reducers object, and constructs a state object with the same shape.
     private _rootReducer
 
-    constructor(name: string, connection: StateConnection, reducers: Array<Reducer<any, any> | ReducerWithPassin<any, any>>) {
+    constructor(name: string, connection: EventStoreConnection, reducers: Array<Reducer<any, any> | ReducerWithPassin<any, any>>) {
         super()
         this._name = name
         this._connection = connection

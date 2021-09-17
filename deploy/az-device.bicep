@@ -93,13 +93,14 @@ resource mongoDB 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2021-06
 }
 
 var azShopCollections = [
+  'koa_sessions'
   'products'
   'business'
-  'inventory'
+  'inventory_spec'
+  'orders_spec'
   'inventory_complete'
   'factory_events'
   'order_events'
-  'orders'
 ]
 
 resource mongoColl 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2021-06-15' = [for collName in azShopCollections: {

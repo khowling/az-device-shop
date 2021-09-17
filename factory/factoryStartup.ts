@@ -4,11 +4,11 @@ import { WorkItemActionType, WorkItemAction, FactoryStateManager, WorkItemStage 
 
 export enum OperationLabel { NEWINV = "NEWINV" }
 
-async function validateRequest({ connection, trigger, flow_id }, next: (action: WorkItemAction, options: ProcessorOptions, event_label?: string) => any) {
+async function validateRequest({ esConnection, trigger, flow_id }, next: (action: WorkItemAction, options: ProcessorOptions, event_label?: string) => any) {
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
-        const mongo_spec = await connection.db.collection("inventory_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: connection.tenentKey })
+        const mongo_spec = await esConnection.db.collection("inventory_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: esConnection.tenentKey })
         // remove the ObjectId from 'productId'
         spec = { ...mongo_spec, ...(mongo_spec.productId && { productId: mongo_spec.productId.toHexString() }) }
     }
@@ -35,19 +35,19 @@ async function tidyUp({ flow_id, spec }, next) {
 
 // ---------------------------------------------------------------------------------------
 import ServiceWebServer from '../common/ServiceWebServer'
-import { StateConnection } from '../common/stateConnection'
+import { EventStoreConnection } from '../common/eventStoreConnection'
 import { startCheckpointing, restoreState } from '../common/event_hydrate'
-import { mongoWatchProcessorTrigger } from '../common/processorActions'
+import { watchProcessorTriggerWithTimeStamp } from '../common/processorActions'
 
-async function factoryStartup(cs: StateConnection) {
+async function factoryStartup(cs: EventStoreConnection) {
 
     console.log(`factoryStartup (1):  create factory state manager "factoryState"`)
     const factoryState = new FactoryStateManager('emeafactory_v0', cs)
+
+    console.log(`factoryStartup (2):  create factory processor "factoryProcessor" & add workflow tasks`)
     const factoryProcessor = new Processor('emeaprocessor_v001', cs, { statePlugin: factoryState })
-
-    // add connection to ctx, to allow middleware access, (maybe not required!)
-    factoryProcessor.context.connection = cs
-
+    // add esConnection to ctx, to allow middleware access, (maybe not required!)
+    factoryProcessor.context.esConnection = cs
     // add workflow actions
     factoryProcessor.use(validateRequest)
     factoryProcessor.use(inFactory)
@@ -55,16 +55,18 @@ async function factoryStartup(cs: StateConnection) {
     factoryProcessor.use(publishInventory)
     factoryProcessor.use(tidyUp)
 
+
+    console.log(`factoryStartup (3): Hydrate local stateStores "factoryState" & "factoryProcessor" from snapshots & event log`)
     const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
     const last_checkpoint = await restoreState(cs, chkdir, [
         factoryState.stateStore,
         factoryProcessor.stateStore
     ])
+    console.log(`factoryStartup (3): Complete Hydrate, restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
 
-    console.log(`factoryStartup (4): restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
 
 
-    console.log(`factoryStartup (5): Re-start active "factoryProcessor" workflows, #flows=${factoryProcessor.processorState.proc_map.length}`)
+    console.log(`factoryStartup (4): Re-start active "factoryProcessor" workflows, #flows=${factoryProcessor.processorState.proc_map.length}`)
     const prInterval = factoryProcessor.initProcessors(function ({ id, stage }) {
         const widx = factoryState.stateStore.state.workItems.items.findIndex(o => o.id === id)
         if (widx < 0) {
@@ -82,13 +84,16 @@ async function factoryStartup(cs: StateConnection) {
         ])
     }
 
-    console.log(`factoryStartup (8): Starting Interval to run "FactoryProcess" action (5 seconds)`)
+    console.log(`factoryStartup (5): Starting Interval to run "FactoryProcess" control loop (5 seconds)`)
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
         await factoryState.dispatch({ type: WorkItemActionType.FactoryProcess })
     }, 5000)
 
-    const mwatch = mongoWatchProcessorTrigger(cs, 'inventory_spec', factoryProcessor, { "status": 'Required' })
+    console.log(`factoryStartup (6): Starting new "inventory_spec" watch"`)
+    const mwatch = watchProcessorTriggerWithTimeStamp(cs, 'inventory_spec', factoryProcessor, { "status": 'Required' })
+
+    console.log(`factoryStartup: FINISHED`)
     return { factoryProcessor, factoryState }
 }
 
@@ -97,16 +102,16 @@ async function factoryStartup(cs: StateConnection) {
 async function init() {
 
     const murl = process.env.MONGO_DB
-    console.log(`Initilise Consumer Connection ${murl}`)
-    const connection = new StateConnection(murl, 'factory_events')
+    console.log(`Initilise EventStoreConnection with 'factory_events' (MONGO_DB=${murl})`)
+    const esConnection = new EventStoreConnection(murl, 'factory_events')
 
-    connection.on('tenent_changed', async (oldTenentId) => {
-        console.error(`StateConnection: TENENT CHANGED - DELETING existing ${connection.collection} documents partition_id=${oldTenentId} & existing`)
-        await connection.db.collection(connection.collection).deleteMany({ partition_key: oldTenentId })
+    esConnection.on('tenent_changed', async (oldTenentId) => {
+        console.error(`EventStoreConnection: TENENT CHANGED - DELETING existing ${esConnection.collection} documents partition_id=${oldTenentId} & existing`)
+        await esConnection.db.collection(esConnection.collection).deleteMany({ partition_key: oldTenentId })
         process.exit()
     })
 
-    let { factoryState, factoryProcessor } = await factoryStartup(await connection.init())
+    let { factoryState, factoryProcessor } = await factoryStartup(await esConnection.init())
 
     // Http health + monitoring + API
     const web = new ServiceWebServer({ port: process.env.PORT || 9091 })
@@ -140,6 +145,12 @@ async function init() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             status: 'tbc',
+        }))
+    })
+    web.addRoute('GET', '/healthz', (req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            status: 'All Good'
         }))
     })
     web.createServer()
