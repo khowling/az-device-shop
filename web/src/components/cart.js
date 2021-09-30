@@ -267,13 +267,14 @@ export function AddToCart({ resource }) {
 
 
   const [, setCartOpen] = useContext(CartOpenContext)
+  const [cartCount, setCartCount] = useContext(CartCountContext)
 
   function addorder() {
     setState({ state: "adding" })
     //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
     _fetchit('/api/cartadd', 'POST', {}, { item: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
-      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartCount.count}`)
-      const [cartCount, setCartCount] = useContext(CartCountContext)
+
+      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartCount}`)
       setCartCount(cartCount + 1)
       setState({ state: "added", response: succ })
 

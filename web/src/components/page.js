@@ -138,12 +138,12 @@ export function Nav({ tenent, auth, cartCount }) {
       <Suspense fallback={<span />}>
         <ModelPanel
           headerText="Shopping Cart"
-          isOpen={cartCount.open}
+          isOpen={cartOpen}
           onDismiss={dismissPanel}
           type={PanelType.medium}
 
           closeButtonAriaLabel="Close">
-          {cartCount.open &&
+          {cartOpen &&
             <MyCart dismissPanel={dismissPanel} resource={_suspenseFetch('componentFetch/mycart')} panel={true} />
           }
         </ModelPanel>

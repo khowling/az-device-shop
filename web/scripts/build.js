@@ -25,6 +25,15 @@ webpack(
                 },
             ],
         },
+        plugins: [
+            new webpack.DefinePlugin({
+                'process.env': {
+                    NODE_ENV: JSON.stringify('production'),
+                    ...(process.env.REACT_APP_FACTORY_PORT && { REACT_APP_FACTORY_PORT: process.env.REACT_APP_FACTORY_PORT }),
+                    ...(process.env.REACT_APP_ORDERING_PORT && { REACT_APP_ORDERING_PORT: process.env.REACT_APP_ORDERING_PORT }),
+                },
+            }),
+        ],
     },
     (err, stats) => {
         if (err) {

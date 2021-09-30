@@ -6,9 +6,11 @@ import { startCheckpointing, restoreState } from '../../common/event_hydrate'
 
 export async function order_state_startup({ db, tenent }) {
 
-    console.log(`orderingFollower (1): Create "EventStoreConnection" and "OrderStateManager"`)
+
     const cs = await new EventStoreConnection(null, 'order_events').initFromDB(db, tenent)
-    const orderState = new OrderStateManager('ordemea_v01', cs)
+
+    console.log(`orderingFollower (1): Create order state manager "orderState"`)
+    const orderState = new OrderStateManager('emeaordering_v0', cs)
 
     // get db time, so we know where to continue the watch
     //const admin = db.admin()

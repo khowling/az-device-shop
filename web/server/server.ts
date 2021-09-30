@@ -412,8 +412,9 @@ async function init() {
     app.use(healthz)
     app.use(ssr)
 
-    console.log(`Starting on 3000..`)
-    app.listen(3000)
+    const port = process.env.PORT || 3000
+    console.log(`Starting on ${port}..`)
+    app.listen(port)
 
 
 

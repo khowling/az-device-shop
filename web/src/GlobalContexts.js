@@ -20,6 +20,6 @@ export const RenderContext = React.createContext(null)
 export const TenentContext = React.createContext(null)
 
 export const AuthContext = React.createContext()
-export const CartCountContext = React.createContext()
 
+export const CartCountContext = React.createContext()
 export const CartOpenContext = React.createContext()

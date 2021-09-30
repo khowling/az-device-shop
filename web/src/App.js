@@ -117,6 +117,7 @@ export const AppRouteCfg = {
 }
 
 
+// Update Global State Contexts "CartCountContext" & "AuthContext" from API call "/api/session_status"
 // Expose Global State, allowing items deep in the Router component tree to modify Nav!
 export const SessionProviderWrapper = ({ children }) => {
 
@@ -130,7 +131,9 @@ export const SessionProviderWrapper = ({ children }) => {
       console.log(`SessionProviderWrapper: useEffect session=${JSON.stringify(session)}`)
       setAuth(session.auth)
       const newCartCount = session.cart_items || 0
-      newCartCount !== cartCount && setCartCount()
+      if (newCartCount !== cartCount) {
+        setCartCount(newCartCount)
+      }
     }
     fetchData()
   }, [])
