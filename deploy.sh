@@ -44,7 +44,7 @@ kubectl create ns $AZSHOP_NS
 # upgrade
 # uninstall
 # install
-helm install ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
+helm upgrade ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
   --set global.registryHost="${ACRNAME}.azurecr.io/" \
   --set global.env.MONGO_DB="${MONGO_DB}" \
   --set global.env.STORAGE_ACCOUNT="${STORAGE_ACCOUNT}" \

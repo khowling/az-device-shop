@@ -71,6 +71,11 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
     apiProperties: {
       serverVersion: '4.0'
     }
+    capabilities: [
+      {
+        name: 'DisableRateLimitingResponses'
+      }
+    ]
   }
 }
 

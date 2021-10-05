@@ -31,8 +31,22 @@ const { MongoClient, Timestamp, ObjectID, ObjectId } = require('mongodb'),
     MongoURL = process.env.MONGO_DB,
     USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
 
+
+interface StoreDefinitionList {
+    [key: string]: StoreDefinition
+}
+interface DefinitionStatus {
+    [key: string]: number;
+}
+interface StoreDefinition {
+    collection?: string;
+    schema?: any;
+    split_types?: Array<string>;
+    status?: DefinitionStatus;
+}
+
 // Store Metadata
-const StoreDef = {
+const StoreDef: StoreDefinitionList = {
     "business": {
         collection: "business",
         schema: Joi.object({
@@ -54,11 +68,13 @@ const StoreDef = {
         schema: Joi.object({
             'type': Joi.string().valid('Product', 'Category').required(),
             'heading': Joi.string().trim().required(),
-            'category': Joi.string().when('type', {
+            'category_ref': Joi.object({
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+            }).when('type', {
                 is: "Product",
                 then: Joi.required()
                 //otherwise: Joi.object({'category': //not exist//})
-            }).trim(),
+            }),
             'position': Joi.string().valid('normal', 'hero', 'highlight').when('type', {
                 is: "Category",
                 then: Joi.required()
@@ -77,30 +93,29 @@ const StoreDef = {
         })
     },
     "inventory": {
-        owner: true,
         collection: "inventory_spec",
         schema: Joi.object({
             'status': Joi.string().valid('Draft', 'Required', 'InFactory', 'Cancel', 'Available').required(),
-            'productId': Joi.string().required(),
-            'categoryId': Joi.string().required(),
+            'product_ref': Joi.object({
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+            }).required(),
+            'category_ref': Joi.object({
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+            }).required(),
             'warehouse': Joi.string().required(),
             'qty': Joi.number().required()
         })
     },
     "inventory_complete": {
-        owner: true,
         collection: "inventory_complete",
     },
     "factory_events": {
-        owner: true,
         collection: "factory_events",
     },
     "order_events": {
-        owner: true,
         collection: "order_events",
     },
     "orders": {
-        owner: true,
         status: {
             InactiveCart: 5,
             ActiveCart: 10,
@@ -116,20 +131,16 @@ const StoreDef = {
             'shipping': Joi.string().valid('A', 'B'),
             'items': Joi.array().items(Joi.object({})).required(),
             'items_count': Joi.number()
-        }),
-        indexes: [
-            { status: 1 },
-            { owner: { _id: 1 } }
-        ]
+        })
     },
     "order_line": {
         schema: Joi.object({
             'options': Joi.object(),
             'qty': Joi.number().required(),
             'recorded_item_price': Joi.number().required(),
-            'item': Joi.object({
+            'product_ref': Joi.object({
                 '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
-            }).required()
+            }).required(),
         })
     },
     "session": {
@@ -140,9 +151,33 @@ const StoreDef = {
     }
 }
 
-// Joi schema formatted as a 'projection' for find operations
-const StoreProjections = Object.keys(StoreDef).filter(k => StoreDef[k].schema !== undefined).reduce((ac, c) => ({ ...ac, [c]: [...StoreDef[c].schema._ids._byKey.keys()].reduce((ac, a) => ({ ...ac, [a]: 1 }), {}) }), {})
+// Joi schema formatted as a Mongo 'projection' paramters for find operations                                                                               
+const StoreProjections =
+    Object.keys(StoreDef).filter(k => StoreDef[k].schema !== undefined).reduce((ac, c) => ({ ...ac, [c]: Object.keys(StoreDef[c].schema.describe().keys).reduce((ac, a) => ({ ...ac, [a.endsWith('_ref') ? `${a.slice(0, -4)}_id` : a]: 1 }), {}) }), {})
 
+
+interface DBTOWEB_LOOKUPS {
+    [key: string]: LOOKUPDEF;
+}
+interface LOOKUPDEF {
+    store: string;
+    records: any[];
+}
+// Convert mongodb document format to the format to be sent to the web
+const dbToWeb = (dbdoc: any, store: string, lookups?: DBTOWEB_LOOKUPS): any => {
+    const storeKeys = Object.keys(StoreDef[store].schema.describe().keys)
+    return storeKeys.reduce((acc, webCol) => {
+        const [dbfield, lookup] = webCol.endsWith('_ref') ? [`${webCol.slice(0, -4)}_id`, true] : [webCol, false]
+        if (dbdoc && dbdoc.hasOwnProperty(dbfield)) {
+            if (lookup) {
+                return { ...acc, [webCol]: { _id: dbdoc[dbfield].toHexString(), ...(lookups && lookups[webCol] && dbToWeb(lookups[webCol].records.find(r => r._id.equals(dbdoc[dbfield])), lookups[webCol].store) as object) } }
+            }
+            return { ...acc, [webCol]: dbdoc[dbfield] }
+        }
+        return acc
+    }
+        , dbdoc && dbdoc.hasOwnProperty('_id') ? { _id: dbdoc._id.toHexString() } : {})
+}
 
 
 
@@ -153,9 +188,12 @@ const FetchOperation = {
         if (!ctx.tenentKey) throw `Requires init`
         const cart = await ctx.db.collection(StoreDef["orders"].collection).findOne({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { projection: StoreProjections["orders"] })
         if (cart && cart.items) {
-            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.item._id))] }, partition_key: ctx.tenentKey }, { projection: StoreProjections["products"] }).toArray()
-            const ref_products_map = ref_products.reduce((a, c) => Object.assign({}, a, { [String(c._id)]: c }), null)
-            cart.items = cart.items.map(i => Object.assign(i, { item: ref_products_map[String(i.item._id)] || { _id: i.item._id, _error: 'missing item' } }))
+            const ref_products = await ctx.db.collection(StoreDef["products"].collection).find({ _id: { $in: [...new Set(cart.items.map(m => m.product_id))] }, partition_key: ctx.tenentKey }, { projection: StoreProjections["products"] }).toArray()
+            //const ref_products_map = ref_products.reduce((a, c) => { return { ...a, [c._id.toHexString()]: c } }, {})
+
+
+            cart.items = cart.items.map(dbdoc => dbToWeb(dbdoc, 'order_line', { ['product_ref']: { store: 'products', records: ref_products } } as DBTOWEB_LOOKUPS))
+            //map(i => { return { ...i, product_ref: ref_products_map[String(i.product_id)] || { _id: i.product_id, _error: 'missing item' } } })
         }
         return cart || {}
     },
@@ -188,14 +226,14 @@ const FetchOperation = {
             let response = s.split_types.reduce((obj, a) => { return { ...obj, [a]: [] } }, {})
             // copied from https://github.com/mongodb/node-mongodb-native/blob/e5b762c6d53afa967f24c26a1d1b6c921757c9c9/lib/cursor/cursor.js#L836
             while (await cursor.hasNext()) {
-                const doc = await cursor.next()
-                if (s.split_types.includes(doc.type)) {
-                    response[doc.type].push(doc)
+                const dbdoc = await cursor.next()
+                if (s.split_types.includes(dbdoc.type)) {
+                    response[dbdoc.type].push(dbToWeb(dbdoc, store))
                 }
             }
             return response
         } else {
-            return await cursor.toArray()
+            return await cursor.toArray().map(dbdoc => dbToWeb(dbdoc, store))
         }
     },
     "getOne": async function (ctx, store, query, proj?: any): Promise<any> {
@@ -209,7 +247,7 @@ const FetchOperation = {
             find_query["owner._id"] = ctx.session.auth.sub
         }
 
-        return await ctx.db.collection(s.collection).findOne(query, { projection: proj || StoreProjections[store] })
+        return dbToWeb(await ctx.db.collection(s.collection).findOne(query, { projection: proj || StoreProjections[store] }), store)
     },
     // -------------------------------
     // componentFetch is my GraphQL :)
@@ -227,7 +265,7 @@ const FetchOperation = {
                 if (componentFetch.urlidField === "recordid") {
                     query['_id'] = ObjectID(urlid)
                 } else {
-                    query[componentFetch.urlidField] = urlid
+                    query[componentFetch.urlidField] = ObjectID(urlid)
                 }
             }
             if (componentFetch.query) {
@@ -250,7 +288,7 @@ const FetchOperation = {
                         if (!refstore.lookup_field) {
                             fetch_promises.push(FetchOperation.get(ctx, refstore.store))
                         } else {
-                            fetch_promises.push(FetchOperation.get(ctx, refstore.store, { _id: ObjectID(refstore.lookup_field === "urlidField" ? urlid : result.data[refstore.lookup_field]) }))
+                            fetch_promises.push(FetchOperation.get(ctx, refstore.store, { _id: ObjectID(refstore.lookup_field === "urlidField" ? urlid : ObjectId(result.data[refstore.lookup_field]._id)) }))
                         }
                     }
                 }
@@ -726,7 +764,7 @@ const api = new Router({ prefix: '/api' })
     })
     .get('/onhand/:sku', async function (ctx, next) {
         if (ctx.orderState) {
-            ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.productId === ctx.params.sku) || { qty: 0 }
+            ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.product === ctx.params.sku) || { qty: 0 }
         } else {
             ctx.throw(400, `/onhand : "orderState"  not initialised`)
         }
@@ -886,8 +924,8 @@ const api = new Router({ prefix: '/api' })
                 const catmap = new Map()
                 const newcats = Category.map(function (c) {
                     console.log(`/createtenent: Processing catalog ${c.heading}`)
-                    const old_id = c._id, new_id = ObjectID().toHexString()
-                    const newc = { ...c, _id: ObjectID(new_id), partition_key: new_tenent.insertedId, creation: Date.now() }
+                    const old_id = c._id, new_id = ObjectID()//.toHexString()
+                    const newc = { ...c, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (c.image && c.image.pathname) {
                         newc.image = imagemap.get(c.image.pathname)
                         if (!newc.image) {
@@ -903,12 +941,12 @@ const api = new Router({ prefix: '/api' })
 
                 const newproducts = Product.map(function (p) {
                     console.log(`/createtenent: Processing product ${p.heading}`)
-                    const old_id = p._id, new_id = ObjectID().toHexString()
-                    const newp = { ...p, _id: ObjectID(new_id), partition_key: new_tenent.insertedId, creation: Date.now() }
-                    if (p.category) {
-                        newp.category = catmap.get(p.category)
-                        if (!newp.category) {
-                            console.error(`/createtenent: Cannot find category ${p.category}`)
+                    const old_id = p._id, new_id = ObjectID()//.toHexString()
+                    const newp = { ...p, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
+                    if (p.category_id) {
+                        newp.category_id = catmap.get(p.category_id)
+                        if (!newp.category_id) {
+                            console.error(`/createtenent: Cannot find category ${p.category_id}`)
                         }
                     }
                     if (p.image && p.image.pathname) {
@@ -929,8 +967,8 @@ const api = new Router({ prefix: '/api' })
                             _ts: new Timestamp(), // Empty timestamp will be replaced by the server to the current server time
                             partition_key: new_tenent.insertedId,
                             status: 'Required',
-                            productId: p._id,
-                            categoryId: p.category,
+                            product_id: p._id,
+                            category_id: p.category_id,
                             warehouse: 'EMEA',
                             qty: 10
                         }
@@ -945,7 +983,7 @@ const api = new Router({ prefix: '/api' })
 
 
         } catch (e) {
-            console.log(`/createtenent: ERROR ${JSON.stringify(e)}`)
+            console.error(`/createtenent: ERROR ${e} ${JSON.stringify(e)}`)
             ctx.throw(400, e)
             await next()
         }

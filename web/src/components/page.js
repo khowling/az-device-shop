@@ -40,26 +40,20 @@ export function Nav({ tenent, auth, cartCount }) {
   function dismissPanel() {
     setCartOpen(false)
   }
-  /*
-    if (cartOpen && cartCount === 0) {
-      dismissPanel()
-    }
-  */
-  if (!tenent) {
-    //return <Redirect route='/init' />
-    return null
-  } else return (
+
+  return (
     <nav className="m-navigation-bar" role="menubar">
 
       <div className="c-navigation-menu" style={{ width: "100%" }}>
 
-        <Link className="navbar-brand no-outline" style={{ "display": "inline-block", "left": "5%", "verticalAlign": "middle", "marginTop": "0px" }}>
-          <MyImage image={tenent.image} height="33px" />
-          { /* <img src="https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png" alt="Microsoft" height="23" /> */}
-        </Link>
+        {tenent && tenent.image &&
+          <Link className="navbar-brand no-outline" style={{ "display": "inline-block", "left": "5%", "verticalAlign": "middle", "marginTop": "0px" }}>
+            <MyImage image={tenent.image} height="33px" />
+            { /* <img src="https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png" alt="Microsoft" height="23" /> */}
+          </Link>
+        }
 
-
-        <Text nowrap variant="xLarge" className={titleClass} >{tenent.name}</Text>
+        <Text nowrap variant="xLarge" className={titleClass} >{tenent ? tenent.name : 'no tenent'}</Text>
 
         <form className="c-search" autoComplete="off" name="form1" target="_self" style={{ display: "inline-block", left: "5%", minWidth: "350px", horizontalAlign: "middle", verticalAlign: "middle", marginTop: "0" }}>
           <input aria-label="Enter your search" type="search" name="search-field" placeholder="Search *TBC*" />

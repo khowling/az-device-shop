@@ -2,12 +2,9 @@ import React from 'react'
 import { pipeToNodeWritable } from 'react-dom/server'
 import { RenderContext, TenentContext } from './GlobalContexts'
 import { App, AppRouteCfg } from './App'
+import Html from './Html'
 import { pathToRoute } from './components/router'
 import { Stylesheet, InjectionMode, resetIds } from '@fluentui/react';
-
-import { initializeIcons } from '@fluentui/font-icons-mdl2';
-initializeIcons();
-
 
 // Do this in file scope to initialize the stylesheet before Fluent UI React components are imported.
 const stylesheet = Stylesheet.getInstance();
@@ -58,7 +55,9 @@ async function ssrRender(ctx, startURL, renderDataPromise) {
         const { startWriting, abort } = pipeToNodeWritable(
             <TenentContext.Provider value={ctx.tenent}>
                 <RenderContext.Provider value={createRenderData(ctx, { ssrContext: "server", reqUrl }, renderDataPromise)}>
-                    <App hydrate_tenent={ctx.tenent} hydrate_data={{ ssrContext: "hydrate", reqUrl, ...(renderDataPromise && { serverInitialData: await renderDataPromise }) }} startUrl={startURL} />
+                    <Html title="React18" hydrate_tenent={ctx.tenent} hydrate_data={{ ssrContext: "hydrate", reqUrl, ...(renderDataPromise && { serverInitialData: await renderDataPromise }) }} >
+                        <App startUrl={startURL} />
+                    </Html>
                 </RenderContext.Provider>
             </TenentContext.Provider>,
             ctx.res,

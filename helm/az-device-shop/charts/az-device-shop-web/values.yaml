@@ -44,6 +44,7 @@ ingress:
   enabled: true
   annotations:
     kubernetes.io/ingress.class: contour
+    projectcontour.io/websocket-routes: "/ws/factory/,/ws/ordering/"
     cert-manager.io/cluster-issuer: letsencrypt-prod
     ingress.kubernetes.io/force-ssl-redirect: "true"
     kubernetes.io/tls-acme: "true"

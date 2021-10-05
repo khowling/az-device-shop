@@ -7,7 +7,7 @@ import { SSRBreadcrumb } from './page'
 
 
 export function Panes({ resource }) {
-
+    console.log('Panes')
     const { status, result } = resource.read()
 
     if (status !== 'success') return null; else {
@@ -92,6 +92,7 @@ export function Panes({ resource }) {
 
 export function Panes3x({ resource }) {
 
+    console.log('Panes3x')
     const { status, result } = resource.read()
 
 

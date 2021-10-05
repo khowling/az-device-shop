@@ -7,19 +7,28 @@ import React from 'react'
 
 // IMPORTANT: The defaultValue argument is only used when a component does not have a matching Provider above it in the tree
 
-// renderContext = { 
-//    ssrContext: "server"
-//    serverInitialData: (from App.js => AppRouteCfg)
-//    session = {
-//        tenent: 
-//        auth: { userid: , given_name:  }
-//        cart_items: numbrt
-//    }
 
-export const RenderContext = React.createContext(null)
+
+// Tentnet State
+// === ctx.tenent
+//  null if development server (npm start)
 export const TenentContext = React.createContext(null)
+
+// RenderContext 
+//  set to a Suspense object, for SSR phases: initial render and hydrate
+//    read(): {
+//       ssrContext:
+//       serverInitialData: 
+//       reqUrl: 
+//    }
+//  null if development server (npm start)
+export const RenderContext = React.createContext(null)
+
+
+
 
 export const AuthContext = React.createContext()
 
 export const CartCountContext = React.createContext()
+
 export const CartOpenContext = React.createContext()

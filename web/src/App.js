@@ -1,5 +1,4 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import Html from './Html'
 import { Router } from './components/router'
 import { Nav } from './components/page'
 import { Panes, Panes3x } from './components/store'
@@ -14,6 +13,8 @@ import { ThemeProvider } from '@fluentui/react';
 import { AuthContext, TenentContext, CartCountContext, CartOpenContext, RenderContext } from './GlobalContexts'
 import { _fetchit } from './utils/fetch'
 
+import { initializeIcons } from '@fluentui/font-icons-mdl2';
+initializeIcons();
 
 
 
@@ -31,7 +32,7 @@ export const AppRouteCfg = {
     componentFetch: {
       operation: "get",
       store: "products",
-      urlidField: "category",
+      urlidField: "category_id",
       query: { type: "Product" },
       refstores: [{ store: "products", lookup_field: "urlidField" }]
     }
@@ -42,7 +43,7 @@ export const AppRouteCfg = {
       operation: "getOne",
       store: "products",
       urlidField: "recordid",
-      refstores: [{ store: "products", lookup_field: "category" }]
+      refstores: [{ store: "products", lookup_field: "category_ref" }]
     }
   },
   "/mycart": {
@@ -150,47 +151,44 @@ export const SessionProviderWrapper = ({ children }) => {
   );
 };
 
-export function App({ startUrl, hydrate_data, hydrate_tenent }) {
+export function App({ startUrl }) {
   console.log(`App: startUrl=${startUrl.pathname}`)
 
   return (
-    <SessionProviderWrapper>
-      <Html title="React18" hydrate_data={hydrate_data} hydrate_tenent={hydrate_tenent}>
-        <ThemeProvider>
-          <main id="mainContent" data-grid="container">
-            <TenentContext.Consumer>
-              {tenent => {
-                console.log(`tenent=${tenent}`); return (
-                  <AuthContext.Consumer>
-                    {auth => {
-                      console.log(`auth=${auth}`); return (
-                        <CartCountContext.Consumer>
-                          {cartCountContext => {
-                            console.log(`cartCountContext=${cartCountContext[0]}`); return (
-                              <Nav tenent={tenent} auth={auth} cartCount={cartCountContext[0]} />
-                            )
-                          }}
-                        </CartCountContext.Consumer>
-                      )
-                    }}
-                  </AuthContext.Consumer>
-                )
+    <ThemeProvider>
+      <SessionProviderWrapper>
+        <main id="mainContent" data-grid="container">
+          <TenentContext.Consumer>
+            {tenent => {
+              console.log(`tenent=${tenent}`); return (
+                <AuthContext.Consumer>
+                  {auth => {
+                    console.log(`auth=${auth}`); return (
+                      <CartCountContext.Consumer>
+                        {cartCountContext => {
+                          console.log(`cartCountContext=${cartCountContext[0]}`); return (
+                            <Nav tenent={tenent} auth={auth} cartCount={cartCountContext[0]} />
+                          )
+                        }}
+                      </CartCountContext.Consumer>
+                    )
+                  }}
+                </AuthContext.Consumer>
+              )
+            }}
+          </TenentContext.Consumer>
+
+          <Suspense fallback={<div>wait route</div>}>
+            <RenderContext.Consumer>
+              {renderContext => {
+                const { ssrContext, reqUrl, serverInitialData } = renderContext ? renderContext.read() : {}
+                return <Router ssrContext={ssrContext} reqUrl={reqUrl} serverInitialData={serverInitialData} startUrl={startUrl} cfg={AppRouteCfg} />
               }}
-            </TenentContext.Consumer>
+            </RenderContext.Consumer>
+          </Suspense>
 
-            <Suspense fallback={<div>wait route</div>}>
-              <RenderContext.Consumer>
-                {renderContext => {
-                  const { ssrContext, reqUrl, serverInitialData } = renderContext.read()
-                  return <Router ssrContext={ssrContext} reqUrl={reqUrl} serverInitialData={serverInitialData} startUrl={startUrl} cfg={AppRouteCfg} />
-                }}
-              </RenderContext.Consumer>
-            </Suspense>
-
-          </main>
-        </ThemeProvider>
-      </Html>
-    </SessionProviderWrapper>
-
+        </main>
+      </SessionProviderWrapper>
+    </ThemeProvider>
   )
 }
