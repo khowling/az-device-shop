@@ -5,7 +5,7 @@
 Using React 18 ALPHA, to allow ```<Suspense>``` Support for SSR [docs](https://github.com/reactwg/react-18/discussions/37)
 
 ```
-npm install react@alpha react-dom@alpha
+npm install react@alpha react-dom@alpha react-scripts@canary
 ```
 
 [Installing React 18 Alpha](https://github.com/reactwg/react-18/discussions/9)

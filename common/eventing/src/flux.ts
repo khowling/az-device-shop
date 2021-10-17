@@ -1,5 +1,6 @@
-const assert = require('assert')
-const { Timestamp } = require('mongodb')
+import assert from 'assert'
+import mongodb  from 'mongodb'
+const { Timestamp } = mongodb
 
 export interface StateStore {
     name: string;
@@ -205,7 +206,7 @@ export interface StateManagerInterface {
 }
 
 import { EventEmitter } from 'events'
-import { EventStoreConnection } from './eventStoreConnection'
+import { EventStoreConnection } from './eventStoreConnection.js'
 
 export class StateManager extends EventEmitter implements StateManagerInterface {
 
@@ -311,7 +312,7 @@ export class StateManager extends EventEmitter implements StateManagerInterface 
             // persist events
             const msg = {
                 sequence: cs.sequence + 1,
-                _ts: new Timestamp(), // Emptry timestamp will be replaced by the server to the current server time
+                _ts: new Timestamp(0,0), // Emptry timestamp will be replaced by the server to the current server time
                 partition_key: cs.tenentKey,
                 [this.name]: changes
             }

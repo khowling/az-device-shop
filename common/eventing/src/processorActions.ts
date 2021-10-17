@@ -1,9 +1,9 @@
 
 
 
-import { EventStoreConnection } from './eventStoreConnection'
-import { Processor } from './processor'
-import { StateManagerInterface } from './flux'
+import { EventStoreConnection } from './eventStoreConnection.js'
+import { Processor } from './processor.js'
+import { StateManagerInterface } from './flux.js'
 
 // inventory_spec & order_spec, nether have 'sequence' fields, so order by '_ts' Timestamp
 // TODO : need 'update' operation, to detect orders that change to status : 30 :(

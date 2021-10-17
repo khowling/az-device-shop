@@ -1,9 +1,14 @@
 
 'use strict';
 
-const path = require('path');
-const rimraf = require('rimraf');
-const webpack = require('webpack');
+import { fileURLToPath } from 'url';
+import path, { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+import rimraf from 'rimraf'
+import webpack from 'webpack'
 
 const isProduction = process.env.NODE_ENV === 'production';
 rimraf.sync(path.resolve(__dirname, '../build'));

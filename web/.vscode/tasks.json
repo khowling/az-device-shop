@@ -1,0 +1,26 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build_server",
+            "dependsOn": [
+                "build_lib",
+                "tsc: build - tsconfig.json",
+                "build_assets_dev"
+            ]
+        },
+        {
+            "label": "build_lib",
+            "type": "npm",
+            "script": "build_lib"
+        },
+        {
+            "label": "build_assets_dev",
+            "type": "npm",
+            "script": "build_assets_dev"
+        }
+        
+    ]
+  }

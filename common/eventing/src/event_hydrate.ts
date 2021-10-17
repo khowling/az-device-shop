@@ -1,8 +1,8 @@
-const assert = require('assert')
-const fs = require('fs')
+import  assert from 'assert'
+import fs from 'fs'
 
-import { StateStore } from './flux'
-import { EventStoreConnection } from './eventStoreConnection'
+import { StateStore } from './flux.js'
+import { EventStoreConnection } from './eventStoreConnection.js'
 
 export async function restoreState(sc: EventStoreConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
 
@@ -68,7 +68,7 @@ async function restoreLatestSnapshot(cs: EventStoreConnection, chkdir: string, s
             const [filename, year, month, day, hour, minute, second, fileseq] = entry_match
 
             if (latestfile.fileseq === null || latestfile.fileseq < fileseq) {
-                latestfile = { fileseq, filedate: new Date(year, month - 1, day, hour, minute, second), filename }
+                latestfile = { fileseq, filedate: new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second)), filename }
             }
         }
     }
@@ -76,7 +76,7 @@ async function restoreLatestSnapshot(cs: EventStoreConnection, chkdir: string, s
     if (latestfile.filename) {
         console.log(`Loading checkpoint seq#=${latestfile.fileseq} from=${latestfile.filename}`)
         //const { state_snapshot, ...rest } = 
-        const body = await JSON.parse(fs.promises.readFile(dir + '/' + latestfile.filename, 'UTF-8'))
+        const body =  JSON.parse(await fs.promises.readFile(dir + '/' + latestfile.filename, {encoding:'utf-8'}))
 
         const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
 

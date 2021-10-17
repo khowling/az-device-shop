@@ -1,9 +1,10 @@
-import { Atomic, AtomicInterface } from './atomic'
-const { MongoClient, ObjectID } = require('mongodb')
+import { Atomic, AtomicInterface } from './atomic.js'
+import mongodb from 'mongodb'
+const { MongoClient, ObjectID } = mongodb
 import { EventEmitter } from 'events'
 
 interface Tenent {
-    _id: typeof ObjectID;
+    _id: any; //typeof ObjectID;
     email: string;
 }
 export class EventStoreConnection extends EventEmitter {
@@ -77,7 +78,7 @@ export class EventStoreConnection extends EventEmitter {
     }
 
     async init() {
-        const client = await MongoClient.connect(this.murl, { useNewUrlParser: true, useUnifiedTopology: true })
+        const client = await MongoClient.connect(this.murl)
         return await this.initFromDB(client.db(), null)
     }
 }

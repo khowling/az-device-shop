@@ -1,4 +1,4 @@
-const assert = require('assert')
+import assert from 'assert'
 
 
 export interface OrderObject {
@@ -31,9 +31,9 @@ export enum OrderStage {
 }
 
 
-import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../common/flux'
-import { EventStoreConnection } from '../common/eventStoreConnection'
-export { StateUpdates } from '../common/flux'
+import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '@az-device-shop/eventing/state'
+import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
+export { StateUpdates } from '@az-device-shop/eventing/state'
 
 // Mutate state in a Consistant, Safe, recorded mannore
 export interface OrderAction {

@@ -1,0 +1,59 @@
+{
+  "name": "@az-device-shop/eventing",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "exports": {
+    "./store-connection": {
+      "types": "./lib/eventStoreConnection.d.ts",
+      "import": "./lib/eventStoreConnection.js"
+    },
+    "./processor": {
+      "types": "./lib/processor.d.ts",
+      "import": "./lib/processor.js"
+    },
+    "./processor-actions": {
+      "types": "./lib/processorActions.d.ts",
+      "import": "./lib/processorActions.js"
+    },
+    "./state": {
+      "types": "./lib/flux.d.ts",
+      "import": "./lib/flux.js"
+    },
+    "./state-restore": {
+      "types": "./lib/event_hydrate.d.ts",
+      "import": "./lib/event_hydrate.js"
+    },
+    "./webserver": {
+      "types": "./lib/ServiceWebServer.d.ts",
+      "import": "./lib/ServiceWebServer.js"
+    }
+  },
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "build": "npx tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khowling/az-device-shop.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/khowling/az-device-shop/issues"
+  },
+  "homepage": "https://github.com/khowling/az-device-shop#readme",
+  "description": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html",
+  "devDependencies": {
+    "@types/ws": "^8.2.0",
+    "typescript": "^4.5.0-beta"
+  },
+  "dependencies": {
+    "mongodb": "^4.1.3",
+    "ws": "^8.2.3"
+  },
+  "main": "index.js"
+}

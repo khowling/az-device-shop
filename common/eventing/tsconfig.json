@@ -2,9 +2,9 @@
   "compilerOptions": {
     "target": "es5",
     "module": "nodenext",
-    "outDir": "out",
+    "forceConsistentCasingInFileNames": true,
     "declaration": true,
-    "sourceMap": true,
-    "downlevelIteration": true
+    "noImplicitAny": false,
+    "outDir": "lib"
   }
 }

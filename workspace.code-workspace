@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "web"
+		},
+		{
+			"path": "ordering"
+		},
+		{
+			"path": "factory"
+		},
+		{
+			"path": "common/eventing"
+		}
+	],
+	"settings": {
+		"typescript.tsdk": "ordering/node_modules/typescript/lib"
+	}
+}

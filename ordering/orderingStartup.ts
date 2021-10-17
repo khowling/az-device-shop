@@ -1,6 +1,7 @@
-import { ObjectId } from 'mongodb'
-import { Processor, ProcessorOptions } from '../common/processor'
-import { OrderActionType, OrderStateManager, OrderStage } from './orderingState'
+import mongodb from 'mongodb';
+const { ObjectId } = mongodb;
+import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
+import { OrderActionType, OrderStateManager, OrderStage } from './orderingState.js'
 
 
 async function validateOrder({ connection, trigger, flow_id }, next) {
@@ -36,10 +37,10 @@ async function complete({ flow_id, spec }, next) {
 }
 
 // ---------------------------------------------------------------------------------------
-import ServiceWebServer from '../common/ServiceWebServer'
-import { EventStoreConnection } from '../common/eventStoreConnection'
-import { startCheckpointing, restoreState } from '../common/event_hydrate'
-import { watchDispatchWithSequence, watchProcessorTriggerWithTimeStamp } from '../common/processorActions'
+import ServiceWebServer from "@az-device-shop/eventing/webserver"
+import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
+import { startCheckpointing, restoreState } from "@az-device-shop/eventing/state-restore"
+import { watchDispatchWithSequence, watchProcessorTriggerWithTimeStamp } from "@az-device-shop/eventing/processor-actions"
 
 async function orderingStartup(cs: EventStoreConnection) {
 

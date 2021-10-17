@@ -55,6 +55,9 @@ No-SQL operations are not transational, and any operations can potentially be th
 Items in a container are divided into distinct subsets called __logical partitions__ based on the value of a partition key, 1 logical partition per distinct partition key value.  __partition keys__ are immutable  
 The high volume data in the sotution is transational or telemetry data, each is assosiated with a user, and potentally a device.  The partition key needs to be related to the hierarchy of the user, or the device for maxiumu data distribution
 
+## Development Requirements
+npm version >= 8 (uses mono-repo workspaces dependencies)
+nodejs >= 14; typescript >= 4.5 (uses ECMAScript Module system)
 
 
 ## Detailed Deployment Instructions

@@ -1,5 +1,5 @@
-const crypto = require('crypto')
-import fetch from './server_fetch'
+import * as crypto from 'crypto'
+import fetch from './server_fetch.js'
 
 export function createServiceSAS(key, storageacc, container, minutes, file?) {
 

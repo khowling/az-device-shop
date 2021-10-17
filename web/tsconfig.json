@@ -1,13 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es2019",
-    "module": "commonjs",
+    "target": "es5",
+    "module": "nodenext",
     "outDir": "out",
     "sourceMap": true,
     "downlevelIteration": true,
     "forceConsistentCasingInFileNames": true
-  },
-  "types": [
-    "node"
-  ]
+  }
 }

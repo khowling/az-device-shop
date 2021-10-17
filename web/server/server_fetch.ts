@@ -1,5 +1,5 @@
-const https = require('https')
-const http = require('http')
+import https from 'https'
+import http from 'http'
 
 export default function (url: string, method = 'GET', headers = {}, body?): Promise<any> {
 
@@ -21,11 +21,9 @@ export default function (url: string, method = 'GET', headers = {}, body?): Prom
         }
     }
 
-
-    let http_s = https
-    if (url.startsWith('http://')) http_s = http
     return new Promise(function (resolve, reject) {
-        const req = http_s.request(url, opts, (res) => {
+
+        const req_callback = (res) => {
 
             if (res.statusCode !== 200 && res.statusCode !== 201) {
                 let error = new Error(`Request Failed: Status Code: ${res.statusCode}`)
@@ -73,10 +71,20 @@ export default function (url: string, method = 'GET', headers = {}, body?): Prom
                     }
                 })
             }
-        }).on('error', (e) => {
-            console.error(`server_fetch: ${e.message}`)
-            reject(e.message)
-        })
+        }
+
+        let req;
+        if (url.startsWith('http://')) {
+            req = http.request(url, opts, req_callback).on('error', (e) => {
+                console.error(`server_fetch: ${e.message}`)
+                reject(e.message)
+            })
+        } else {
+            req = https.request(url, opts, req_callback).on('error', (e) => {
+                console.error(`server_fetch: ${e.message}`)
+                reject(e.message)
+            })
+        }
 
         if (opts.method === 'POST' || opts.method === 'PUT') {
             // Write data to request body

@@ -1,5 +1,6 @@
-const WebSocket = require('ws')
-const http = require('http')
+ 
+import  WebSocket, { WebSocketServer } from "ws"
+import  http from "http"
 import { EventEmitter } from 'events'
 
 type WS_ServerClientType = Record<string, any>;
@@ -7,8 +8,8 @@ type WS_ServerClientType = Record<string, any>;
 export default class ServiceWebServer extends EventEmitter {
 
     //private context
-    private httpServer
-    private port
+    private httpServer: http.Server
+    private port: string
     private routes
 
     constructor(options) {
@@ -50,8 +51,7 @@ export default class ServiceWebServer extends EventEmitter {
     private ws_server_clients: WS_ServerClientType
 
     createWebSocketServer() {
-        const wss = new WebSocket.Server({
-            perMessageDeflate: false,
+        const wss = new WebSocketServer ({
             server: this.httpServer
         });
 

@@ -1,21 +1,19 @@
-const path = require('path')
-const fs = require('fs')
+import path from 'path'
+import fs from 'fs'
 
 // Web require
-const
-    Koa = require('koa'),
-    cors = require('@koa/cors'),
-    Router = require('koa-router'),
-    bodyParser = require('koa-bodyparser'),
+import Koa from 'koa'
+import cors from '@koa/cors'
+import Router from 'koa-router'
+import bodyParser from 'koa-bodyparser'
     // Simple session middleware for Koa. Defaults to cookie-based sessions and supports external stores
-    session = require('koa-session'),
-    Joi = require('joi')
+import session from 'koa-session'
+import Joi from 'joi'
 
 // Auth & SAS require
-const
-    jwkToPem = require('jwk-to-pem'),
-    jws = require('jws'),
-    crypto = require('crypto')
+import jwkToPem from 'jwk-to-pem'
+import jws from 'jws'
+import crypto from 'crypto'
 
 
 const app_host_url = process.env.APP_HOST_URL
@@ -27,9 +25,10 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 
 
 // Mongo require
-const { MongoClient, Timestamp, ObjectID, ObjectId } = require('mongodb'),
-    MongoURL = process.env.MONGO_DB,
-    USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
+import mongodb from 'mongodb'
+const { MongoClient, Timestamp, ObjectId } = mongodb
+const MongoURL = process.env.MONGO_DB
+const USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
 
 
 interface StoreDefinitionList {
@@ -69,7 +68,7 @@ const StoreDef: StoreDefinitionList = {
             'type': Joi.string().valid('Product', 'Category').required(),
             'heading': Joi.string().trim().required(),
             'category_ref': Joi.object({
-                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectId").required()
             }).when('type', {
                 is: "Product",
                 then: Joi.required()
@@ -97,10 +96,10 @@ const StoreDef: StoreDefinitionList = {
         schema: Joi.object({
             'status': Joi.string().valid('Draft', 'Required', 'InFactory', 'Cancel', 'Available').required(),
             'product_ref': Joi.object({
-                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectId").required()
             }).required(),
             'category_ref': Joi.object({
-                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectId").required()
             }).required(),
             'warehouse': Joi.string().required(),
             'qty': Joi.number().required()
@@ -139,7 +138,7 @@ const StoreDef: StoreDefinitionList = {
             'qty': Joi.number().required(),
             'recorded_item_price': Joi.number().required(),
             'product_ref': Joi.object({
-                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectID").required()
+                '_id': Joi.string().regex(/^[0-9a-fA-F]{24}$/, "require ObjectId").required()
             }).required(),
         })
     },
@@ -263,9 +262,9 @@ const FetchOperation = {
             if (componentFetch.urlidField) {
                 if (!urlid) throw new Error("componentFetch requires urlid")
                 if (componentFetch.urlidField === "recordid") {
-                    query['_id'] = ObjectID(urlid)
+                    query['_id'] = new ObjectId(urlid)
                 } else {
-                    query[componentFetch.urlidField] = ObjectID(urlid)
+                    query[componentFetch.urlidField] = new ObjectId(urlid)
                 }
             }
             if (componentFetch.query) {
@@ -288,7 +287,7 @@ const FetchOperation = {
                         if (!refstore.lookup_field) {
                             fetch_promises.push(FetchOperation.get(ctx, refstore.store))
                         } else {
-                            fetch_promises.push(FetchOperation.get(ctx, refstore.store, { _id: ObjectID(refstore.lookup_field === "urlidField" ? urlid : ObjectId(result.data[refstore.lookup_field]._id)) }))
+                            fetch_promises.push(FetchOperation.get(ctx, refstore.store, { _id: new ObjectId(refstore.lookup_field === "urlidField" ? urlid : new ObjectId(result.data[refstore.lookup_field]._id)) }))
                         }
                     }
                 }
@@ -305,7 +304,7 @@ async function dbInit() {
     //const murl = new URL(MongoURL as string)
     //console.log(`connecting with ${murl.toString()}`)
     console.log(`connecting with ${MongoURL}`)
-    const client = await MongoClient.connect(MongoURL, { useNewUrlParser: true, useUnifiedTopology: true })
+    const client = await MongoClient.connect(MongoURL)
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     const _db = client.db()
     // If Cosmos, need to pre-create the collections, becuse it enforces a partitioning strategy.
@@ -374,7 +373,7 @@ async function serve_static(ctx, next) {
 
 
 
-import { order_state_startup } from './orderingFollower'
+import { order_state_startup } from './orderingFollower.js'
 const app = new Koa();
 
 async function init() {
@@ -426,7 +425,7 @@ async function init() {
         { fullDocument: "updateLookup" }
     ).on('change', async change => {
         console.log(`TENENT Change -  operationType=${change.operationType} key=${JSON.stringify(change.documentKey)}`)
-        if (!change.documentKey._id.equals(app.context.tenentKey)) {
+        if (!change.documentKey.equals(app.context.tenentKey)) {
             console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
             process.exit()
         }
@@ -457,7 +456,7 @@ async function init() {
 
 
     // Init order status (dont await, incase no tenent! )
-    order_state_startup(app.context).then(val => {
+    order_state_startup({db: app.context.db, tenent: app.context.tenent }).then(val => {
         app.context.orderState = val
     })
 
@@ -479,17 +478,17 @@ async function getSession(ctx) {
 
 
 // ----------------------------------------------------------- Server SSR
-const stringReplaceStream = require('string-replace-stream')
-const { Readable } = require('stream')
-import fetch from './server_fetch'
-import { AzBlobWritable, createServiceSAS } from './AzBlobWritable'
+import stringReplaceStream from 'string-replace-stream'
+import Readable from 'stream'
+import fetch from './server_fetch.js'
+import { AzBlobWritable, createServiceSAS } from './AzBlobWritable.js'
 
 // all requires after this will use babel transpile, using 'babel.config.json'
 /*
 require("@babel/register")()
 const server_ssr = require('../../../../src/ssr_server')
 */
-const server_ssr = require('../../../../lib/ssr_server')
+import server_ssr from '../../../lib/ssr_server.js'
 
 // ssr middleware (ensure this this the LAST middleware to be used)
 async function ssr(ctx, next) {
@@ -648,7 +647,7 @@ function LoggedIn(ctx, next) {
 
 function getFileSaS(store, filename) {
     const extension = encodeURIComponent(filename.substring(1 + filename.lastIndexOf(".")))
-    const pathname = `${store}/${(new ObjectID()).toString()}.${extension}`
+    const pathname = `${store}/${(new ObjectId()).toString()}.${extension}`
     const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10, pathname)
     return Object.assign({ pathname, extension }, retsas)
 }
@@ -662,6 +661,43 @@ async function ensureInit(ctx, next) {
 }
 
 
+async function writeimages(new_tenent, images: any) {
+    let imagemap = new Map()
+    for (const pathname of Object.keys(images)) {
+
+        const b64 = Buffer.from(images[pathname], 'base64'),
+            bstr = b64.toString('utf-8'),
+            file_stream = Readable.from(b64),
+            new_blob_info = getFileSaS(new_tenent.insertedId.toHexString(), pathname),
+            blobStream = new AzBlobWritable(new_blob_info)
+
+        console.log(`/createtenent: Importing ${pathname} (${bstr.length})`)
+
+        await new Promise(function (resolve, reject) {
+            let error
+            file_stream.pipe(blobStream)
+            blobStream.on('finish', () => {
+                console.log(`/import 'blobStream finish'`)
+                if (!error) {
+                    resolve("")
+                } else {
+                    reject(`error importing blob : ${error}`)
+                }
+            })
+
+            blobStream.on('error', (e) => {
+                console.error(`/createtenent: blobStream error: ${e}`)
+                reject(`/createtenent: blobStream error : ${e}`)
+            })
+
+        })
+        imagemap.set(pathname, { pathname: new_blob_info.pathname, container_url: new_blob_info.container_url })
+
+    }
+    return imagemap
+}
+
+
 // API
 const api = new Router({ prefix: '/api' })
     .get('/session_status', async function (ctx, next) {
@@ -672,11 +708,11 @@ const api = new Router({ prefix: '/api' })
         console.log(`add product to cart ${ctx.session && JSON.stringify(ctx.session)}`)
         const { value, error } = StoreDef["order_line"].schema.validate(ctx.request.body, { allowUnknown: true })
         if (!error) {
-            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: ObjectId(value.item._id) }, { projection: { "price": 1, "active": 1 } })
+            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: new ObjectId(value.item._id) }, { projection: { "price": 1, "active": 1 } })
             ctx.assert(ref_product, 400, "Cannot find product")
             ctx.assert(ref_product.price === value.recorded_item_price, 400, "Incorrect Price, please refresh your page")
             const line_total = ref_product.price * 1
-            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $inc: { items_count: 1 }, $push: { items: { _id: ObjectID(), item: { _id: ObjectID(value.item._id) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
+            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $inc: { items_count: 1 }, $push: { items: { _id: new ObjectId(), item: { _id: new ObjectId(value.item._id) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
 
             ctx.assert(res.ok === 1, 500, `error`)
             ctx.body = { items_count: res.value.items_count }
@@ -688,7 +724,7 @@ const api = new Router({ prefix: '/api' })
     })
     .put('/cartdelete/:itemid', async function (ctx, next) {
         try {
-            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $inc: { items_count: -1 }, $pull: { 'items': { _id: ObjectID(ctx.params.itemid) } } })
+            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $inc: { items_count: -1 }, $pull: { 'items': { _id: new ObjectId(ctx.params.itemid) } } })
             ctx.status = 201;
             await next()
         } catch (e) {
@@ -703,7 +739,7 @@ const api = new Router({ prefix: '/api' })
             try {
                 const { value, error } = Joi.object({ 'shipping': Joi.string().valid('A', 'B').required() }).validate(ctx.request.body, { allowUnknown: true })
 
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $set: { _ts: new Timestamp(), status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $set: { _ts: new Timestamp(0,0), status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
                 ctx.body = { _id: order.value._id }
                 await next()
             } catch (e) {
@@ -751,7 +787,7 @@ const api = new Router({ prefix: '/api' })
         try {
             let query = { partition_key: ctx.tenentKey }
             if (ctx.params.id) {
-                query['_id'] = ObjectID(ctx.params.id)
+                query['_id'] = new ObjectId(ctx.params.id)
                 ctx.body = await FetchOperation.getOne(ctx, ctx.params.store, query)
             } else {
                 query = { ...(ctx.query.q ? JSON.parse(decodeURI(ctx.query.q)) : {}), ...query }// url param q is a mongo find query
@@ -787,9 +823,9 @@ const api = new Router({ prefix: '/api' })
             if (error) throw new Error(`document not valid: ${error}`)
 
             if (_id) {
-                ctx.body = await ctx.db.collection(store.collection).updateOne({ _id: ObjectID(_id), partition_key: ctx.tenentKey }, { $set: value })
+                ctx.body = await ctx.db.collection(store.collection).updateOne({ _id: new ObjectId(_id), partition_key: ctx.tenentKey }, { $set: value })
             } else {
-                ctx.body = await ctx.db.collection(store.collection).insertOne({ ...value, _id: ObjectID(), _ts: new Timestamp(), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenentKey })
+                ctx.body = await ctx.db.collection(store.collection).insertOne({ ...value, _id: new ObjectId(), _ts: new Timestamp(0,0), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenentKey })
             }
             await next()
         } catch (e) {
@@ -802,7 +838,7 @@ const api = new Router({ prefix: '/api' })
 
             if (!store) throw `unknown store: ${ctx.params.store}`
 
-            ctx.body = await ctx.db.collection(store.collection).deleteOne({ _id: ObjectID(ctx.params.id), partition_key: ctx.tenentKey })
+            ctx.body = await ctx.db.collection(store.collection).deleteOne({ _id: new ObjectId(ctx.params.id), partition_key: ctx.tenentKey })
             await next()
         } catch (e) {
             ctx.throw(400, `cannot find ${ctx.params.store + ':' + ctx.params.id}: ${e}`)
@@ -883,48 +919,12 @@ const api = new Router({ prefix: '/api' })
                 const { images, products } = await fetch('https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json')
                 const { Product, Category } = products
 
-                async function writeimages(images: any) {
-                    let imagemap = new Map()
-                    for (const pathname of Object.keys(images)) {
-
-                        const b64 = Buffer.from(images[pathname], 'base64'),
-                            bstr = b64.toString('utf-8'),
-                            file_stream = Readable.from(b64),
-                            new_blob_info = getFileSaS(new_tenent.insertedId.toHexString(), pathname),
-                            blobStream = new AzBlobWritable(new_blob_info)
-
-                        console.log(`/createtenent: Importing ${pathname} (${bstr.length})`)
-
-                        await new Promise(function (resolve, reject) {
-                            let error
-                            file_stream.pipe(blobStream)
-                            blobStream.on('finish', () => {
-                                console.log(`/import 'blobStream finish'`)
-                                if (!error) {
-                                    resolve("")
-                                } else {
-                                    reject(`error importing blob : ${error}`)
-                                }
-                            })
-
-                            blobStream.on('error', (e) => {
-                                console.error(`/createtenent: blobStream error: ${e}`)
-                                reject(`/createtenent: blobStream error : ${e}`)
-                            })
-
-                        })
-                        imagemap.set(pathname, { pathname: new_blob_info.pathname, container_url: new_blob_info.container_url })
-
-                    }
-                    return imagemap
-                }
-
-                const imagemap = await writeimages(images)
+                const imagemap = await writeimages(new_tenent, images)
 
                 const catmap = new Map()
                 const newcats = Category.map(function (c) {
                     console.log(`/createtenent: Processing catalog ${c.heading}`)
-                    const old_id = c._id, new_id = ObjectID()//.toHexString()
+                    const old_id = c._id, new_id = new ObjectId()//.toHexString()
                     const newc = { ...c, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (c.image && c.image.pathname) {
                         newc.image = imagemap.get(c.image.pathname)
@@ -941,7 +941,7 @@ const api = new Router({ prefix: '/api' })
 
                 const newproducts = Product.map(function (p) {
                     console.log(`/createtenent: Processing product ${p.heading}`)
-                    const old_id = p._id, new_id = ObjectID()//.toHexString()
+                    const old_id = p._id, new_id = new ObjectId()//.toHexString()
                     const newp = { ...p, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
                     if (p.category_id) {
                         newp.category_id = catmap.get(p.category_id)
@@ -964,7 +964,7 @@ const api = new Router({ prefix: '/api' })
                 if (ctx.request.body.inventory) {
                     await ctx.db.collection(StoreDef["inventory"].collection).insertMany(newproducts.map(function (p) {
                         return {
-                            _ts: new Timestamp(), // Empty timestamp will be replaced by the server to the current server time
+                            _ts: new Timestamp(0,0), // Empty timestamp will be replaced by the server to the current server time
                             partition_key: new_tenent.insertedId,
                             status: 'Required',
                             product_id: p._id,
