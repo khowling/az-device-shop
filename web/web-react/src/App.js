@@ -1,17 +1,17 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { Router } from './components/router'
-import { Nav } from './components/page'
-import { Panes, Panes3x } from './components/store'
-import { AddToCart, MyCart } from './components/cart'
-import { ManageOrders, Order } from './components/order'
-import { ManageProducts, Product } from './components/product'
-import { StartBusiness } from './components/business'
-import { Inventory } from './components/factorymgr'
-import { OrderMgr } from './components/ordermgr'
+import { Router } from './components/router.js'
+import { Nav } from './components/page.js'
+import { Panes, Panes3x } from './components/store.js'
+import { AddToCart, MyCart } from './components/cart.js'
+import { ManageOrders, Order } from './components/order.js'
+import { ManageProducts, Product } from './components/product.js'
+import { StartBusiness } from './components/business.js'
+import { Inventory } from './components/factorymgr.js'
+import { OrderMgr } from './components/ordermgr.js'
 import { ThemeProvider } from '@fluentui/react';
 
-import { AuthContext, TenentContext, CartCountContext, CartOpenContext, RenderContext } from './GlobalContexts'
-import { _fetchit } from './utils/fetch'
+import { AuthContext, TenentContext, CartCountContext, CartOpenContext, RenderContext } from './GlobalContexts.js'
+import { _fetchit } from './utils/fetch.js'
 
 import { initializeIcons } from '@fluentui/font-icons-mdl2';
 initializeIcons();

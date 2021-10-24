@@ -1,9 +1,9 @@
 import React /*, { useEffect }*/ from 'react';
 import { Link, navTo } from './router.js'
-import { MyImage } from '../utils/common'
+import { MyImage } from '../utils/common.js'
 
 import { Stack } from '@fluentui/react'
-import { SSRBreadcrumb } from './page'
+import { SSRBreadcrumb } from './page.js'
 
 
 export function Panes({ resource }) {

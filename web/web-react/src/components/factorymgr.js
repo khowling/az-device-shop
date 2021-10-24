@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from './router.js'
 
-import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
+import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch.js'
 import { /*DetailsListLayoutMode, SelectionMode, DetailsList,*/ ProgressIndicator, Label, PrimaryButton, DefaultButton, Separator, MessageBar, MessageBarType, Panel, PanelType, Slider, Dropdown, Stack, Text } from '@fluentui/react'
 
 function WorkItem({ resource, dismissPanel, refstores }) {

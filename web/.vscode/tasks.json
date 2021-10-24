@@ -7,19 +7,33 @@
             "label": "build_server",
             "dependsOn": [
                 "build_lib",
-                "tsc: build - tsconfig.json",
+                "compile_ts",
                 "build_assets_dev"
             ]
         },
         {
+            "label": "compile_ts",
+            "type": "npm",
+            "script": "build",
+            "options": {
+                "cwd": "${workspaceFolder}/web-server"
+            }
+        },
+        {
             "label": "build_lib",
             "type": "npm",
-            "script": "build_lib"
+            "script": "build_lib",
+            "options": {
+                "cwd": "${workspaceFolder}/web-react"
+            }
         },
         {
             "label": "build_assets_dev",
             "type": "npm",
-            "script": "build_assets_dev"
+            "script": "build_assets_dev",
+            "options": {
+                "cwd": "${workspaceFolder}/web-react"
+            }
         }
         
     ]

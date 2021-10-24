@@ -4,7 +4,7 @@ import fs from 'fs'
 // Web require
 import Koa from 'koa'
 import cors from '@koa/cors'
-import Router from 'koa-router'
+import Router from '@koa/router'
 import bodyParser from 'koa-bodyparser'
     // Simple session middleware for Koa. Defaults to cookie-based sessions and supports external stores
 import session from 'koa-session'
@@ -339,8 +339,8 @@ async function dbInit() {
 
 
 // Serve Static files
-const BUILD_PATH = './build' //process.env.NODE_ENV === 'production' ? './build' : './dist'
-const PUBLIC_PATH = "./public"
+const BUILD_PATH = './web-react/out' //process.env.NODE_ENV === 'production' ? './build' : './dist'
+const PUBLIC_PATH = "./web-react/public"
 async function serve_static(ctx, next) {
 
     ctx.assert(ctx.captures.length === 2, 404, `${ctx.path} not found`)
@@ -350,9 +350,9 @@ async function serve_static(ctx, next) {
 
     let fsPath
     if (staticType === 'static') {// webpacked assets (lives in ./build)
-        fsPath = path.join(process.cwd(), 'build', filePath)
+        fsPath = path.join(process.cwd(), BUILD_PATH, filePath)
     } else if (staticType === 'public') {// public assets (lives in ./public)
-        fsPath = path.join(process.cwd(), 'public', filePath)
+        fsPath = path.join(process.cwd(), PUBLIC_PATH, filePath)
     }
     ctx.assert(fsPath, 404, `${ctx.path} not found`)
 
@@ -478,8 +478,7 @@ async function getSession(ctx) {
 
 
 // ----------------------------------------------------------- Server SSR
-import stringReplaceStream from 'string-replace-stream'
-import Readable from 'stream'
+import { Stream } from 'stream'
 import fetch from './server_fetch.js'
 import { AzBlobWritable, createServiceSAS } from './AzBlobWritable.js'
 
@@ -488,19 +487,22 @@ import { AzBlobWritable, createServiceSAS } from './AzBlobWritable.js'
 require("@babel/register")()
 const server_ssr = require('../../../../src/ssr_server')
 */
-import server_ssr from '../../../lib/ssr_server.js'
+// https://devblogs.microsoft.com/typescript/announcing-typescript-4-5-beta/#commonjs-interop
+//import ssr_server = require('../lib/ssr_server.js')
+//const { AppRouteCfg, pathToRoute, ssrRender } = ssr_server
+import { AppRouteCfg, pathToRoute, ssrRender } from '@az-device-shop/web-react' //'../web-react/lib/ssr_server.js'
 
 // ssr middleware (ensure this this the LAST middleware to be used)
 async function ssr(ctx, next) {
     if (!ctx._matchedRoute) {
         //console.log (`no route matched for [${ctx.request.url}], serve index.html to ${ctx.session.auth && ctx.session.auth.given_name}`)
-        var filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, 'index.html')
+        //var filePath = path.join(process.cwd() /* __dirname */, BUILD_PATH, 'index.html')
 
         // Get Iniitial Data
         const urlsplit = ctx.request.url.split('?', 2),
             startURL = { pathname: urlsplit[0], search: urlsplit.length > 1 ? urlsplit[1] : "", hash: "" },
-            { routekey, urlid } = server_ssr.pathToRoute(startURL),
-            { requireAuth, componentFetch } = server_ssr.AppRouteCfg[routekey] || {}
+            { routekey, urlid } = pathToRoute(startURL),
+            { requireAuth, componentFetch } = AppRouteCfg[routekey] || {}
 
         if (!ctx.tenentKey && routekey != '/init') {
             ctx.redirect('/init')
@@ -529,7 +531,7 @@ async function ssr(ctx, next) {
             // https://koajs.com/#context
             // ctx.response = A Koa Response object.
             // ctx.res = Node's response object.
-            await server_ssr.ssrRender(ctx, startURL, componentFetch && FetchOperation.componentFetch(ctx, componentFetch, urlid))
+            await ssrRender(ctx, startURL, componentFetch && FetchOperation.componentFetch(ctx, componentFetch, urlid))
             /*
             ctx.response.type = 'text/html'
             ctx.body = fs.createReadStream(filePath)
@@ -667,7 +669,7 @@ async function writeimages(new_tenent, images: any) {
 
         const b64 = Buffer.from(images[pathname], 'base64'),
             bstr = b64.toString('utf-8'),
-            file_stream = Readable.from(b64),
+            file_stream = Stream.Readable.from(b64),
             new_blob_info = getFileSaS(new_tenent.insertedId.toHexString(), pathname),
             blobStream = new AzBlobWritable(new_blob_info)
 
@@ -760,7 +762,7 @@ const api = new Router({ prefix: '/api' })
 
         const
             routekey = '/' + (ctx.params.component || ''),
-            { requireAuth, componentFetch } = server_ssr.AppRouteCfg[routekey] || {}
+            { requireAuth, componentFetch } = AppRouteCfg[routekey] || {}
 
         if (!componentFetch) {
             ctx.throw(404, `unknown componentFetch [${routekey}]`)

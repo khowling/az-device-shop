@@ -3,10 +3,12 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./out/orderingState.d.ts",
-      "import": "./out/orderingState.js"
+      "types": "./lib/orderingState.d.ts",
+      "import": "./lib/orderingState.js"
     }
   },
+  "main": "lib/orderingStartup.js",
+  "types": "./lib/orderingStartup.d.ts",
   "version": "0.1.0",
   "dependencies": {
     "mongodb": "^3.7.0",
@@ -16,7 +18,6 @@
     "@types/node": "^14.17.14",
     "typescript": "^4.5.0-beta"
   },
-  "main": "out/orderingStartup.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -26,7 +27,6 @@
   },
   "author": "",
   "license": "ISC",
-  "types": "./out/orderingStartup.d.ts",
   "bugs": {
     "url": "https://github.com/khowling/az-device-shop/issues"
   },

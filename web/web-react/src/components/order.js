@@ -2,7 +2,7 @@ import React from 'react'
 import { Link, navTo } from './router.js'
 
 import { Stack } from '@fluentui/react'
-import { SSRBreadcrumb } from './page'
+import { SSRBreadcrumb } from './page.js'
 
 export function ManageOrders({ resource }) {
 

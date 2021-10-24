@@ -68,11 +68,20 @@ export function createServiceSAS(key, storageacc, container, minutes, file?) {
 // Provides a FlushWritable class which is used exactly like stream.Writable but supporting a new _flush method 
 // which is invoked after the consumer calls .end() but before the finish event is emitted.
 
-const { Writable } = require('stream'),
-    BLOCK_SIZE = 4 * 1024 * 1024 // 4MB blocks
+import { Stream } from 'stream'
+const BLOCK_SIZE = 4 * 1024 * 1024 // 4MB blocks
 
-export class AzBlobWritable extends Writable {
+export class AzBlobWritable extends Stream.Writable {
+    saslocator: string;
+    pathname: string;
+    filetype: string;
+    blockBuffer: Buffer;
+    blockBuffer_length: number;
+    currblock: number;
+    sendblockids: string[];
+    totalbytes: number;
 
+    
     constructor({ pathname, container_url, sas, extension }, options = {}) {
         super(options)
         this.saslocator = `${container_url}/${pathname}?${sas}`

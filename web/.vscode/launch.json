@@ -7,10 +7,21 @@
         {
             "type": "pwa-node",
             "request": "launch",
-            "name": "Launch Program",
-            "program": "${workspaceFolder}/server/server.ts",
-            //"preLaunchTask": "tsc: build - tsconfig.json",
+            "name": "Full Build",
+            //"cwd": "${workspaceFolder}/web/web-server",
+            "program": "${workspaceFolder}/web-server/server.ts",
+            //"outFiles": ["${workspaceFolder}/web-server/out/**/*.js"],
             "preLaunchTask": "build_server",
+            "envFile": "${workspaceFolder}/../.env_azure"
+        },
+        {
+            "type": "pwa-node",
+            "request": "launch",
+            "name": "Launch",
+            //"cwd": "${workspaceFolder}/web-server",
+            "program": "${workspaceFolder}/web-server/server.ts",
+            //"outFiles": ["${workspaceFolder}/web-server/out/*.js"],
+            "preLaunchTask": "tsc: build - web-server/tsconfig.json",
             "envFile": "${workspaceFolder}/../.env_azure"
         }
     ]

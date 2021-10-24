@@ -1,7 +1,7 @@
 import React, { useState, Suspense } from 'react'
 import { navTo /*, _encodeURL */ } from './router.js'
-import { Alert, MyImage, EditImage } from '../utils/common'
-import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch'
+import { Alert, MyImage, EditImage } from '../utils/common.js'
+import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch.js'
 
 import { Dropdown, ChoiceGroup, Panel, PanelType, Separator, mergeStyleSets, PrimaryButton, DefaultButton, Label, MessageBar, MessageBarType, Stack, Text, TextField, DetailsList, DetailsListLayoutMode, SelectionMode } from '@fluentui/react'
 

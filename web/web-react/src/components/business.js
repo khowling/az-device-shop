@@ -1,7 +1,7 @@
 import React, { useState, } from 'react'
 import { Link } from './router.js'
-import { EditImage } from '../utils/common'
-import { _fetchit /*, _suspenseFetch, _suspenseWrap */ } from '../utils/fetch'
+import { EditImage } from '../utils/common.js'
+import { _fetchit /*, _suspenseFetch, _suspenseWrap */ } from '../utils/fetch.js'
 
 //import { Card } from '@fluentui/react-cards'
 import { DocumentCardTitle, DocumentCard, DocumentCardImage, DocumentCardPreview, DocumentCardDetails, DocumentCardActivity, Text, Image, FontIcon, ImageFit, mergeStyles, TextField, Stack, PrimaryButton, Label, Checkbox, Spinner, ChoiceGroup, Separator } from '@fluentui/react'

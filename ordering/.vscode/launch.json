@@ -10,7 +10,6 @@
             "name": "Launch Ordering",
             "program": "${workspaceFolder}/orderingStartup.ts",
             "preLaunchTask": "tsc: build - tsconfig.json",
-            //"preLaunchTask": "build_server",
             "envFile": "${workspaceFolder}/../.env_azure"
         }
     ]

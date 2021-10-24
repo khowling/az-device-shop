@@ -1,12 +1,12 @@
 {
-    "compilerOptions": {
-      "target": "es5",
-      "module": "commonjs",
-      "outDir": "out",
-      "sourceMap": true,
-      "downlevelIteration": true
-    },
-    "types": [
-      "node"
-    ]
+  "compilerOptions": {
+    //"target": "es5",
+    "module": "nodenext",
+    //"forceConsistentCasingInFileNames": true,
+    //"declaration": true,
+    //"noImplicitAny": false,
+    "outDir": "lib",
+    "sourceMap": true,
+    "esModuleInterop": true
   }
+}

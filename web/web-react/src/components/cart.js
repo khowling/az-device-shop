@@ -1,9 +1,9 @@
 import React, { useState, useContext, useEffect } from 'react'
-import { Alert, MyImage } from '../utils/common'
+import { Alert, MyImage } from '../utils/common.js'
 import { _fetchit } from '../utils/fetch.js'
 //import { AppInsights } from 'applicationinsights-js'
 import { Link, navTo } from './router.js'
-import { CartCountContext, CartOpenContext } from '../GlobalContexts'
+import { CartCountContext, CartOpenContext } from '../GlobalContexts.js'
 import { SSRBreadcrumb } from './page.js'
 import { DefaultButton, Separator, Stack, Spinner, Text, Label, ChoiceGroup, MessageBar, MessageBarType, PrimaryButton, DropdownMenuItemType, Dropdown, List, mergeStyleSets, mergeStyles, getTheme, getFocusStyle } from '@fluentui/react'
 

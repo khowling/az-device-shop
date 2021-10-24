@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useContext /*, Suspense */ } from 'react'
-import { _suspenseFetch, _suspenseWrap } from '../utils/fetch'
-import { RenderContext, SessionContext } from '../GlobalContexts'
+import { _suspenseFetch, _suspenseWrap } from '../utils/fetch.js'
 
 import { Spinner, SpinnerSize } from '@fluentui/react';
 

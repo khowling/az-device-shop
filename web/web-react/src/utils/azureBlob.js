@@ -1,4 +1,4 @@
-import { _fetchit } from './fetch'
+import { _fetchit } from './fetch.js'
 
 const BLOCK_SIZE = 4 * 1024 * 1024
 

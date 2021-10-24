@@ -1,16 +1,16 @@
 import React, { useContext, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, navTo /*, Redirect */ } from './router'
-import { MyImage } from '../utils/common'
-import { _suspenseFetch } from '../utils/fetch'
-import { MyCart } from './cart'
+import { Link, navTo /*, Redirect */ } from './router.js'
+import { MyImage } from '../utils/common.js'
+import { _suspenseFetch } from '../utils/fetch.js'
+import { MyCart } from './cart.js'
 
 import { CommandBarButton, Text, Panel, PanelType } from '@fluentui/react'
 import { Icon } from '@fluentui/react';
 import { mergeStyles, mergeStyleSets } from '@fluentui/merge-styles';
 
 
-import { CartOpenContext } from '../GlobalContexts'
+import { CartOpenContext } from '../GlobalContexts.js'
 
 const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
 

@@ -4,9 +4,6 @@
 			"path": "."
 		},
 		{
-			"path": "web"
-		},
-		{
 			"path": "ordering"
 		},
 		{
@@ -14,6 +11,9 @@
 		},
 		{
 			"path": "common/eventing"
+		},
+		{
+			"path": "web"
 		}
 	],
 	"settings": {
