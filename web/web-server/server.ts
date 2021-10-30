@@ -163,7 +163,7 @@ interface LOOKUPDEF {
     records: any[];
 }
 // Convert mongodb document format to the format to be sent to the web
-const dbToWeb = (dbdoc: any, store: string, lookups?: DBTOWEB_LOOKUPS): any => {
+function dbToWeb (dbdoc: any, store: string, lookups?: DBTOWEB_LOOKUPS): any  {
     const storeKeys = Object.keys(StoreDef[store].schema.describe().keys)
     return storeKeys.reduce((acc, webCol) => {
         const [dbfield, lookup] = webCol.endsWith('_ref') ? [`${webCol.slice(0, -4)}_id`, true] : [webCol, false]
@@ -178,7 +178,39 @@ const dbToWeb = (dbdoc: any, store: string, lookups?: DBTOWEB_LOOKUPS): any => {
         , dbdoc && dbdoc.hasOwnProperty('_id') ? { _id: dbdoc._id.toHexString() } : {})
 }
 
+interface DbObject {
+    error?: string;
+    collection?: string;
+    _id?: any;
+    value?: any;
+}
 
+function webToDb (webdoc: any, store: string, userId: string) : DbObject {
+
+    
+    if (!(typeof webdoc === 'object' && webdoc !== null)) return {error: `no document provided`}
+    if (!store) return {error: `no store provided`}
+    const storedef = StoreDef[store]
+    if (!storedef) return {error: `unknown store: ${store}`}
+
+    const { _id, ...body } = webdoc
+    const { value, error } = storedef.schema.validate(body, { allowUnknown: false })
+    if (error) return {error: `document not valid: ${error}`}
+
+    return {
+        collection: storedef.collection, 
+        ...(_id && { _id: new ObjectId(_id)}),
+        value: { 
+            _lastModified: new Timestamp(0,0), 
+            _lastModifiedBy:  userId,
+            ...(!_id && {_ts: new Timestamp(0,0), _createdBy: userId, owner: { _id: userId}}), 
+            ...Object.keys(value).reduce((a,c) => {
+                return c.endsWith('_ref') ? {...a,  [`${c.slice(0, -4)}_id`] : new ObjectId(value[c]._id)} : {...a, [c]: value[c]}
+            }, {})
+        }
+    }
+
+}
 
 // Operations
 const FetchOperation = {
@@ -224,15 +256,14 @@ const FetchOperation = {
             // setup response oject with empty arrarys with all possible values of 'type'
             let response = s.split_types.reduce((obj, a) => { return { ...obj, [a]: [] } }, {})
             // copied from https://github.com/mongodb/node-mongodb-native/blob/e5b762c6d53afa967f24c26a1d1b6c921757c9c9/lib/cursor/cursor.js#L836
-            while (await cursor.hasNext()) {
-                const dbdoc = await cursor.next()
-                if (s.split_types.includes(dbdoc.type)) {
-                    response[dbdoc.type].push(dbToWeb(dbdoc, store))
+            for await (const doc of cursor) {
+                if (s.split_types.includes(doc.type)) {
+                    response[doc.type].push(dbToWeb(doc, store))
                 }
             }
             return response
         } else {
-            return await cursor.toArray().map(dbdoc => dbToWeb(dbdoc, store))
+            return await cursor.map(doc => dbToWeb(doc, store))
         }
     },
     "getOne": async function (ctx, store, query, proj?: any): Promise<any> {
@@ -708,16 +739,29 @@ const api = new Router({ prefix: '/api' })
     })
     .post('/cartadd', async function (ctx, next) {
         console.log(`add product to cart ${ctx.session && JSON.stringify(ctx.session)}`)
-        const { value, error } = StoreDef["order_line"].schema.validate(ctx.request.body, { allowUnknown: true })
+        const {_id, value, error, collection} = webToDb (ctx.request.body, "order_line", ctx.session.auth ? ctx.session.auth.sub : ctx.session._id )
+        if (error) throw new Error(error)
+        const partition_key = ctx.tenentKey
+
         if (!error) {
-            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({ _id: new ObjectId(value.item._id) }, { projection: { "price": 1, "active": 1 } })
+            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({_id: value.product_id}, { projection: { "price": 1, "active": 1 } })
             ctx.assert(ref_product, 400, "Cannot find product")
             ctx.assert(ref_product.price === value.recorded_item_price, 400, "Incorrect Price, please refresh your page")
             const line_total = ref_product.price * 1
-            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, owner_type: ctx.session.auth ? "user" : "session", status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $inc: { items_count: 1 }, $push: { items: { _id: new ObjectId(), item: { _id: new ObjectId(value.item._id) }, options: value.options, qty: 1, line_total, added: new Date() } } }, { upsert: true, returnOriginal: false, returnNewDocument: true })
+            const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate(
+                { 
+                    partition_key, 
+                    owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, 
+                    owner_type: ctx.session.auth ? "user" : "session", 
+                    status: StoreDef["orders"].status.ActiveCart },
+                { 
+                    $inc: { items_count: 1 }, 
+                    $push: {  items: {...value, line_total} } 
+                },
+                { upsert: true, returnOriginal: false, returnNewDocument: true })
 
             ctx.assert(res.ok === 1, 500, `error`)
-            ctx.body = { items_count: res.value.items_count }
+            ctx.body = { items_count: res.value && res.value.items_count || 1 }
             ctx.status = 201
         } else {
             ctx.throw(400, error)
@@ -802,7 +846,7 @@ const api = new Router({ prefix: '/api' })
     })
     .get('/onhand/:sku', async function (ctx, next) {
         if (ctx.orderState) {
-            ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.product === ctx.params.sku) || { qty: 0 }
+            ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.productId === ctx.params.sku) || { qty: 0 }
         } else {
             ctx.throw(400, `/onhand : "orderState"  not initialised`)
         }
@@ -816,18 +860,14 @@ const api = new Router({ prefix: '/api' })
             if (!ctx.tenentKey) throw new Error(`no tenent`)
 
 
-            const store = StoreDef[ctx.params.store]
-            if (!store) throw new Error(`unknown store: ${ctx.params.store}`)
-
-            const { _id, partition_key, ...body } = ctx.request.body
-            const { value, error } = store.schema.validate(body, { allowUnknown: false })
-
-            if (error) throw new Error(`document not valid: ${error}`)
+            const {_id, value, error, collection} = webToDb (ctx.request.body, ctx.params.store, ctx.session.auth.sub)
+            if (error) throw new Error(error)
+            const partition_key = ctx.tenentKey
 
             if (_id) {
-                ctx.body = await ctx.db.collection(store.collection).updateOne({ _id: new ObjectId(_id), partition_key: ctx.tenentKey }, { $set: value })
+                ctx.body = await ctx.db.collection(collection).updateOne({ _id, partition_key }, { $set: value })
             } else {
-                ctx.body = await ctx.db.collection(store.collection).insertOne({ ...value, _id: new ObjectId(), _ts: new Timestamp(0,0), owner: { _id: ctx.session.auth.sub }, creation: Date.now(), partition_key: ctx.tenentKey })
+                ctx.body = await ctx.db.collection(collection).insertOne({partition_key, ...value})
             }
             await next()
         } catch (e) {

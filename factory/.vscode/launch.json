@@ -7,8 +7,8 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Ordering",
-            "program": "${workspaceFolder}/orderingStartup.ts",
+            "name": "Launch Factory",
+            "program": "${workspaceFolder}/factoryStartup.ts",
             "preLaunchTask": "full tsc",
             "envFile": "${workspaceFolder}/../.env_azure",
             "resolveSourceMapLocations": [

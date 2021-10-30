@@ -7,10 +7,11 @@
             "label": "build_server",
             "dependsOn": [
                 "build_lib",
-                "compile_ts",
+                "tsc: build - web-server/tsconfig.json",
                 "build_assets_dev"
             ]
         },
+        /*
         {
             "label": "compile_ts",
             "type": "npm",
@@ -19,6 +20,7 @@
                 "cwd": "${workspaceFolder}/web-server"
             }
         },
+        */
         {
             "label": "build_lib",
             "type": "npm",

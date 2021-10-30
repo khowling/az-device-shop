@@ -30,9 +30,9 @@ export enum WorkItemStage {
 
 
 
-import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '../common/flux'
-import { EventStoreConnection } from '../common/eventStoreConnection'
-export { StateUpdates } from '../common/flux'
+import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '@az-device-shop/eventing/state'
+import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
+export { StateUpdates } from '@az-device-shop/eventing/state'
 
 // Mutate state in a Consistant, Safe, recorded mannore
 export interface WorkItemAction {
@@ -55,7 +55,10 @@ interface WorkItemReducerState {
     workitem_sequence: number;
 }
 
-
+// This returns a 'Reducer' function that performs an 'action <WorkItemAction>' on the 'workItems <WorkItemReducerState>' 'slice' of the factory State
+// and returns an array of 'state updates <StateUpdate>' that can be applied to a current state view by another function
+// It also provides a 'initState' for the slice.
+// It is a 'ReducerWithPassin', as the function it allows an attitional parameter 'passInSlice', this contains another Reducer & State that that  
 function workItemsReducer(): ReducerWithPassin<WorkItemReducerState, WorkItemAction> {
 
     return {
@@ -246,7 +249,7 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
                         inventoryId: 'INV' + String(state.inventry_sequence).padStart(5, '0'),
                         spec
                     })
-                    if (result && result.insertedCount === 1) {
+                    if (result && result.insertedId) {
                         return [{ failed: false }, [
                             { method: UpdatesMethod.Inc, doc: { inventry_sequence: 1 } }
                             //{ method: UpdatesMethod.Add, path: 'items', doc: { ...spec, id: 'INV' + String(state.inventry_sequence).padStart(5, '0'), inventry_sequence: state.inventry_sequence } }

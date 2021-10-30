@@ -173,6 +173,15 @@ export interface ReducerInfo {
 export type ReducerReturnWithSlice = [ReducerInfo, Array<StateUpdates>][];
 export type ReducerReturn = [ReducerInfo, Array<StateUpdates>];
 
+// Interface for a Reducer, operating on the state sliceKey, defining an initial state
+export interface Reducer<S, A> {
+    sliceKey: string;
+    initState: S;
+    fn: (connection: any, state: S, action: A) => Promise<ReducerReturn>
+}
+
+// Interface for a Reducer, that has a Passin Slice
+// The Passin Slide is a update to a nested state
 export interface ReducerWithPassin<S, A> {
     sliceKey: string;
     passInSlice: string;
@@ -180,11 +189,7 @@ export interface ReducerWithPassin<S, A> {
     fn: (connection: any, state: S, action: A, passInSlice: Array<any>) => Promise<ReducerReturnWithSlice>
 }
 
-export interface Reducer<S, A> {
-    sliceKey: string;
-    initState: S;
-    fn: (connection: any, state: S, action: A) => Promise<ReducerReturn>
-}
+
 
 interface ControlReducerState {
     head_sequence: number;
@@ -255,7 +260,8 @@ export class StateManager extends EventEmitter implements StateManagerInterface 
             //let hasChanged = false
             const allUpdates = {}
 
-            for (let { sliceKey, passInSlice, fn } of reducers) {
+            for (let reducer of reducers) {
+                const { sliceKey, passInSlice, fn } = reducer
                 //const key = finalReducerKeys[i]
                 const previousStateForKey = state[sliceKey]
                 assert(passInSlice ? reducers.findIndex(r => r.sliceKey === passInSlice) >= 0 : true, `reducer definition "${sliceKey}" requires a missing passInSlice reducer "${passInSlice}"`)
@@ -268,11 +274,11 @@ export class StateManager extends EventEmitter implements StateManagerInterface 
                 //console.log(`get sliceKey=${sliceKey}: ${JSON.stringify(reducerRes)}`)
                 if (sliceUpdates) {
                     //console.log(sliceUpdates)
-                    assert(sliceUpdates.length === 2 && sliceKey === '_control' ? true : Array.isArray(sliceUpdates[1]) && sliceUpdates[1].length > 0, `Error reducer at slice "${sliceKey}" return unexected value`)
+                    assert(sliceUpdates.length === 2 && sliceKey === '_control' ? true : Array.isArray(sliceUpdates[1]) && sliceUpdates[1].length > 0, `Error reducer at sliceKey=${sliceKey}, return unexected value`)
                     allUpdates[sliceKey] = allUpdates[sliceKey] ? [allUpdates[sliceKey][0] || sliceUpdates[0], [...allUpdates[sliceKey][1], ...sliceUpdates[1]]] : sliceUpdates
                 }
                 if (passInUpdates) {
-                    assert(passInUpdates.length === 2 && Array.isArray(passInUpdates[1]) && passInUpdates[1].length > 0, `Error reducer at slice "${sliceKey}" return unexected passInUpdates value for slice "${passInSlice}"`)
+                    assert(passInUpdates.length === 2 && Array.isArray(passInUpdates[1]) && passInUpdates[1].length > 0, `Error reducer at sliceKey=${sliceKey}, return unexected passInUpdates value for passInSlice=${passInSlice}`)
                     allUpdates[passInSlice] = allUpdates[passInSlice] ? [allUpdates[passInSlice][0] || passInUpdates[0], [...allUpdates[passInSlice][1], ...passInUpdates[1]]] : passInUpdates
                 }
             }

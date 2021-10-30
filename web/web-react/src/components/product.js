@@ -15,7 +15,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     'type': result.type || type,
     'heading': result.heading,
     'position': result.position || "normal",
-    'category': result.category,
+    'category_ref': result.category_ref,
     'description': result.description,
     'price': result.price,
     'image': result.image
@@ -66,7 +66,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
 
       <Stack {...columnProps}>
         {input.type === "Product" ?
-          <Dropdown label="Category" defaultSelectedKey={input.category_ref._id} onChange={(e, i) => _onChange({ target: { name: "category_ref" } }, { _id: i.key })} options={refstores.Category} />
+          <Dropdown label="Category" defaultSelectedKey={input.category_ref && input.category_ref._id} onChange={(e, i) => _onChange({ target: { name: "category_ref" } }, { _id: i.key })} options={refstores.Category} />
           :
           <ChoiceGroup label="Category Position" onChange={(e, i) => _onChange({ target: { name: "position" } }, i.key)} defaultSelectedKey={input.position} options={[
             { key: 'hero', text: 'Hero', iconProps: { iconName: 'FitWidth' } },
@@ -249,13 +249,13 @@ export function ManageProducts({ resource }) {
             {
               key: 'category',
               name: 'Category',
-              fieldName: 'category',
+              fieldName: 'category_ref',
               className: classNames.fileIconHeaderIcon,
               minWidth: 25,
               maxWidth: 150,
               onRender: (item) => {
                 console.log(`ManageProducts: Category: ${item.category_ref}`)
-                return <Text variant="medium">{result.data.Category.find(i => item.category_ref._id === i._id).heading}</Text>;
+                return <Text variant="medium">{item.category_ref && result.data.Category.find(i => item.category_ref._id === i._id).heading}</Text>;
               }
             },
             {

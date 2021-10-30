@@ -197,11 +197,11 @@ export class Processor extends EventEmitter {
             } else if (!restartall) {
                 continue /* dont restart */
             }
-            console.log(`processor.restartProcessors pid=${pobj.flow_id}, fidx=${pobj.function_idx}, sleep_unit=${pobj.options && JSON.stringify(pobj.options.sleep_until)}`)
+            console.log(`processor.restartProcessors flow_id=${pobj.flow_id}, function_idx=${pobj.function_idx}, options.sleep_unit=${pobj.options && JSON.stringify(pobj.options.sleep_until)}`)
             try {
                 this.launchHandler(pobj.flow_id)
             } catch (err) {
-                console.error(`restartProcessors, failed to restart process ${pobj.flow_id}, err=${err}`)
+                console.error(`restartProcessors, failed to restart process flow_id=${pobj.flow_id}, err=${err}`)
             }
         }
     }

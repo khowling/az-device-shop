@@ -14,7 +14,6 @@
     "mongodb": "^4.1.2"
   },
   "scripts": {
-    "build": "npx tsc"
   },
   "devDependencies": {
     "@types/koa-router": "^7.4.4",

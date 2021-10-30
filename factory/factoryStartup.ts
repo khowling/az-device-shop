@@ -1,6 +1,7 @@
-import { ObjectId } from 'mongodb'
-import { Processor, ProcessorOptions } from '../common/processor'
-import { WorkItemActionType, WorkItemAction, FactoryStateManager, WorkItemStage } from './factoryState'
+import mongodb from 'mongodb';
+const { ObjectId } = mongodb;
+import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
+import { WorkItemActionType, WorkItemAction, FactoryStateManager, WorkItemStage } from './factoryState.js'
 
 export enum OperationLabel { NEWINV = "NEWINV" }
 
@@ -9,8 +10,8 @@ async function validateRequest({ esConnection, trigger, flow_id }, next: (action
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
         const mongo_spec = await esConnection.db.collection("inventory_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: esConnection.tenentKey })
-        // remove the ObjectId from 'productId'
-        spec = { ...mongo_spec, ...(mongo_spec.productId && { productId: mongo_spec.productId.toHexString() }) }
+        // translate the db document '*_id' ObjectId fields to '*Id' strings
+        spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
     }
 
     await next({ type: WorkItemActionType.New, id: flow_id, spec }, { update_ctx: { spec } } as ProcessorOptions)
@@ -34,10 +35,10 @@ async function tidyUp({ flow_id, spec }, next) {
 }
 
 // ---------------------------------------------------------------------------------------
-import ServiceWebServer from '../common/ServiceWebServer'
-import { EventStoreConnection } from '../common/eventStoreConnection'
-import { startCheckpointing, restoreState } from '../common/event_hydrate'
-import { watchProcessorTriggerWithTimeStamp } from '../common/processorActions'
+import ServiceWebServer from '@az-device-shop/eventing/webserver'
+import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
+import { startCheckpointing, restoreState } from '@az-device-shop/eventing/state-restore'
+import { watchProcessorTriggerWithTimeStamp } from '@az-device-shop/eventing/processor-actions'
 
 async function factoryStartup(cs: EventStoreConnection) {
 

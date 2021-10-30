@@ -186,11 +186,11 @@ export function MyCart({ dismissPanel, panel, resource, checkout }) {
     //console.log(`rendering ${line}`)
     return (
       <div className={classNames.itemCell} data-is-focusable={true}>
-        <MyImage image={line.item.image} width={panel ? 100 : 150} />
+        <MyImage image={line.product_ref.image} width={panel ? 100 : 150} />
         <div className={classNames.itemContent}>
-          <div className={classNames.itemName}>{line.item.heading}</div>
+          <div className={classNames.itemName}>{line.product_ref.heading}</div>
           <div className={classNames.itemIndex}>{Object.keys(line.options).map(o => <span key={o}>{o} : {line.options[o].text}</span>)}</div>
-          <div style={{ marginBottom: 10 }}>{line.item.description}</div>
+          <div style={{ marginBottom: 10 }}>{line.product_ref.description}</div>
           <div >
             <div style={{ display: "inline" }}>
               <button onClick={() => _removeitem(line._id)} className="c-button f-lightweight" style={{ minWidth: 0, margin: 0, padding: 0, border: 0 }}>delete</button>
@@ -202,7 +202,6 @@ export function MyCart({ dismissPanel, panel, resource, checkout }) {
           <Dropdown
             selectedKey={line.qty}
             disabled={true}
-            //onChange={(e, item) => setOptColor(item)}
             label="Qty"
             options={[
               { key: 1, text: '1' },
@@ -271,8 +270,8 @@ export function AddToCart({ resource }) {
 
   function addorder() {
     setState({ state: "adding" })
-    //    AppInsights.trackEvent("Add Order", item, { line_count: 1 })
-    _fetchit('/api/cartadd', 'POST', {}, { item: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
+
+    _fetchit('/api/cartadd', 'POST', {}, { product_ref: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
 
       console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartCount}`)
       setCartCount(cartCount + 1)

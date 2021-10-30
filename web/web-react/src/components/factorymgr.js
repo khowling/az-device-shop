@@ -11,25 +11,25 @@ function WorkItem({ resource, dismissPanel, refstores }) {
 
     const [error, setError] = useState(null)
 
-    const [input, handleInputChange] = useState({
-        'qty': result.qty,
+    const [inventory, setInventory] = useState({
+        
         'status': result.status || "Required",
-        'categoryId': result.categoryId,
-        'productId': result.productId,
-        'price': result.price,
-        'warehouse': result.warehouse
+        'product_ref': result.product_ref,
+        'category_ref': result.category_ref,
+        'warehouse': result.warehouse,
+        'qty': result.qty
     })
 
     function _onChange(e, val) {
-        handleInputChange({
-            ...input,
+        setInventory({
+            ...inventory,
             [e.target.name]: val
         })
     }
 
     function _save() {
         setError(null)
-        _fetchit('/api/store/inventory', 'POST', {}, result._id ? { _id: result._id, ...input } : input).then(succ => {
+        _fetchit('/api/store/inventory', 'POST', {}, result._id ? { _id: result._id, ...inventory } : inventory).then(succ => {
             console.log(`created success : ${JSON.stringify(succ)}`)
             //navTo("/MyBusiness")
             dismissPanel()
@@ -42,25 +42,25 @@ function WorkItem({ resource, dismissPanel, refstores }) {
     return (
         <Stack tokens={{ childrenGap: 15 }} styles={{ root: { width: 300 } }}>
 
-            <Dropdown label="Category" defaultSelectedKey={input.categoryId} onChange={(e, i) => _onChange({ target: { name: "categoryId" } }, i.key)} options={refstores.Category} />
-            <Dropdown label="Product" defaultSelectedKey={input.productId} onChange={(e, i) => _onChange({ target: { name: "productId" } }, i.key)} options={refstores.Product.filter(x => x.category === input.categoryId)} />
+            <Dropdown label="Category" defaultSelectedKey={inventory.category_ref && inventory.category_ref._id} onChange={(e, i) => _onChange({ target: { name: "category_ref" } }, {_id:i.key})} options={refstores.Category} />
+            <Dropdown label="Product" defaultSelectedKey={inventory.product_ref && inventory.product_ref._id} onChange={(e, i) => _onChange({ target: { name: "product_ref" } }, {_id:i.key})} options={refstores.Product.filter(p => inventory.category_ref && p.category_ref && p.category_ref._id === inventory.category_ref._id)} />
 
             <Slider
                 label="Number to build"
                 min={0}
                 max={1000}
                 step={10}
-                defaultValue={input.qty}
+                defaultValue={inventory.qty}
                 showValue={true}
                 onChange={(val) => _onChange({ target: { name: "qty" } }, val)}
                 snapToStep
             />
 
-            <Dropdown label="Warehouse" defaultSelectedKey={input.warehouse} onChange={(e, i) => _onChange({ target: { name: "warehouse" } }, i.key)} options={[{ key: "emea", text: "EMEA" }, { key: "america", text: "Americas" }, { key: "asia", text: "ASIA" }]} />
+            <Dropdown label="Warehouse" defaultSelectedKey={inventory.warehouse} onChange={(e, i) => _onChange({ target: { name: "warehouse" } }, i.key)} options={[{ key: "emea", text: "EMEA" }, { key: "america", text: "Americas" }, { key: "asia", text: "ASIA" }]} />
 
 
 
-            <Dropdown label="Status" defaultSelectedKey={input.status} onChange={(e, i) => _onChange({ target: { name: "status" } }, i.key)} options={[{ key: "Required", text: "Required" }, { key: "Draft", text: "Draft" }]} />
+            <Dropdown label="Status" defaultSelectedKey={inventory.status} onChange={(e, i) => _onChange({ target: { name: "status" } }, i.key)} options={[{ key: "Required", text: "Required" }, { key: "Draft", text: "Draft" }]} />
 
             {error &&
                 <MessageBar messageBarType={MessageBarType.error} isMultiline={false} truncated={true}>
@@ -205,7 +205,7 @@ export function Inventory({ resource }) {
     const { products } = result.refstores || {},
         refstores = {
             Category: products ? products.Category.map(c => { return { key: c._id, text: c.heading } }) : {},
-            Product: products ? products.Product.map(c => { return { key: c._id, text: c.heading, category: c.category } }) : {}
+            Product: products ? products.Product.map(c => { return { key: c._id, text: c.heading, category_ref: c.category_ref }}) : {}
         }
 
     const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: {}, metadata: {} })
