@@ -1,8 +1,8 @@
 import React from 'react'
 import { hydrateRoot } from 'react-dom'
 import { App } from './App.js'
-import Html from './Html'
-import { RenderContext, TenentContext } from './GlobalContexts'
+import Html from './Html.js'
+import { RenderContext, TenentContext } from './GlobalContexts.js'
 
 const { pathname, search, hash } = window.location
 

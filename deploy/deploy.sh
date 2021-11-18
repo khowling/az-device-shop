@@ -1,20 +1,50 @@
 
+#  Create Cluster - Community solutions, Simple Cluster no additional security
+# Additiomal - No System Pool, ACR - Basic, Contor cert-mana & external-dns
 
-NAME=azdevshop001
-az group create -n ${NAME}-rg -l westeurope
+# Create Resource Group 
 
-export STORAGE_MASTER_KEY=$(az deployment group create -g ${NAME}-rg  --template-file ./deploy/az-device.bicep  --parameters name=${NAME} --query properties.outputs.storageKey.value -o tsv)
-export MONGO_DB="mongodb://${NAME}:$(az cosmosdb keys list -g ${NAME}-rg -n ${NAME} --query primaryMasterKey -o tsv)@${NAME}.mongo.cosmos.azure.com:10255/az-shop?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${NAME}@"
+AKS_NAME=basic-dev-k8s
+AKS_RG=${AKS_NAME}-rg
+AZ_DNSZONE_ID=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
+
+az group create -l WestEurope -n ${AKS_RG} 
+
+# Deploy template with in-line parameters 
+az deployment group create -g ${AKS_RG}  --template-uri https://github.com/Azure/Aks-Construction/releases/download/0.3.0-preview/main.json --parameters \
+	resourceName=${AKS_NAME} \
+	kubernetesVersion=1.20.9 \
+	agentCount=2 \
+	JustUseSystemPool=true \
+	agentVMSize=Standard_DS3_v2 \
+	registries_sku=Basic \
+	acrPushRolePrincipalId=$(az ad signed-in-user show --query objectId --out tsv) \
+	dnsZoneId=${AZ_DNSZONE_ID}
+
+
+export APPNAME=azkhdevshop
+az group create -n ${APPNAME}-rg -l westeurope
+
+export DEPLOY_OUTPUT=$(az deployment group create -g ${APPNAME}-rg  --template-file ./az-device.bicep  --parameters name=${APPNAME} --query [properties.outputs.cosmosConnectionURL.value,properties.outputs.storageKey.value,properties.outputs.storagedownloadSAS.value] -o tsv)
+export MONGO_DB=$(echo $DEPLOY_OUTPUT | cut -f 1 -d ' ')
+export STORAGE_MASTER_KEY=$(echo $DEPLOY_OUTPUT | cut -f 2 -d ' ')
+export STORAGE_DOWNLOAD_SAS=$(echo $DEPLOY_OUTPUT | cut -f 3 -d ' ')
+
+#"mongodb://${APPNAME}:$(az cosmosdb keys list -g ${APPNAME}-rg -n ${APPNAME} --query primaryMasterKey -o tsv)@${APPNAME}.mongo.cosmos.azure.com:10255/az-shop?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${APPNAME}@"
 export REACT_APP_FACTORY_PORT=9091
 export REACT_APP_ORDERING_PORT=9090
-export STORAGE_ACCOUNT=$NAME
+export STORAGE_ACCOUNT=$APPNAME
 export STORAGE_CONTAINER=az-shop-images
 
 ## Get local B2C values from local file (not in repo)
 source ./web/.env
 
+export ACRNAME=$(az acr list -g ${AKS_RG} --query [0].name -o tsv)
 
-export ACRNAME=khcommon
+az acr build -r $ACRNAME -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
+
+
+#export ACRNAME=khcommon
 az acr login -n $ACRNAME
 cd ../web
 az acr build --registry $ACRNAME --image az-device-shop/web:0.1.0 -f Dockerfile.root ../

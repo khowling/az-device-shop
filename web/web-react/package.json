@@ -39,14 +39,18 @@
     ]
   },
   "devDependencies": {
-    "@babel/cli": "^7.15.7"
+    "@babel/cli": "^7.15.7",
+    "@babel/preset-env": "^7.16.4",
+    "@babel/preset-react": "^7.16.0",
+    "babel-loader": "^8.2.3",
+    "rimraf": "^3.0.2",
+    "webpack": "^5.64.1"
   },
   "dependencies": {
     "@fluentui/merge-styles": "^8.2.0",
     "@fluentui/react": "^8.37.0",
-    "react": "^18.0.0-alpha-5ca4b0433-20211020",
-    "react-dom": "^18.0.0-alpha-5ca4b0433-20211020",
-    "react-scripts": "^3.3.0-next.38"
+    "react": "^18.0.0-beta-fdc1d617a-20211118",
+    "react-dom": "^18.0.0-beta-fdc1d617a-20211118"
   },
   "proxy": "http://localhost:3000"
 }

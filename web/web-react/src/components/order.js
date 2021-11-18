@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, navTo } from './router.js'
+import { _fetchit } from '../utils/fetch.js'
 
 import { Stack } from '@fluentui/react'
 import { SSRBreadcrumb } from './page.js'
@@ -7,7 +8,17 @@ import { SSRBreadcrumb } from './page.js'
 export function ManageOrders({ resource }) {
 
     const { status, result } = resource.read()
-
+    //const [ result, setResult] = useState({})
+/*
+    useEffect(() => {
+        async function fetchData() {
+          const res = await _fetchit('/api/componentFetch/myorders')
+          console.log(`SessionProviderWrapper: useEffect session=${JSON.stringify(res)}`)
+          setResult(res)
+        }
+        fetchData()
+      }, [])
+*/
 
     return (
 
@@ -36,12 +47,12 @@ export function ManageOrders({ resource }) {
                     <tbody>
                         {status === 'success' && result.data && result.data.map((o, idx) => {
                             const odate = o.checkout_date && new Date(o.checkout_date)
-                            const status = o.orderState
+                            const {orderId, stage} = o.orderState || {orderId: '<processing>', stage: null} 
                             return (
                                 <tr key={idx}>
-                                    <td><Link route="/o" urlid={o._id}>{status ? status.orderId : '<processing>'}</Link></td>
+                                    <td><Link route="/o" urlid={o._id}>{orderId}</Link></td>
                                     <td>{odate ? odate.toGMTString() : ''}</td>
-                                    <td>{o.status && <strong className="c-badge f-small f-highlight">{status ? ['Draft', 'New', 'InventoryAllocated', 'PickingReady', 'PickingAccepted', 'PickingComplete', 'Shipped', 'Received'][status.stage] : 'Queued'}</strong>}
+                                    <td>{stage && <strong className="c-badge f-small f-highlight">{ ['Draft', 'New', 'InventoryAllocated', 'PickingReady', 'PickingAccepted', 'PickingComplete', 'Shipped', 'Received'][stage] }</strong>}
                                     </td>
                                     <td className="f-numerical f-sub-categorical">{o.shipping ? o.shipping.shipping : "default"}</td>
                                     <td className="f-numerical f-sub-categorical">{o.qty}</td>

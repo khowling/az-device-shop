@@ -13,7 +13,6 @@ import Joi from 'joi'
 // Auth & SAS require
 import jwkToPem from 'jwk-to-pem'
 import jws from 'jws'
-import crypto from 'crypto'
 
 
 const app_host_url = process.env.APP_HOST_URL
@@ -440,15 +439,26 @@ async function init() {
     // app.context is the prototype from which ctx is created. 
     // You may add additional properties to ctx by editing app.context. 
     // This is useful for adding properties or methods to ctx to be used across your entire app
-    // Init Auth
+    console.log ("init(): getting openid config from b2c tenant...")
     app.context.openid_configuration = await fetch(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/${signin_policy}/v2.0/.well-known/openid-configuration`)
     const signing_keys: any = await fetch(app.context.openid_configuration.jwks_uri)
     app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
 
     // Init Settings (currently single tenent)
+    console.log ("init(): getting tenant config from db...")
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ type: "business", partition_key: "root" })
+    if (!app.context.tenent) {
+        console.log ("init(): no tenant creating default config")
+        app.context.tenent = await createTenant( app.context, {
+            "name": "Demo Bike Shop",
+            "catalog": "bike",
+            "email": "first@sign.in",
+            "inventory": true
+        })
+    }
     app.context.tenentKey = app.context.tenent && app.context.tenent._id
 
+    console.log ("init(): setting tenant watcher, will process.exit() if removed")
     app.context.businessWatcher = db.collection(StoreDef["business"].collection).watch([
         { $match: { $and: [{ 'operationType': { $in: ['insert', 'update', 'replace'] } }, { 'fullDocument.partition_key': 'root' }, { 'fullDocument.type': 'business' }] } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
@@ -466,7 +476,8 @@ async function init() {
     // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud (using REACT_APP_SERVER_URL)
     app.use(cors({ credentials: true }))
 
-    // Init Routes
+
+    console.log ("init(): setting routes....")
     //const STATIC_URL_PREFIX = "/static"
     app.use(new Router()
         .get(`/(static)/(.*)`, serve_static)
@@ -481,9 +492,8 @@ async function init() {
     app.use(ssr)
 
     const port = process.env.PORT || 3000
-    console.log(`Starting on ${port}..`)
+    console.log(`init(): starting webserver on ${port}..`)
     app.listen(port)
-
 
 
     // Init order status (dont await, incase no tenent! )
@@ -522,6 +532,7 @@ const server_ssr = require('../../../../src/ssr_server')
 //import ssr_server = require('../lib/ssr_server.js')
 //const { AppRouteCfg, pathToRoute, ssrRender } = ssr_server
 import { AppRouteCfg, pathToRoute, ssrRender } from '@az-device-shop/web-react' //'../web-react/lib/ssr_server.js'
+import { sign } from 'crypto'
 
 // ssr middleware (ensure this this the LAST middleware to be used)
 async function ssr(ctx, next) {
@@ -562,7 +573,7 @@ async function ssr(ctx, next) {
             // https://koajs.com/#context
             // ctx.response = A Koa Response object.
             // ctx.res = Node's response object.
-            await ssrRender(ctx, startURL, componentFetch && FetchOperation.componentFetch(ctx, componentFetch, urlid))
+            await ssrRender(ctx, startURL, componentFetch && componentFetch.clientSide !== true && FetchOperation.componentFetch(ctx, componentFetch, urlid))
             /*
             ctx.response.type = 'text/html'
             ctx.body = fs.createReadStream(filePath)
@@ -671,13 +682,6 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
     })
     .routes()
 
-/*
-function LoggedIn(ctx, next) {
-    console.log(`checking logged in with ${ctx.session.auth}`)
-    return ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.url)}`)
-}
-*/
-
 function getFileSaS(store, filename) {
     const extension = encodeURIComponent(filename.substring(1 + filename.lastIndexOf(".")))
     const pathname = `${store}/${(new ObjectId()).toString()}.${extension}`
@@ -686,13 +690,91 @@ function getFileSaS(store, filename) {
 }
 
 async function ensureInit(ctx, next) {
-
     if (!ctx.tenentKey)
         ctx.throw(400, `Please Initialised your tenent`)
     else
         await next()
 }
 
+async function createTenant(ctx, value) { 
+
+    // clear down any old details
+    if (ctx.tenentKey) {
+        console.log(`/createtenent: tear down current tenent: ${ctx.tenentKey}`)
+        for (let coll of Object.keys(StoreDef).filter(c => StoreDef[c].collection).map(c => StoreDef[c].collection)) {
+            console.log(`/createtenent: tear down collection=${coll}`)
+            await ctx.db.collection(coll).deleteMany({})
+        }
+    }
+
+    // Create new details.
+    const new_tenent = await ctx.db.collection(StoreDef["business"].collection).insertOne({ ...value, type: "business", partition_key: "root" })
+
+    if (value.catalog === 'bike') {
+
+        const { images, products } = await fetch('https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json')
+        const { Product, Category } = products
+
+        const imagemap = await writeimages(new_tenent, images)
+
+        const catmap = new Map()
+        const newcats = Category.map(function (c) {
+            console.log(`/createtenent: Processing catalog ${c.heading}`)
+            const old_id = c._id, new_id = new ObjectId()//.toHexString()
+            const newc = { ...c, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
+            if (c.image && c.image.pathname) {
+                newc.image = imagemap.get(c.image.pathname)
+                if (!newc.image) {
+                    console.error(`/createtenent: Cannot find image pathname ${c.image.pathname}`)
+                }
+            }
+            catmap.set(old_id, new_id)
+            return newc
+        })
+
+        console.log(`/createtenent: Loading Categories : ${JSON.stringify(newcats)}`)
+        await ctx.db.collection(StoreDef["products"].collection).insertMany(newcats)
+
+        const newproducts = Product.map(function (p) {
+            console.log(`/createtenent: Processing product ${p.heading}`)
+            const old_id = p._id, new_id = new ObjectId()//.toHexString()
+            const newp = { ...p, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
+            if (p.category_id) {
+                newp.category_id = catmap.get(p.category_id)
+                if (!newp.category_id) {
+                    console.error(`/createtenent: Cannot find category ${p.category_id}`)
+                }
+            }
+            if (p.image && p.image.pathname) {
+                newp.image = imagemap.get(p.image.pathname)
+                if (!newp.image) {
+                    console.error(`/createtenent: Cannot find image pathname ${p.image.pathname}`)
+                }
+            }
+            return newp
+        })
+
+        console.log("/createtenent: Importing Products")
+        await ctx.db.collection(StoreDef["products"].collection).insertMany(newproducts)
+
+        if (value.inventory) {
+            await ctx.db.collection(StoreDef["inventory"].collection).insertMany(newproducts.map(function (p) {
+                return {
+                    _ts: new Timestamp(0,0), // Empty timestamp will be replaced by the server to the current server time
+                    partition_key: new_tenent.insertedId,
+                    status: 'Required',
+                    product_id: p._id,
+                    category_id: p.category_id,
+                    warehouse: 'EMEA',
+                    qty: 1
+                }
+            }))
+        }
+
+    }
+
+    return {...value, _id: new_tenent.insertedId}
+}
 
 async function writeimages(new_tenent, images: any) {
     let imagemap = new Map()
@@ -929,13 +1011,12 @@ const api = new Router({ prefix: '/api' })
 
     })
     .post('/createtenent', async function (ctx, next) {
-        if (!ctx.request.body) throw new Error(`no body`)
-
-        const { value, error } = StoreDef["business"].schema.validate(ctx.request.body, { allowUnknown: false })
-        if (error) throw new Error(`document not valid: ${error}`)
-
         try {
-            // close the watch cursor, so the watch does not restart this process!, we explicitly close as this replica is creating the new tenent!
+            if (!ctx.request.body) throw new Error(`no body`)
+
+            const {_id, value, error, collection} = webToDb (ctx.request.body, "business", ctx.session.auth ? ctx.session.auth.sub : ctx.session._id )
+            if (error) throw new Error(error)
+
             console.log(`/createtenent: Starting - close the business watch cursor`)
             await app.context.businessWatcher.close()
 
@@ -944,85 +1025,11 @@ const api = new Router({ prefix: '/api' })
                 process.exit()
             })
 
-            // clear down any old details
-            if (ctx.tenentKey) {
-                console.log(`/createtenent: tear down current tenent: ${ctx.tenentKey}`)
-                for (let coll of Object.keys(StoreDef).filter(c => StoreDef[c].collection).map(c => StoreDef[c].collection)) {
-                    console.log(`/createtenent: tear down collection=${coll}`)
-                    await ctx.db.collection(coll).deleteMany({})
-                }
-            }
-
-            // Create new details.
-            const new_tenent = await ctx.db.collection(StoreDef["business"].collection).insertOne({ ...value, type: "business", partition_key: "root" })
-
-            if (ctx.request.body.catalog === 'bike') {
-
-                const { images, products } = await fetch('https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json')
-                const { Product, Category } = products
-
-                const imagemap = await writeimages(new_tenent, images)
-
-                const catmap = new Map()
-                const newcats = Category.map(function (c) {
-                    console.log(`/createtenent: Processing catalog ${c.heading}`)
-                    const old_id = c._id, new_id = new ObjectId()//.toHexString()
-                    const newc = { ...c, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
-                    if (c.image && c.image.pathname) {
-                        newc.image = imagemap.get(c.image.pathname)
-                        if (!newc.image) {
-                            console.error(`/createtenent: Cannot find image pathname ${c.image.pathname}`)
-                        }
-                    }
-                    catmap.set(old_id, new_id)
-                    return newc
-                })
-
-                console.log(`/createtenent: Loading Categories : ${JSON.stringify(newcats)}`)
-                await ctx.db.collection(StoreDef["products"].collection).insertMany(newcats)
-
-                const newproducts = Product.map(function (p) {
-                    console.log(`/createtenent: Processing product ${p.heading}`)
-                    const old_id = p._id, new_id = new ObjectId()//.toHexString()
-                    const newp = { ...p, _id: new_id, partition_key: new_tenent.insertedId, creation: Date.now() }
-                    if (p.category_id) {
-                        newp.category_id = catmap.get(p.category_id)
-                        if (!newp.category_id) {
-                            console.error(`/createtenent: Cannot find category ${p.category_id}`)
-                        }
-                    }
-                    if (p.image && p.image.pathname) {
-                        newp.image = imagemap.get(p.image.pathname)
-                        if (!newp.image) {
-                            console.error(`/createtenent: Cannot find image pathname ${p.image.pathname}`)
-                        }
-                    }
-                    return newp
-                })
-
-                console.log("/createtenent: Importing Products")
-                await ctx.db.collection(StoreDef["products"].collection).insertMany(newproducts)
-
-                if (ctx.request.body.inventory) {
-                    await ctx.db.collection(StoreDef["inventory"].collection).insertMany(newproducts.map(function (p) {
-                        return {
-                            _ts: new Timestamp(0,0), // Empty timestamp will be replaced by the server to the current server time
-                            partition_key: new_tenent.insertedId,
-                            status: 'Required',
-                            product_id: p._id,
-                            category_id: p.category_id,
-                            warehouse: 'EMEA',
-                            qty: 10
-                        }
-                    }))
-                }
-
-            }
+            createTenant(ctx, value)
 
             console.log("/createtenent: Finished")
             ctx.body = { status: 'success', description: 'done' }
             await next()
-
 
         } catch (e) {
             console.error(`/createtenent: ERROR ${e} ${JSON.stringify(e)}`)

@@ -9,8 +9,8 @@ resource fnstore 'Microsoft.Storage/storageAccounts@2021-01-01' = {
     name: 'Standard_LRS'
   }
   properties: {
-    accessTier: 'Hot'
-    allowBlobPublicAccess: true
+   // accessTier: 'Hot'
+   // allowBlobPublicAccess: true
   }
 }
 
@@ -32,7 +32,7 @@ resource fnstoreBlob 'Microsoft.Storage/storageAccounts/blobServices@2021-04-01'
             'DELETE'
           ]
           allowedOrigins: [
-            'http://localhost:8000'
+            '*'
           ]
           exposedHeaders: [
             '*'
@@ -47,13 +47,12 @@ resource fnstoreBlob 'Microsoft.Storage/storageAccounts/blobServices@2021-04-01'
 resource fnstoreContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2021-04-01' = {
   parent: fnstoreBlob
   name: 'az-shop-images'
-  properties: {
-    publicAccess: 'Blob'
-  }
 }
 
+
+
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
-  name: name
+  name: '${name}-db'
   kind: 'MongoDB'
   location: location
   properties: {
@@ -121,5 +120,15 @@ resource mongoColl 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/colle
   }
 }]
 
-output storageKey string = fnstore.listKeys().keys[0].value
-//output cosmosKey string = cosmosAccount.properties.connectionStrings
+
+param expireDate1Year string = dateTimeAdd(utcNow('u'), 'P1Y')
+output storagedownloadSAS string = listAccountSAS(fnstore.name, '2021-04-01', {
+  signedProtocol: 'https'
+  signedResourceTypes: 'sco'
+  signedPermission: 'rl'
+  signedServices: 'b'
+  signedExpiry: expireDate1Year //'2022-07-01T00:00:00Z'
+}).accountSasToken
+
+output storageKey string = first(fnstore.listKeys().keys).value
+output cosmosConnectionURL string = first(listConnectionStrings(cosmosAccount.id, '2021-06-15').connectionStrings).connectionString

@@ -170,7 +170,7 @@ const RouterRender = React.memo(({ routecfg, renderRoute, serverInitialData }) =
 
     let resource
     if (componentFetch) {
-      if (renderRoute.ssrContext && (renderRoute.ssrContext === "server" || renderRoute.ssrContext === "hydrate")) {
+      if (componentFetch.clientSide !== true &&  renderRoute.ssrContext && (renderRoute.ssrContext === "server" || renderRoute.ssrContext === "hydrate")) {
         console.log(`RouterRender : "${renderRoute.ssrContext}": fetching data from serverInitialData, so _suspenseWrap`)
         resource = _suspenseWrap(serverInitialData)
       } else {

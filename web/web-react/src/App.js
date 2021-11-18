@@ -52,6 +52,7 @@ export const AppRouteCfg = {
       checkout: false
     },
     componentFetch: {
+      clientSide: true,
       operation: "mycart"
     }
   },
@@ -62,6 +63,7 @@ export const AppRouteCfg = {
     },
     requireAuth: true,
     componentFetch: {
+      clientSide: true,
       operation: "mycart"
     }
   },
@@ -69,6 +71,7 @@ export const AppRouteCfg = {
     component: ManageOrders,
     requireAuth: true,
     componentFetch: {
+      clientSide: true,
       operation: "myorders"
     }
   },
