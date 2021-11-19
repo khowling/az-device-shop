@@ -49,7 +49,7 @@
   "description": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html",
   "devDependencies": {
     "@types/ws": "^8.2.0",
-    "typescript": "^4.5.0-beta"
+    "typescript": "^4.6.0-dev.20211119"
   },
   "dependencies": {
     "mongodb": "^4.1.3",

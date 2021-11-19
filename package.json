@@ -3,6 +3,8 @@
   "workspaces": [
     "common/eventing",
     "ordering",
-    "web/web-react"
+    "factory",
+    "web/web-react",
+    "web/web-server"
   ]
 }
