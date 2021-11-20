@@ -9,7 +9,7 @@ async function validateRequest({ esConnection, trigger, flow_id }, next: (action
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
-        const mongo_spec = await esConnection.db.collection("inventory_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: esConnection.tenentKey })
+        const mongo_spec = await esConnection.db.collection("inventory_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: esConnection.tenentKey })
         // translate the db document '*_id' ObjectId fields to '*Id' strings
         spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
     }

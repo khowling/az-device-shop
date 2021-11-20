@@ -14,6 +14,8 @@
     "mongodb": "^4.1.2"
   },
   "scripts": {
+    "build": "npx tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
     "@types/koa-router": "^7.4.4",

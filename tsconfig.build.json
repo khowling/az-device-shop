@@ -1,0 +1,18 @@
+{
+    "exclude": [
+        "**/*.test.ts",
+        "**/*.stub.ts",
+        "**/node_modules",
+        "**/lib",
+        "**/out"
+    ],
+    "compilerOptions": {
+        "module": "nodenext",
+        "sourceMap": true,
+        "declaration": true,
+        "paths": {
+            "@az-device-shop/eventing": ["./common/eventing"],
+            "@az-device-shop/ordering": ["./ordering"]
+        }
+    }
+}

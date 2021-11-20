@@ -8,7 +8,7 @@ async function validateOrder({ connection, trigger, flow_id }, next) {
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
-        const mongo_spec = await connection.db.collection("orders_spec").findOne({ _id: ObjectId(trigger.doc_id), partition_key: connection.tenentKey })
+        const mongo_spec = await connection.db.collection("orders_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: connection.tenentKey })
         // translate the db document '*_id' ObjectId fields to '*Id' strings
         spec = { ...mongo_spec, ...(mongo_spec.items && { items: mongo_spec.items.map(i => { return { ...i, ...(i.product_id && { productId: i.product_id.toHexString() }) } }) }) }
     }

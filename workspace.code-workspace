@@ -17,6 +17,6 @@
 		}
 	],
 	"settings": {
-		"typescript.tsdk": "ordering/node_modules/typescript/lib"
+		"npm.packageManager": "npm"
 	}
 }

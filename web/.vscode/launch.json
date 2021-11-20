@@ -5,24 +5,28 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "pwa-node",
+            "type": "node",
             "request": "launch",
-            "name": "Full Build",
-            //"cwd": "${workspaceFolder}/web/web-server",
+            "name": "Launch web (Full client build)",
             "program": "${workspaceFolder}/web-server/server.ts",
-            //"outFiles": ["${workspaceFolder}/web-server/out/**/*.js"],
-            "preLaunchTask": "build_server",
-            "envFile": "${workspaceFolder}/../.env_azure"
+            "preLaunchTask": "build_all",
+            "envFile": "${workspaceFolder}/../.env_azure",
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/web-server/lib/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+            ],
         },
         {
-            "type": "pwa-node",
+            "type": "node",
             "request": "launch",
-            "name": "Launch",
-            //"cwd": "${workspaceFolder}/web-server",
+            "name": "Launch web",
             "program": "${workspaceFolder}/web-server/server.ts",
-            //"outFiles": ["${workspaceFolder}/web-server/out/*.js"],
-            "preLaunchTask": "tsc: build - web-server/tsconfig.json",
-            "envFile": "${workspaceFolder}/../.env_azure"
+            "preLaunchTask": "npm: build",
+            "envFile": "${workspaceFolder}/../.env_azure",
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/web-server/lib/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+            ]
         }
     ]
 }

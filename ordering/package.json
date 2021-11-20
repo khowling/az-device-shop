@@ -1,14 +1,8 @@
 {
   "name": "@az-device-shop/ordering",
   "type": "module",
-  "exports": {
-    ".": {
-      "types": "./lib/orderingState.d.ts",
-      "import": "./lib/orderingState.js"
-    }
-  },
-  "main": "lib/orderingStartup.js",
-  "types": "./lib/orderingStartup.d.ts",
+   "main": "lib/orderingState.js",
+  "types": "lib/orderingState.d.ts",
   "version": "0.1.0",
   "dependencies": {
     "mongodb": "^3.7.0",

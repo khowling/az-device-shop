@@ -8,6 +8,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@az-device-shop/eventing": "*",
     "mongodb": "^3.7.0",
     "ws": "^7.5.4"
   },

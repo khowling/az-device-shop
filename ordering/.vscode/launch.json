@@ -9,13 +9,12 @@
             "request": "launch",
             "name": "Launch Ordering",
             "program": "${workspaceFolder}/orderingStartup.ts",
-            "preLaunchTask": "full tsc",
+            "preLaunchTask": "npm: build",
             "envFile": "${workspaceFolder}/../.env_azure",
             "resolveSourceMapLocations": [
-                "${workspaceFolder}/lib/**",
-                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**",
-                "!**/node_modules/**"
-              ],
+                "${workspaceFolder}/lib/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+            ],
         }
     ]
 }

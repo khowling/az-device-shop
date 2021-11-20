@@ -1,12 +1,6 @@
 {
+  "extends": "../../tsconfig.build.json",
   "compilerOptions": {
-    //"target": "es5",
-    "module": "nodenext",
-    //"forceConsistentCasingInFileNames": true,
-    //"declaration": true,
-    //"noImplicitAny": false,
-    "outDir": "lib",
-    "sourceMap": true,
-    "esModuleInterop": true
+    "outDir": "lib"
   }
 }

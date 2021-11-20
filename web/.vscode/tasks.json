@@ -4,23 +4,26 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build_server",
+            "label": "build_all",
             "dependsOn": [
                 "build_lib",
-                "tsc: build - web-server/tsconfig.json",
+                "npm: build",
                 "build_assets_dev"
             ]
         },
-        /*
         {
-            "label": "compile_ts",
             "type": "npm",
             "script": "build",
+            "group": "build",
+            "problemMatcher": {
+                "base": "$tsc",
+                "fileLocation": ["relative", "${workspaceFolder}/web-server"]
+            },
+            "label": "npm: build",
             "options": {
                 "cwd": "${workspaceFolder}/web-server"
             }
         },
-        */
         {
             "label": "build_lib",
             "type": "npm",

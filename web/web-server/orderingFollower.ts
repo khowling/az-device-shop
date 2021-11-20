@@ -1,8 +1,8 @@
 //import assert from 'assert'
 
-import { OrderStateManager } from '@az-device-shop/ordering'
-import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { startCheckpointing, restoreState } from '@az-device-shop/eventing/state-restore'
+import { OrderStateManager } from "@az-device-shop/ordering"
+import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
+import { startCheckpointing, restoreState } from "@az-device-shop/eventing/state-restore"
 
 export async function order_state_startup({ db, tenent }) {
 
