@@ -11,9 +11,10 @@ export default function Html({ children, title, hydrate_data, hydrate_tenent }) 
                 <link rel="stylesheet" type="text/css" href="https://assets.onestore.ms/cdnfiles/external/mwf/long/v1/v1.26.1/css/mwf-west-european-default.css" />
                 <title>{title}</title>
             </head>
-            <body id="root">
-                {children}
-                <div id="modal-root"></div>
+            <body>
+                <noscript>You need to enable JavaScript to run this app.</noscript>
+                <div id="root" aria-hidden="true">{children}</div>
+                <div id="modal-root" aria-hidden="true"></div>
                 <script dangerouslySetInnerHTML={{
                     __html: `
                         window.__HYDRATE__TENENT__ = ${JSON.stringify(hydrate_tenent)};

@@ -1,5 +1,5 @@
 import React, { useContext, Suspense } from 'react'
-import { createPortal } from 'react-dom'
+//import { createPortal } from 'react-dom'
 import { Link, navTo /*, Redirect */ } from './router.js'
 import { MyImage } from '../utils/common.js'
 import { _suspenseFetch } from '../utils/fetch.js'
@@ -14,6 +14,7 @@ import { CartOpenContext } from '../GlobalContexts.js'
 
 const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
 
+/*
 function ModelPanel(props) {
   const { children, ...panelprops } = props
 
@@ -28,6 +29,7 @@ function ModelPanel(props) {
   }
 
 }
+*/
 
 const titleClass = mergeStyleSets({ "display": "inline-block", "left": "5%", "maxWidth": "350px", "verticalAlign": "middle", "marginTop": "0px" })
 
@@ -35,7 +37,7 @@ const titleClass = mergeStyleSets({ "display": "inline-block", "left": "5%", "ma
 export function Nav({ tenent, auth, cartCount }) {
 
   const [cartOpen, setCartOpen] = useContext(CartOpenContext)
-  console.log(`Nav: tenent=${JSON.stringify(tenent)} cartCount=${cartCount} auth=${JSON.stringify(auth)}`)
+  console.log(`Nav: cartOpen=${cartOpen} cartCount=${cartCount}`)
 
   function dismissPanel() {
     setCartOpen(false)
@@ -129,19 +131,22 @@ export function Nav({ tenent, auth, cartCount }) {
 
       </div>
 
-      <Suspense fallback={<span />}>
-        <ModelPanel
+    
+        <Panel
           headerText="Shopping Cart"
           isOpen={cartOpen}
           onDismiss={dismissPanel}
           type={PanelType.medium}
 
           closeButtonAriaLabel="Close">
-          {cartOpen &&
-            <MyCart dismissPanel={dismissPanel} resource={_suspenseFetch('componentFetch/mycart')} panel={true} />
-          }
-        </ModelPanel>
-      </Suspense>
+            { cartOpen && 
+              <Suspense fallback={<div></div>}>
+                 <MyCart dismissPanel={dismissPanel} resource={_suspenseFetch('componentFetch/mycart')} panel={true} />
+              </Suspense>
+
+            }
+        </Panel>
+     
 
     </nav>
   )

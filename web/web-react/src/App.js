@@ -163,13 +163,13 @@ export function App({ startUrl }) {
         <main id="mainContent" data-grid="container">
           <TenentContext.Consumer>
             {tenent => {
-              console.log(`tenent=${tenent}`); return (
+              return (
                 <AuthContext.Consumer>
                   {auth => {
-                    console.log(`auth=${auth}`); return (
+                    return (
                       <CartCountContext.Consumer>
                         {cartCountContext => {
-                          console.log(`cartCountContext=${cartCountContext[0]}`); return (
+                          return (
                             <Nav tenent={tenent} auth={auth} cartCount={cartCountContext[0]} />
                           )
                         }}

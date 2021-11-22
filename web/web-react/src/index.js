@@ -16,9 +16,7 @@ root.render(
         name: "Dev Server",
         image: {"url": "https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png"}
         }}>
-        <React.StrictMode>
-            <App startUrl={{ pathname, search, hash }} />
-        </React.StrictMode>,
+        <App startUrl={{ pathname, search, hash }} />
     </TenentContext.Provider>
 
 )
