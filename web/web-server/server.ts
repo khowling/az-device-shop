@@ -447,16 +447,24 @@ async function init() {
     // Init Settings (currently single tenent)
     console.log ("init(): getting tenant config from db...")
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ type: "business", partition_key: "root" })
+
     if (!app.context.tenent) {
         console.log ("init(): no tenant creating default config")
         app.context.tenent = await createTenant( app.context, {
             "name": "Demo Bike Shop",
+            "image": {"url": "https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png"},
             "catalog": "bike",
             "email": "first@sign.in",
             "inventory": true
         })
     }
-    app.context.tenentKey = app.context.tenent && app.context.tenent._id
+
+    app.context.tenent = {
+        ...app.context.tenent,
+        downloadSAS: process.env.STORAGE_DOWNLOAD_SAS
+    }
+
+    app.context.tenentKey =  app.context.tenent._id
 
     console.log ("init(): setting tenant watcher, will process.exit() if removed")
     app.context.businessWatcher = db.collection(StoreDef["business"].collection).watch([

@@ -10,16 +10,10 @@ COPY common/eventing/package*.json ./
 WORKDIR /usr/src/ordering
 COPY ordering/package*.json ./
 
-WORKDIR /usr/src/web/web-react
-COPY web/web-react/package*.json ./
-
-WORKDIR /usr/src/web/web-server
-COPY web/web-server/package*.json ./
-
 WORKDIR /usr/src
 COPY package*.json ./
 # legacy-peer-deps required to run fluentui with react 18
-RUN npm i --legacy-peer-deps
+RUN npm i 
 
 
 
@@ -37,20 +31,6 @@ WORKDIR /usr/src/ordering
 COPY ordering/ ./
 RUN npm run build
 
-WORKDIR /usr/src/web/web-react
-COPY web/web-react/ ./
-# Creates js in ./lib
-RUN npm run-script build_lib
-# Create webpack assets in ./out
-RUN npm run-script build_assets
-
-
-WORKDIR /usr/src/web/web-server
-COPY web/web-server/ ./
-RUN npm run build
-
-
-
 # Second stage: run things.
 FROM node:14
 
@@ -63,23 +43,13 @@ WORKDIR /usr/src/common/eventing
 COPY --from=build /usr/src/common/eventing/package*.json ./
 COPY --from=build /usr/src/common/eventing/lib/ ./lib
 
+
 WORKDIR /usr/src/ordering
 COPY --from=build /usr/src/ordering/package*.json ./
 COPY --from=build /usr/src/ordering/lib/ ./lib
-
-WORKDIR /usr/src/web/web-react
-COPY --from=build /usr/src/web/web-react/package*.json ./
-COPY --from=build /usr/src/web/web-react/lib/ ./lib
-COPY --from=build /usr/src/web/web-react/out/ ./out
-COPY --from=build /usr/src/web/web-react/public/ ./public
-COPY --from=build /usr/src/web/web-react/src/react-app-env.d.ts ./src/
-
-WORKDIR /usr/src/web
-COPY --from=build /usr/src/web/web-server/package*.json ./web-server/
-COPY --from=build /usr/src/web/web-server/lib/ ./web-server/lib
 
 # Copy compiled typescript server
 
 
 EXPOSE 3000
-CMD [ "node", "web-server/lib/server.js" ]
+CMD [ "node", "lib/orderingStartup.js" ]

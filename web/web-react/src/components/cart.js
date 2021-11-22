@@ -270,17 +270,21 @@ export function AddToCart({ resource }) {
 
   function addorder() {
     setState({ state: "adding" })
+    try {
+      _fetchit('/api/cartadd', 'POST', {}, { product_ref: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
 
-    _fetchit('/api/cartadd', 'POST', {}, { product_ref: { _id: product._id }, qty: 1, recorded_item_price: product.price, options: { "Colour": optColor } }).then(succ => {
+        console.log(`addorder success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartCount}`)
+        setCartCount(cartCount + 1)
+        setState({ state: "added", response: succ })
 
-      console.log(`created success : ${JSON.stringify(succ)},  setting cartItemsAdded ${cartCount}`)
-      setCartCount(cartCount + 1)
-      setState({ state: "added", response: succ })
-
-    }, err => {
-      console.error(`created failed : ${err}`)
-      setState({ state: "error", description: err })
-    })
+      }, err => {
+        console.error(`addorder failed : ${err}`)
+        setState({ state: "error", description: JSON.stringify(err) })
+      })
+    } catch (err) {
+      console.error(`addorder failed : ${err}`)
+        setState({ state: "error", description: JSON.stringify(err)  })
+    }
   }
 
   useEffect(() => {

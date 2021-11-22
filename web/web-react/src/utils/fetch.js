@@ -52,13 +52,13 @@ export async function _fetchit(url, method = 'GET', headers = {}, body = null, c
         opts.body = JSON.stringify(body)
         opts.headers = {
           'content-type': 'application/json',
-          'content-length': Buffer.byteLength(opts.body),
+          'content-length': opts.body.length.toString(),
           ...headers
         }
       } else {
         opts.body = body
         opts.headers = {
-          'content-length': Buffer.byteLength(opts.body),
+          'content-length': opts.body.length.toString(),
           ...headers
         }
       }

@@ -3,17 +3,23 @@ import ReactDOM from 'react-dom';
 //import './index.css';
 import { App } from './App';
 import * as serviceWorker from './serviceWorker';
-import { RenderContext } from './GlobalContexts'
+import { TenentContext } from './GlobalContexts'
 
 
 const { pathname, search, hash } = window.location
 
 const root = ReactDOM.createRoot(document.getElementById('root'))
-console.log('index.js - root.render')
+console.log(`index.js - root.render: downloadSAS=${process.env.REACT_APP_STORAGE_DOWNLOAD_SAS}`)
 root.render(
-    <React.StrictMode>
-        <App startUrl={{ pathname, search, hash }} />
-    </React.StrictMode>,
+    <TenentContext.Provider value={{
+        downloadSAS: process.env.REACT_APP_STORAGE_DOWNLOAD_SAS, 
+        name: "Dev Server",
+        image: {"url": "https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png"}
+        }}>
+        <React.StrictMode>
+            <App startUrl={{ pathname, search, hash }} />
+        </React.StrictMode>,
+    </TenentContext.Provider>
 
 )
 

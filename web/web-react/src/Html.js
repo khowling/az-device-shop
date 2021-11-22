@@ -11,7 +11,7 @@ export default function Html({ children, title, hydrate_data, hydrate_tenent }) 
                 <link rel="stylesheet" type="text/css" href="https://assets.onestore.ms/cdnfiles/external/mwf/long/v1/v1.26.1/css/mwf-west-european-default.css" />
                 <title>{title}</title>
             </head>
-            <body>
+            <body id="root">
                 {children}
                 <div id="modal-root"></div>
                 <script dangerouslySetInnerHTML={{

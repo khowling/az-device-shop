@@ -41,6 +41,8 @@ spec:
               value: {{ required "env.STORAGE_ACCOUNT Value required" .Values.global.env.STORAGE_ACCOUNT | quote}}
             - name: STORAGE_CONTAINER
               value: {{ required "env.STORAGE_CONTAINER Value required" .Values.global.env.STORAGE_CONTAINER | quote}}
+            - name: STORAGE_DOWNLOAD_SAS
+              value: {{ required "env.STORAGE_DOWNLOAD_SAS Value required" .Values.global.env.STORAGE_DOWNLOAD_SAS | quote}}
             - name: B2C_CLIENT_ID
               value: {{ required "env.B2C_CLIENT_ID Value required" .Values.env.B2C_CLIENT_ID | quote}}
             - name: B2C_TENANT

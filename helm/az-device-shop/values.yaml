@@ -10,6 +10,7 @@ global:
     STORAGE_ACCOUNT: ""
     STORAGE_CONTAINER: ""
     STORAGE_MASTER_KEY: ""
+    STORAGE_DOWNLOAD_SAS: ""
     APP_HOST_URL: ""
 
 az-device-shop-web:

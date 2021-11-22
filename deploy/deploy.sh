@@ -42,27 +42,9 @@ source ./web/.env
 export ACRNAME=$(az acr list -g ${AKS_RG} --query [0].name -o tsv)
 
 az acr build -r $ACRNAME -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
+az acr build -r $ACRNAME -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .
+az acr build -r $ACRNAME -t az-device-shop/ordering:0.1.0  -f ./ordering/Dockerfile .
 
-
-#export ACRNAME=khcommon
-az acr login -n $ACRNAME
-cd ../web
-az acr build --registry $ACRNAME --image az-device-shop/web:0.1.0 -f Dockerfile.root ../
-
-cd ../ordering
-az acr build --registry $ACRNAME --image az-device-shop/ordering:0.1.0 -f Dockerfile.root ../
-
-cd ../factory
-az acr build --registry $ACRNAME --image az-device-shop/factory:0.1.0 -f Dockerfile.root ../
-
-
-### or
-cd ../web && docker build -t ${ACRNAME}.azurecr.io/az-device-shop/web:0.1.0 -f Dockerfile.root ../
-cd ../ordering && docker build -t ${ACRNAME}.azurecr.io/az-device-shop/ordering:0.1.0 -f Dockerfile.root ../
-cd ../factory && docker build -t ${ACRNAME}.azurecr.io/az-device-shop/factory:0.1.0 -f Dockerfile.root ../
-docker push ${ACRNAME}.azurecr.io/az-device-shop/web:0.1.0
-docker push ${ACRNAME}.azurecr.io/az-device-shop/ordering:0.1.0
-docker push ${ACRNAME}.azurecr.io/az-device-shop/factory:0.1.0
 
 export APP_NAME="az-shop"
 export APP_DOMAIN="labhome.biz"
@@ -74,12 +56,13 @@ kubectl create ns $AZSHOP_NS
 # upgrade
 # uninstall
 # install
-helm upgrade ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
+helm upgrade --install ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
   --set global.registryHost="${ACRNAME}.azurecr.io/" \
   --set global.env.MONGO_DB="${MONGO_DB}" \
   --set global.env.STORAGE_ACCOUNT="${STORAGE_ACCOUNT}" \
   --set global.env.STORAGE_CONTAINER="${STORAGE_CONTAINER}" \
   --set global.env.STORAGE_MASTER_KEY="${STORAGE_MASTER_KEY}" \
+  --set global.env.STORAGE_DOWNLOAD_SAS="${STORAGE_DOWNLOAD_SAS}" \
   --set global.env.APP_HOST_URL="${APP_HOST_URL}" \
   --set global.ingressDomain="${APP_DOMAIN}" \
   --set az-device-shop-web.env.B2C_RESETPWD_POLICY="${B2C_RESETPWD_POLICY}" \
@@ -92,9 +75,8 @@ helm upgrade ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
   --set az-device-shop-factory.image.tab="0.1.0"
 
 
-
-or local
-
-node
-
-docker build  -t $ACRNAME.azurecr.io/az-device-shop/web:0.1.0 -f Dockerfile.root ../
+## Testing cert-manager
+# Is the certificate ready
+ kubectl describe certificate chart-example-tls -n ${AZSHOP_NS}
+# If not look at events
+ kubectl get events -n cert-manager

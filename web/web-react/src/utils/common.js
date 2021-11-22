@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 
 import { putBlob /*, listFiles */ } from '../utils/azureBlob.js'
-
 import { Toggle, TextField, DefaultButton, Stack } from '@fluentui/react'
-
+import { TenentContext } from '../GlobalContexts.js'
 
 export function MyImage({ image, ...rest }) {
     if (image) {
@@ -11,11 +10,15 @@ export function MyImage({ image, ...rest }) {
             return (
                 <img src={image.url} alt="" {...rest} />
             )
-        } else if (image.container_url && image.pathname) {
+        } else if (image.container_url && image.pathname) 
             return (
-                <img src={image.container_url + "/" + image.pathname} alt="" {...rest} />
+                <TenentContext.Consumer>
+                    {tenent => { return (
+                        <img src={`${image.container_url}/${image.pathname}${tenent && tenent.downloadSAS ? `?${tenent.downloadSAS}` : ''}`} alt="" {...rest} />
+                    )}}
+                </TenentContext.Consumer>
             )
-        } else {
+        else {
             return (
                 <img src={"http://placehold.it/50x50"} alt="" {...rest} />
             )
