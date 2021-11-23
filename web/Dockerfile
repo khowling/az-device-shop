@@ -42,7 +42,7 @@ COPY web/web-react/ ./
 # Creates js in ./lib
 RUN npm run-script build_lib
 # Create webpack assets in ./out
-RUN npm run-script build_assets
+RUN npm run-script build_assets_prod
 
 
 WORKDIR /usr/src/web/web-server
@@ -53,11 +53,6 @@ RUN npm run build
 
 # Second stage: run things.
 FROM node:14
-
-#  Code dependencies from build stage
-WORKDIR /usr/src/
-COPY --from=build /usr/src/package*.json ./
-COPY --from=build /usr/src/node_modules/ ./node_modules
 
 WORKDIR /usr/src/common/eventing
 COPY --from=build /usr/src/common/eventing/package*.json ./
@@ -78,8 +73,18 @@ WORKDIR /usr/src/web
 COPY --from=build /usr/src/web/web-server/package*.json ./web-server/
 COPY --from=build /usr/src/web/web-server/lib/ ./web-server/lib
 
-# Copy compiled typescript server
+#  Code dependencies from build stage
+WORKDIR /usr/src/
+COPY --from=build /usr/src/package*.json ./
 
+
+ENV NODE_ENV=production
+RUN npm -g install npm@latest
+#COPY --from=build /usr/src/node_modules/ ./node_modules
+RUN npm i --legacy-peer-deps --only=prod
+RUN ls -R
+
+WORKDIR /usr/src/web
 
 EXPOSE 3000
 CMD [ "node", "web-server/lib/server.js" ]

@@ -9,21 +9,21 @@ export const _suspenseWrap = (res) => {
 
 
 export const _suspenseFetch = (operation, recordid) => {
-  console.log(`_suspenseFetch :  web fetch for ${operation} ${recordid}`)
+  //console.log(`_suspenseFetch :  web fetch for ${operation} ${recordid}`)
   let r = { status: 'pending' }
   let suspender = _fetchit(`/api/${operation}` + (recordid ? `/${recordid}` : ''))
     //  .then(async res => res.ok? res.json() : {error: res.status + ': '+ await res.text()})  
     .then(res => {
-      console.log(`_suspenseFetch response error=${res.error}`)
+      //console.log(`_suspenseFetch response error=${res.error}`)
       r = (!res.error) ? { status: 'success', result: res } : { status: 'error', result: res.error }
     })
     .catch((e) => {
       r = { status: 'error', result: e }
     })
-  console.log(`_suspenseFetch returning ${r.status}`)
+  //console.log(`_suspenseFetch returning ${r.status}`)
   return {
     read() {
-      console.log(`_suspenseFetch reading ${r.status}`)
+      //console.log(`_suspenseFetch reading ${r.status}`)
       if (r.status === 'pending') {
         throw suspender
       }

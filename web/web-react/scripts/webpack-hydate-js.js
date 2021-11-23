@@ -10,12 +10,12 @@ import path, { dirname } from 'path';
 import rimraf from 'rimraf'
 import webpack from 'webpack'
 
-const isProduction = process.env.NODE_ENV === 'production';
+const dev = process.env.NODE_ENV !== "production";
 rimraf.sync(path.resolve(/*__dirname, */ './out'));
 webpack(
     {
-        mode: isProduction ? 'production' : 'development',
-        devtool: isProduction ? 'source-map' : 'cheap-module-source-map',
+        mode: dev ? "development" : "production",
+        devtool: dev ? "eval-source-map" : false,
         entry: [path.resolve(/*__dirname, */'src/ssr_hydrate.js')],
         output: {
             path: path.resolve(/*__dirname,*/ './out/js'),

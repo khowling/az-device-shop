@@ -1,5 +1,5 @@
 import React, { useContext, Suspense } from 'react'
-//import { createPortal } from 'react-dom'
+import { createPortal } from 'react-dom'
 import { Link, navTo /*, Redirect */ } from './router.js'
 import { MyImage } from '../utils/common.js'
 import { _suspenseFetch } from '../utils/fetch.js'
@@ -12,12 +12,12 @@ import { mergeStyles, mergeStyleSets } from '@fluentui/merge-styles';
 
 import { CartOpenContext } from '../GlobalContexts.js'
 
-const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
 
-/*
+
 function ModelPanel(props) {
+  const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
   const { children, ...panelprops } = props
-
+  console.log (`modalRoot=${modalRoot.id}`)
   if (modalRoot) {
     return createPortal(
       <Panel {...panelprops}>
@@ -29,7 +29,7 @@ function ModelPanel(props) {
   }
 
 }
-*/
+
 
 const titleClass = mergeStyleSets({ "display": "inline-block", "left": "5%", "maxWidth": "350px", "verticalAlign": "middle", "marginTop": "0px" })
 
@@ -39,10 +39,6 @@ export function Nav({ tenent, auth, cartCount }) {
   const [cartOpen, setCartOpen] = useContext(CartOpenContext)
   console.log(`Nav: cartOpen=${cartOpen} cartCount=${cartCount}`)
 
-  function dismissPanel() {
-    setCartOpen(false)
-  }
-
   return (
     <nav className="m-navigation-bar" role="menubar">
 
@@ -51,7 +47,6 @@ export function Nav({ tenent, auth, cartCount }) {
         {tenent && tenent.image &&
           <Link className="navbar-brand no-outline" style={{ "display": "inline-block", "left": "5%", "verticalAlign": "middle", "marginTop": "0px" }}>
             <MyImage image={tenent.image} height="33px" />
-            { /* <img src="https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png" alt="Microsoft" height="23" /> */}
           </Link>
         }
 
@@ -132,20 +127,19 @@ export function Nav({ tenent, auth, cartCount }) {
       </div>
 
     
-        <Panel
-          headerText="Shopping Cart"
-          isOpen={cartOpen}
-          onDismiss={dismissPanel}
-          type={PanelType.medium}
+      <ModelPanel
+        headerText="Shopping Cart"
+        isOpen={cartOpen}
+        onDismiss={() => setCartOpen(false)}
+        type={PanelType.medium}
 
-          closeButtonAriaLabel="Close">
-            { cartOpen && 
-              <Suspense fallback={<div></div>}>
-                 <MyCart dismissPanel={dismissPanel} resource={_suspenseFetch('componentFetch/mycart')} panel={true} />
-              </Suspense>
-
-            }
-        </Panel>
+        closeButtonAriaLabel="Close">
+          { cartOpen && 
+            <Suspense fallback={<div></div>}>
+                <MyCart dismissPanel={() => setCartOpen(false)} resource={_suspenseFetch('componentFetch/mycart')} panel={true} />
+            </Suspense>
+          }
+      </ModelPanel>
      
 
     </nav>
