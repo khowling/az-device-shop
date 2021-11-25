@@ -1,20 +1,39 @@
 import React, { useState } from 'react'
-
+import { createPortal } from 'react-dom'
 import { putBlob /*, listFiles */ } from '../utils/azureBlob.js'
-import { Toggle, TextField, DefaultButton, Stack } from '@fluentui/react'
+import { Toggle, TextField, DefaultButton, Stack, Panel } from '@fluentui/react'
 import { TenentContext } from '../GlobalContexts.js'
 
+
+export function ModelPanel(props) {
+    const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
+    const { children, ...panelprops } = props
+    console.log (`modalRoot=${modalRoot.id}`)
+    if (modalRoot) {
+      return createPortal(
+        <Panel {...panelprops}>
+          {children}
+        </Panel>,
+        modalRoot)
+    } else {
+      return null
+    }
+  
+  }
+
+
+  
 export function MyImage({ image, ...rest }) {
     if (image) {
         if (image.url) {
             return (
                 <img src={image.url} alt="" {...rest} />
             )
-        } else if (image.container_url && image.pathname) 
+        } else if (image.pathname) 
             return (
                 <TenentContext.Consumer>
                     {tenent => { return (
-                        <img src={`${image.container_url}/${image.pathname}${tenent && tenent.downloadSAS ? `?${tenent.downloadSAS}` : ''}`} alt="" {...rest} />
+                        <img src={`/api/file/${image.pathname}`} alt="" {...rest} />
                     )}}
                 </TenentContext.Consumer>
             )
@@ -160,7 +179,7 @@ export function EditImage({ result_image, root = false, onChange }) {
 
     console.log(`EditImage, result_image ${JSON.stringify(result_image)}`)
     const validImage = imageTypeUrl ? result_image && result_image.url && result_image.url.startsWith('https://') : result_image && result_image.pathname
-    let previewsrc = imageTypeUrl ? validImage && result_image.url : validImage && result_image.container_url + "/" + result_image.pathname
+    let previewsrc = imageTypeUrl ? validImage && result_image.url : validImage && `/api/file/${result_image.pathname}`
     // Picture
     const fileInputRef = React.createRef()
 

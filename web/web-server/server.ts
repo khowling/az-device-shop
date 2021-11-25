@@ -13,7 +13,7 @@ import Joi from 'joi'
 // Auth & SAS require
 import jwkToPem from 'jwk-to-pem'
 import jws from 'jws'
-
+import https from 'https'
 
 const app_host_url = process.env.APP_HOST_URL
 const client_id = process.env.B2C_CLIENT_ID
@@ -54,9 +54,8 @@ const StoreDef: StoreDefinitionList = {
             'inventory': Joi.boolean(),
             'image': Joi.object({
                 'url': Joi.string().uri(),
-                'container_url': Joi.string().uri(),
                 'pathname': Joi.string().uri({ relativeOnly: true })
-            }).xor('url', 'pathname').xor('url', 'container_url')
+            }).min(1)
 
         })
     },
@@ -85,9 +84,8 @@ const StoreDef: StoreDefinitionList = {
             }),
             'image': Joi.object({
                 'url': Joi.string().uri(),
-                'container_url': Joi.string().uri(),
                 'pathname': Joi.string().uri({ relativeOnly: true })
-            }).xor('url', 'pathname').xor('url', 'container_url')
+            }).min(1)
         })
     },
     "inventory": {
@@ -373,10 +371,11 @@ const BUILD_PATH = './web-react/out' //process.env.NODE_ENV === 'production' ? '
 const PUBLIC_PATH = "./web-react/public"
 async function serve_static(ctx, next) {
 
-    ctx.assert(ctx.captures.length === 2, 404, `${ctx.path} not found`)
+    const captures = ctx.captures.length
+    ctx.assert(captures !== 0, 404, `${ctx.path} not found`)
 
-    const staticType = ctx.captures[0],
-        filePath = ctx.captures[1]
+    const staticType = captures === 2 ? ctx.captures[0] : 'public',
+        filePath =  captures === 2 ? ctx.captures[1] : ctx.captures[0]
 
     let fsPath
     if (staticType === 'static') {// webpacked assets (lives in ./build)
@@ -481,8 +480,8 @@ async function init() {
     })
 
 
-    // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud (using REACT_APP_SERVER_URL)
-    app.use(cors({ credentials: true }))
+    // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud
+    //app.use(cors({ credentials: true }))
 
 
     console.log ("init(): setting routes....")
@@ -491,7 +490,7 @@ async function init() {
         .get(`/(static)/(.*)`, serve_static)
         .get(`/(public)/(.*)`, serve_static)
         // This is for '/favicon.ico' '/manifest.json' '/robots.txt'
-        //.get(/^\/[^\/]*\./, serve_static)
+        .get(/^\/([^\/]*\..*)/, serve_static)
         .routes())
 
     app.use(authroutes)
@@ -541,6 +540,7 @@ const server_ssr = require('../../../../src/ssr_server')
 //const { AppRouteCfg, pathToRoute, ssrRender } = ssr_server
 import { AppRouteCfg, pathToRoute, ssrRender } from '@az-device-shop/web-react' //'../web-react/lib/ssr_server.js'
 import { sign } from 'crypto'
+import { Http2ServerRequest } from 'http2'
 
 // ssr middleware (ensure this this the LAST middleware to be used)
 async function ssr(ctx, next) {
@@ -814,7 +814,7 @@ async function writeimages(new_tenent, images: any) {
             })
 
         })
-        imagemap.set(pathname, { pathname: new_blob_info.pathname, container_url: new_blob_info.container_url })
+        imagemap.set(pathname, { pathname: new_blob_info.pathname })
 
     }
     return imagemap
@@ -986,30 +986,41 @@ const api = new Router({ prefix: '/api' })
         ctx.body = getFileSaS(userdoc.root ? 'root' : ctx.tenentKey.toHexString(), userdoc.filename)
         await next()
     })
+    .get('/file/:folder/:id', async function (ctx, next) {
+        const pathname = ctx.params.folder + '/' + ctx.params.id
+        const url = `https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net/${process.env.STORAGE_CONTAINER}/${pathname}?${process.env.STORAGE_DOWNLOAD_SAS}`
+        console.log (`/file : url=${url}`)
+        try {
+            await new Promise((acc, rej) => {
+                https.get(url, async (res) => {
+                    console.log (res.statusCode)
+                    if (res.statusCode !== 200) {
+                        //ctx.throw(400, `Request Failed: Status Code: ${res.statusCode}`)
+                        rej(res.statusCode)
+                    } else {
+                        ctx.status = res.statusCode;
+                        res.pipe(ctx.res).on('finish', acc)
+                    }
+                })
+            })
+            await next()
+        } catch (e) {
+            ctx.throw(400, `Request Failed: error: ${JSON.stringify(e)}`)
+            await next()
+        }
+    })
     .get('/export', async function (ctx, next) {
         const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10)
 
         const products = await FetchOperation.get(ctx, "products")
 
-
-        /*
-         * const res = await fetch(`${retsas.container_url}?${retsas.sas}&restype=container&comp=list`, {
-         *    method: 'GET',
-         *    headers: {
-         *        'x-ms-version': "2018-03-28"
-         *    }
-         * })
-         * const files = res.split('<Blob>').map(b => b.substring(0, b.indexOf('</Blob>'))).slice(1).map(r => Object.assign({}, ...r.split('</').map((e) => { return { [e.substring(e.lastIndexOf('<') + 1, e.lastIndexOf('>'))]: e.substring(e.lastIndexOf('>') + 1) } })))
-         */
-
         const imagesb64 = {}
         for (const c of [...products.Category, ...products.Product]) {
 
-            if (c.image && c.image.container_url) {
-                const pathname = c.image.pathname || c.image.filename || c.image.blobname
+            if (c.image && c.image.pathname) {
+                const pathname = c.image.pathname
                 if (pathname && !imagesb64.hasOwnProperty(pathname)) {
-                    //console.log(`getting ${c.image.container_url}/${pathname}`)
-                    imagesb64[pathname] = await fetch(`${c.image.container_url}/${pathname}`)
+                    imagesb64[pathname] = await fetch(`/api/file/${pathname}`)
                 }
             }
         }

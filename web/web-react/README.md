@@ -13,8 +13,6 @@ npm install @fluentui/react @fluentui/merge-styles  --save-dev
 
 Running Locally
  * npm start
-    * ```PORT=8000 REACT_APP_SERVER_URL=http://localhost:3000 react-scripts start"```
-    * uses ```index.js``` -> ``` react-dom.render(<App startUrl={{ pathname, search, hash }} />```
 
 Running SSR
 

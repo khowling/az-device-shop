@@ -1,7 +1,6 @@
 import React, { useContext, Suspense } from 'react'
-import { createPortal } from 'react-dom'
 import { Link, navTo /*, Redirect */ } from './router.js'
-import { MyImage } from '../utils/common.js'
+import { MyImage, ModelPanel } from '../utils/common.js'
 import { _suspenseFetch } from '../utils/fetch.js'
 import { MyCart } from './cart.js'
 
@@ -12,23 +11,6 @@ import { mergeStyles, mergeStyleSets } from '@fluentui/merge-styles';
 
 import { CartOpenContext } from '../GlobalContexts.js'
 
-
-
-function ModelPanel(props) {
-  const modalRoot = typeof document !== 'undefined' && document.getElementById('modal-root');
-  const { children, ...panelprops } = props
-  console.log (`modalRoot=${modalRoot.id}`)
-  if (modalRoot) {
-    return createPortal(
-      <Panel {...panelprops}>
-        {children}
-      </Panel>,
-      modalRoot)
-  } else {
-    return null
-  }
-
-}
 
 
 const titleClass = mergeStyleSets({ "display": "inline-block", "left": "5%", "maxWidth": "350px", "verticalAlign": "middle", "marginTop": "0px" })

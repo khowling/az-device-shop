@@ -1,6 +1,6 @@
 import React, { useState, Suspense } from 'react'
 import { navTo /*, _encodeURL */ } from './router.js'
-import { Alert, MyImage, EditImage } from '../utils/common.js'
+import { Alert, MyImage, EditImage, ModelPanel } from '../utils/common.js'
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch.js'
 
 import { Dropdown, ChoiceGroup, Panel, PanelType, Separator, mergeStyleSets, PrimaryButton, DefaultButton, Label, MessageBar, MessageBarType, Stack, Text, TextField, DetailsList, DetailsListLayoutMode, SelectionMode } from '@fluentui/react'
@@ -38,8 +38,8 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     setError(null)
     _fetchit('/api/store/products', 'POST', {}, result._id ? { _id: result._id, ...input } : input).then(succ => {
       console.log(`created success : ${JSON.stringify(succ)}`)
-      navTo("/products")
-      dismissPanel()
+      dismissPanel("/products")
+      
     }, err => {
       console.error(`created failed : ${err}`)
       setError(`created failed : ${err}`)
@@ -50,7 +50,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
     setError(null)
     _fetchit('/api/store/products/' + result._id, 'DELETE').then(succ => {
       console.log(`delete success : ${JSON.stringify(succ)}`)
-      navTo("/products")
+      dismissPanel("/products")
     }, err => {
       console.error(`delete failed : ${err}`)
       setError(`delete failed : ${err}`)
@@ -126,7 +126,7 @@ export function Product({ dismissPanel, resource, type, refstores }) {
         }
         <Stack horizontal tokens={{ childrenGap: 5 }}>
           <PrimaryButton text="Save" onClick={_save} allowDisabledFocus disabled={false} />
-          <DefaultButton text="Cancel" /*href={_encodeURL("/ManageProducts")}*/ onClick={dismissPanel} allowDisabledFocus disabled={false} />
+          <DefaultButton text="Cancel" /*href={_encodeURL("/ManageProducts")}*/ onClick={() => dismissPanel()} allowDisabledFocus disabled={false} />
           {result._id &&
             <DefaultButton text="Delete" onClick={_delete} allowDisabledFocus disabled={false} />
           }
@@ -155,16 +155,14 @@ export function ManageProducts({ resource }) {
 
   const { inventory } = result.refstores || {}
 
-  console.log('ManageProducts')
+  console.log(`ManageProducts panel=${JSON.stringify(panel)}`)
 
   function openNewItem(type, editid) {
     console.log('openNewItem')
     const refstores = type === 'Product' ? { 'Category': result.data.Category.map(c => { return { key: c._id, text: c.heading } }) } : {}
     setPanel({ open: true, type, resource: editid ? _suspenseFetch('store/products', editid) : _suspenseWrap({}), refstores })
   }
-  function dismissPanel() {
-    setPanel({ open: false })
-  }
+
 
   if (false) return <div></div>
   else
@@ -172,19 +170,22 @@ export function ManageProducts({ resource }) {
       <Stack>
 
 
-        <Panel
+        <ModelPanel
           headerText={"Create " + panel.type}
           isOpen={panel.open}
-          onDismiss={dismissPanel}
+          onDismiss={() => setPanel({ open: false })}
           type={PanelType.custom}
           customWidth='360px'
           closeButtonAriaLabel="Close">
           {panel.open &&
             <Suspense fallback={<span></span>}>
-              <Product type={panel.type} refstores={panel.refstores} dismissPanel={dismissPanel} resource={panel.resource} />
+              <Product type={panel.type} refstores={panel.refstores} dismissPanel={(nav) => {
+                setPanel({ open: false })
+                //if (nav) navTo(nav)
+              }} resource={panel.resource} />
             </Suspense>
           }
-        </Panel>
+        </ModelPanel>
 
 
         <DetailsList

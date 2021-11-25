@@ -23,11 +23,11 @@ export function putBlob(file, root, evtFn) {
 
       let currblock = 0, sendblockids = []
       reader.onload = (event) => {
-        let blockid = pathname + ('0000' + currblock++).slice(-4)
+        let blockid = btoa(pathname + ('0000' + currblock++).slice(-4))
         sendblockids.push(blockid)
         console.log(`putting block (${sendblockids.length}) ${blockid}`)
 
-        _fetchit(`${saslocator}&comp=block&blockid=${new Buffer(blockid).toString('base64')}`, 'PUT', {
+        _fetchit(`${saslocator}&comp=block&blockid=${blockid}`, 'PUT', {
           "x-ms-blob-content-type": filetype,
           "x-ms-version": "2018-03-28",
           "Access-Control-Allow-Origin": "*",
@@ -48,11 +48,11 @@ export function putBlob(file, root, evtFn) {
                 "Access-Control-Request-Method": "PUT",
                 "Access-Control-Request-Headers": "Content-Type"
               }, '<?xml version="1.0" encoding="utf-8"?>' +
-              '<BlockList>' + sendblockids.map((l) => `<Latest>${new Buffer(l).toString('base64')}</Latest>`).join('') +
+              '<BlockList>' + sendblockids.map((l) => `<Latest>${l}</Latest>`).join('') +
               '</BlockList>')
                 .then(() => {
                   console.log(`finished  ${(new Date().getTime() - startt) / 1000}s`);
-                  acc({ container_url, pathname })
+                  acc({ pathname })
                 }, (err) => {
                   console.error(`putblock error : ${err}`)
                   return rej(err)

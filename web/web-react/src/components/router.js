@@ -142,19 +142,6 @@ export function Router({ ssrContext, reqUrl, serverInitialData, startUrl, cfg })
   }, [])
 
   const routecfg = cfg[renderRoute.routekey] || {}
-
-  // Check Autth!!
-  /*
-  if (routecfg.requireAuth) {
-    if (!(cartCount.session && cartCount.session.auth)) {
-      if (typeof window !== 'undefined') {
-        if (!window.location.search.includes("login=ok")) { // stop a loop! because this will render BEFORE we get the results from getsession useEffect
-          window.location.replace((process.env.REACT_APP_SERVER_URL || '') + `/connect/microsoft?surl=${encodeURIComponent(window.location.href)}`)
-        }
-      }
-    }
-  }
-  */
   return <RouterRender renderRoute={renderRoute} routecfg={routecfg} serverInitialData={serverInitialData} />
 }
 
