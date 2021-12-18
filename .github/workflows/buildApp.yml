@@ -29,9 +29,9 @@ jobs:
     
     - name: 3.build_app
       run: |
-        az acr build -r ${{env.ACRNAME}} -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
-        az acr build -r ${{env.ACRNAME}} -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .
-        az acr build -r ${{env.ACRNAME}} -t az-device-shop/ordering:0.1.0  -f ./ordering/Dockerfile .
+        az acr build -r ${{ env.ACRNAME }} -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
+        az acr build -r ${{ env.ACRNAME }} -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .
+        az acr build -r ${{ env.ACRNAME }} -t az-device-shop/ordering:0.1.0  -f ./ordering/Dockerfile .
     
     - uses: Azure/aks-set-context@v1
       with:
