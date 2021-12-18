@@ -16,6 +16,9 @@ jobs:
     
     - name: 2.deploy_app_dependencies
       run: |
-        echo ${{secrets.ENV_AZURE_PREREQS}} >.env_azure_prereqs
+        echo "${{secrets.ENV_AZURE_PREREQS}}" >.env_azure_prereqs
         cat .env_azure_prereqs
-        bash ./deploy/2.deploy_app_dependencies.sh
+        source <(bash ./deploy/2.deploy_app_dependencies.sh)
+
+        echo "MONGO ${MONGO_DB}"
+        echo "MONGO ${STORAGE_ACCOUNT}"

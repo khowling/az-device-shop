@@ -6,12 +6,12 @@ on:
         description: "Log level"
         required: true
         default: "warning"
-  push:
-    paths:
-      - "web/**"
-      - "common/**"
-      - "factory/**"
-      - "ordering/**"
+#  push:
+#    paths:
+#      - "web/**"
+#      - "common/**"
+#      - "factory/**"
+#      - "ordering/**"
 env:
   REGISTRY_NAME: khcommon
   CLUSTER_NAME: az-k8s-9137
