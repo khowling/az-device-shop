@@ -25,7 +25,7 @@ helm upgrade --install ${APPNAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS
   --set global.env.STORAGE_CONTAINER="${STORAGE_CONTAINER}" \
   --set global.env.STORAGE_MASTER_KEY="${STORAGE_MASTER_KEY}" \
   --set global.env.STORAGE_DOWNLOAD_SAS="${STORAGE_DOWNLOAD_SAS}" \
-  --set global.env.APP_HOST_URL="https://${APPNAME}.${APP_DOMAIN}" \
+  --set global.ingressHost="${APPNAME }" \
   --set global.ingressDomain="${APP_DOMAIN}" \
   --set az-device-shop-web.env.B2C_RESETPWD_POLICY="${B2C_RESETPWD_POLICY}" \
   --set az-device-shop-web.env.B2C_TENANT="${B2C_TENANT}" \

@@ -34,7 +34,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: APP_HOST_URL
-              value: {{ required "env.APP_HOST_URL Value required" .Values.global.env.APP_HOST_URL | quote }}
+              value: "https://{{ .Values.global.ingressHost }}.{{ .Values.global.ingressDomain }}"
             - name: USE_COSMOS
               value: "true"
             - name: STORAGE_ACCOUNT

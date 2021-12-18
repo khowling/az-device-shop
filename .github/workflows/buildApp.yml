@@ -50,22 +50,22 @@ jobs:
         renderEngine: 'helm'
         helmChart: './helm/az-device-shop/'
         overrides: |     
-          global.registryHost: "${{ env.ACRNAME }}.azurecr.io/"
-          global.env.MONGO_DB: "${{ env.MONGO_DB }}"
-          global.env.STORAGE_ACCOUNT: "${{ env.STORAGE_ACCOUNT }}"
-          global.env.STORAGE_CONTAINER: "${{ env.STORAGE_CONTAINER }}"
-          global.env.STORAGE_MASTER_KEY: "${{ env.STORAGE_MASTER_KEY }}"
-          global.env.STORAGE_DOWNLOAD_SAS: "${{ env.STORAGE_DOWNLOAD_SAS }}"
-          global.env.APP_HOST_URL: "https://${{ env.APPNAME }}.${{ env.APP_DOMAIN }}"
-          global.ingressDomain: "${{ env.APP_DOMAIN }}"
-          az-device-shop-web.env.B2C_RESETPWD_POLICY: "${{ env.B2C_RESETPWD_POLICY }}"
-          az-device-shop-web.env.B2C_TENANT: "${{ env.B2C_TENANT }}"
-          az-device-shop-web.env.B2C_CLIENT_SECRET: "${{ env.B2C_CLIENT_SECRET }}"
-          az-device-shop-web.env.B2C_SIGNIN_POLICY: "${{ env.B2C_SIGNIN_POLICY }}"
-          az-device-shop-web.env.B2C_CLIENT_ID: "${{ env.B2C_CLIENT_ID }}"
-          az-device-shop-web.image.tab: "0.1.0"
-          az-device-shop-ordering.image.tab: "0.1.0"
-          az-device-shop-factory.image.tab: "0.1.0"
+          global.registryHost:"${{ env.ACRNAME }}.azurecr.io/"
+          global.env.MONGO_DB:${{ env.MONGO_DB }}
+          global.env.STORAGE_ACCOUNT:${{ env.STORAGE_ACCOUNT }}
+          global.env.STORAGE_CONTAINER:${{ env.STORAGE_CONTAINER }}
+          global.env.STORAGE_MASTER_KEY:${{ env.STORAGE_MASTER_KEY }}
+          global.env.STORAGE_DOWNLOAD_SAS:${{ env.STORAGE_DOWNLOAD_SAS }}
+          global.ingressHost:${{ env.APPNAME }}
+          global.ingressDomain:"${{ env.APP_DOMAIN }}"
+          az-device-shop-web.env.B2C_RESETPWD_POLICY:${{ env.B2C_RESETPWD_POLICY }}
+          az-device-shop-web.env.B2C_TENANT:${{ env.B2C_TENANT }}
+          az-device-shop-web.env.B2C_CLIENT_SECRET:${{ env.B2C_CLIENT_SECRET }}
+          az-device-shop-web.env.B2C_SIGNIN_POLICY:${{ env.B2C_SIGNIN_POLICY }}
+          az-device-shop-web.env.B2C_CLIENT_ID:${{ env.B2C_CLIENT_ID }}
+          az-device-shop-web.image.tab:"0.1.0"
+          az-device-shop-ordering.image.tab:"0.1.0"
+          az-device-shop-factory.image.tab:"0.1.0"
         helm-version: 'latest' 
       id: bake
 
