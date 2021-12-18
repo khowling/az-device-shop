@@ -2,7 +2,7 @@ param name string
 var location = resourceGroup().location
 
 resource fnstore 'Microsoft.Storage/storageAccounts@2021-01-01' = {
-  name: name
+  name: '${replace(name, '-', '')}'
   location: location
   kind: 'StorageV2'
   sku: {
@@ -120,7 +120,7 @@ resource mongoColl 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/colle
   }
 }]
 
-
+output storageAccountName string = fnstore.name
 param expireDate1Year string = dateTimeAdd(utcNow('u'), 'P1Y')
 output storagedownloadSAS string = listAccountSAS(fnstore.name, '2021-04-01', {
   signedProtocol: 'https'

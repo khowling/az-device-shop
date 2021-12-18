@@ -112,7 +112,11 @@ export function Nav({ tenent, auth, cartCount }) {
       <ModelPanel
         headerText="Shopping Cart"
         isOpen={cartOpen}
-        onDismiss={() => setCartOpen(false)}
+        onDismiss={() => {
+          console.log (`onDismiss cartOpen=${cartOpen}`)
+          setCartOpen(false)
+        }
+        }
         type={PanelType.medium}
 
         closeButtonAriaLabel="Close">

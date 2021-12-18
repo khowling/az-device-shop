@@ -1,0 +1,20 @@
+name: buildanddeploy
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: kh-emp-dev
+    steps:
+    - uses: actions/checkout@main
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: 2.deploy_app_dependencies
+      run: |
+        echo ${{secrets.ENV_AZURE_PREREQS}}
+        bash ./deploy/deploy_app_dependencies.sh
