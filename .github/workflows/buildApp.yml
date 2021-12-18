@@ -16,7 +16,7 @@ jobs:
     
     - name: 2.deploy_app_dependencies
       run: |
-        echo "${{secrets.ENV_AZURE_PREREQS}}" >.env_azure_prereqs
+        echo '${{secrets.ENV_AZURE_PREREQS}}' >.env_azure_prereqs
         cat .env_azure_prereqs
         source <(bash ./deploy/2.deploy_app_dependencies.sh)
 
