@@ -1,4 +1,4 @@
-set -x
+#set -x
 #
 export AZ_APPNAME=kh-dev-az-shop-01
 az group create -n ${AZ_APPNAME}-rg -l westeurope
@@ -16,5 +16,5 @@ export AZ_USE_COSMOS=true
 
 
 FILE=".env_azure"
-printenv | grep AZ_.*= | sed 's/AZ_\([^=]*=\)\(.*\)/\1"\2"/'  > $FILE
-cat ./.env_azure_prereqs >> $FILE
+printenv | grep AZ_.*= | sed 's/AZ_\([^=]*=\)\(.*\)/\1"\2"/' # > $FILE
+cat ./.env_azure_prereqs #>> $FILE
