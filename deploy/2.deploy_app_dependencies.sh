@@ -15,6 +15,6 @@ export AZ_USE_COSMOS=true
 #"mongodb://${APPNAME}:$(az cosmosdb keys list -g ${APPNAME}-rg -n ${APPNAME} --query primaryMasterKey -o tsv)@${APPNAME}.mongo.cosmos.azure.com:10255/az-shop?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${APPNAME}@"
 
 
-FILE=".env_azure"
+#FILE=".env_azure"
 printenv | grep AZ_.*= | sed 's/AZ_\([^=]*=\)\(.*\)/\1"\2"/' # > $FILE
-cat ./.env_azure_prereqs #>> $FILE
+#cat ./.env_azure_prereqs #>> $FILE
