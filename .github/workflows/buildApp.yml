@@ -30,7 +30,7 @@ jobs:
       if: ${{ env.BUILD_ENV }}
       run: |
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
-#        bash ./deploy/2.deploy_app_dependencies.sh >> $GITHUB_ENV
+        bash ./deploy/2.deploy_app_dependencies.sh >> $GITHUB_ENV
 
     - name: 2.testenv
       if: ${{ env.BUILD_ENV }}
