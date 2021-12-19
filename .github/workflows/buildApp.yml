@@ -29,16 +29,18 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
     - name: 2.deploy_app_dependencies
-      if: ${{ env.BUILD_ENV }}
+      if: '${{ secrets.ENV_AZURE_DEPENDENCIES }}' == ''
       run: |
+        echo "environment = ${{ job.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
         bash ./deploy/2.deploy_app_dependencies.sh ${{ job.environment }} >> $GITHUB_ENV
 
-    - name: 2.testenv
-      if: ${{ env.BUILD_ENV }}
+    - name: 2.set_app_dependency_vars
+      if: '${{ secrets.ENV_AZURE_DEPENDENCIES }}' != ''
       run: |
-        echo "secrets.ENV_AZURE_PREREQS is ${{secrets.ENV_AZURE_PREREQS}}"
-        echo "B2C_SIGNIN_POLICY is ${{ env.B2C_SIGNIN_POLICY }}"
+        echo "environment = ${{ job.environment }}"
+        echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
+        echo "${{secrets.ENV_AZURE_DEPENDENCIES}}" >> $GITHUB_ENV
  
     - name: 3.build_app
       if: ${{ github.event.inputs.buildContainer == 'true' }}
