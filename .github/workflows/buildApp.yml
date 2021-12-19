@@ -7,6 +7,7 @@ on:
         required: true
         default: 'true'
 env:
+  ENVIRONMENT: kh-emp-dev
   BUILD_ENV: true
   AKS_RG: "basic-dev-k8s-rg"
   AKS_NAME: "aks-basic-dev-k8s"
@@ -17,7 +18,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: kh-emp-dev
+    environment: ${{ env.ENVIRONMENT }}
     steps:
     - uses: actions/checkout@main
     
@@ -30,7 +31,7 @@ jobs:
       if: ${{ env.BUILD_ENV }}
       run: |
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
-        bash ./deploy/2.deploy_app_dependencies.sh >> $GITHUB_ENV
+        bash ./deploy/2.deploy_app_dependencies.sh ${{ env.ENVIRONMENT }} >> $GITHUB_ENV
 
     - name: 2.testenv
       if: ${{ env.BUILD_ENV }}
@@ -54,7 +55,7 @@ jobs:
     - uses: Azure/k8s-bake@v2
       with:
         renderEngine: 'helm'
-        releaseName: ${{ env.APPNAME }}
+        releaseName: ${{ env.ENVIRONMENT }}
         helmChart: './helm/az-device-shop/'
         overrides: |     
           global.registryHost:${{ env.ACRNAME }}.azurecr.io/
@@ -63,7 +64,7 @@ jobs:
           global.env.STORAGE_CONTAINER:${{ env.STORAGE_CONTAINER }}
           global.env.STORAGE_MASTER_KEY:${{ env.STORAGE_MASTER_KEY }}
           global.env.STORAGE_DOWNLOAD_SAS:${{ env.STORAGE_DOWNLOAD_SAS }}
-          global.ingressHost:${{ env.APPNAME }}
+          global.ingressHost:${{ env.ENVIRONMENT }}
           global.ingressDomain:${{ env.APP_DOMAIN }}
           az-device-shop-web.env.B2C_RESETPWD_POLICY:${{ env.B2C_RESETPWD_POLICY }}
           az-device-shop-web.env.B2C_TENANT:${{ env.B2C_TENANT }}
