@@ -54,6 +54,7 @@ jobs:
     - uses: Azure/k8s-bake@v2
       with:
         renderEngine: 'helm'
+        releaseName: ${{ env.APPNAME }}
         helmChart: './helm/az-device-shop/'
         overrides: |     
           global.registryHost:${{ env.ACRNAME }}.azurecr.io/
