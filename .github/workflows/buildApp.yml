@@ -29,14 +29,18 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
     - name: 2.deploy_app_dependencies
-      if: secrets.ENV_AZURE_DEPENDENCIES == ''
+      env:
+        ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
+      if: env.ENV_AZURE_DEPENDENCIES == null
       run: |
         echo "environment = ${{ job.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
         bash ./deploy/2.deploy_app_dependencies.sh ${{ job.environment }} >> $GITHUB_ENV
 
     - name: 2.set_app_dependency_vars
-      if: secrets.ENV_AZURE_DEPENDENCIES  != ''
+      env:
+        ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
+      if: secrets.ENV_AZURE_DEPENDENCIES  != null
       run: |
         echo "environment = ${{ job.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
