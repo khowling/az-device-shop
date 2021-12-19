@@ -46,13 +46,20 @@ jobs:
         ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
       if: env.ENV_AZURE_DEPENDENCIES  != null
       run: |
-        echo "environment = ${{ github.event.inputs.environment }}"
-        echo "ENV_AZURE_PREREQS = ${{ secrets.ENV_AZURE_PREREQS }}"
-        echo "ENV_AZURE_DEPENDENCIES = ${{ secrets.ENV_AZURE_DEPENDENCIES }}"
+        echo "This is github.event.inputs.environment:${{ github.event.inputs.environment }}"
+
+        echo "This is secrets.ENV_AZURE_PREREQS:${{ secrets.ENV_AZURE_PREREQS }}"
+
+        echo "This is secrets.ENV_AZURE_DEPENDENCIES:${{ secrets.ENV_AZURE_DEPENDENCIES }}"
 
         echo "${{ secrets.ENV_AZURE_PREREQS }}" >> $GITHUB_ENV
+
         echo "${{ secrets.ENV_AZURE_DEPENDENCIES }}" >> $GITHUB_ENV
 
+        echo "cat start..."
+        cat $GITHUB_ENV
+        echo "cat end..."
+        
         echo "MONGO_DB = ${{ env.MONGO_DB }}"
  
     - name: 3.build_app
