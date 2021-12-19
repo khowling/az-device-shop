@@ -65,7 +65,7 @@ jobs:
           global.env.STORAGE_CONTAINER:${{ env.STORAGE_CONTAINER }}
           global.env.STORAGE_MASTER_KEY:${{ env.STORAGE_MASTER_KEY }}
           global.env.STORAGE_DOWNLOAD_SAS:${{ env.STORAGE_DOWNLOAD_SAS }}
-          global.ingressHost:${{ jobs.environment }}
+          global.ingressHost:${{ job.environment }}
           global.ingressDomain:${{ env.APP_DOMAIN }}
           az-device-shop-web.env.B2C_RESETPWD_POLICY:${{ env.B2C_RESETPWD_POLICY }}
           az-device-shop-web.env.B2C_TENANT:${{ env.B2C_TENANT }}
