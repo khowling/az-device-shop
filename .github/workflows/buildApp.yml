@@ -6,6 +6,11 @@ on:
         description: 'Build Container (true/false)'     
         required: true
         default: 'false'
+    inputs:
+      environment:
+        description: 'Environment to deploy to'     
+        required: true
+        default: 'kh-emp-dev'
 env:
   BUILD_ENV: true
   AKS_RG: "basic-dev-k8s-rg"
@@ -18,8 +23,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: 
-      name: kh-emp-dev
-      url: https://kh-emp-dev.${{ env.APP_DOMAIN }}
+      name: ${{ inputs.environment }}
+      url: https://${{ inputs.environment }}.${{ env.APP_DOMAIN }}
     steps:
     - uses: actions/checkout@main
     
@@ -33,16 +38,16 @@ jobs:
         ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
       if: env.ENV_AZURE_DEPENDENCIES == null
       run: |
-        echo "environment = ${{ job.environment }}"
+        echo "environment = ${{ inputs.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
-        bash ./deploy/2.deploy_app_dependencies.sh ${{ job.environment }} >> $GITHUB_ENV
+        bash ./deploy/2.deploy_app_dependencies.sh ${{ inputs.environment }} >> $GITHUB_ENV
 
     - name: 2.set_app_dependency_vars
       env:
         ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
       if: env.ENV_AZURE_DEPENDENCIES  != null
       run: |
-        echo "environment = ${{ job.environment }}"
+        echo "environment = ${{ inputs.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
         echo "${{secrets.ENV_AZURE_DEPENDENCIES}}" >> $GITHUB_ENV
  
@@ -62,7 +67,7 @@ jobs:
     - uses: Azure/k8s-bake@v2
       with:
         renderEngine: 'helm'
-        releaseName: ${{ job.environment }}
+        releaseName: ${{ inputs.environment }}
         helmChart: './helm/az-device-shop/'
         overrides: |     
           global.registryHost:${{ env.ACRNAME }}.azurecr.io/
@@ -71,7 +76,7 @@ jobs:
           global.env.STORAGE_CONTAINER:${{ env.STORAGE_CONTAINER }}
           global.env.STORAGE_MASTER_KEY:${{ env.STORAGE_MASTER_KEY }}
           global.env.STORAGE_DOWNLOAD_SAS:${{ env.STORAGE_DOWNLOAD_SAS }}
-          global.ingressHost:${{ job.environment }}
+          global.ingressHost:${{ inputs.environment }}
           global.ingressDomain:${{ env.APP_DOMAIN }}
           az-device-shop-web.env.B2C_RESETPWD_POLICY:${{ env.B2C_RESETPWD_POLICY }}
           az-device-shop-web.env.B2C_TENANT:${{ env.B2C_TENANT }}
@@ -87,5 +92,3 @@ jobs:
     - uses: Azure/k8s-deploy@v1.2
       with:
         manifests: ${{ steps.bake.outputs.manifestsBundle }}
-        imagepullsecrets: |
-          demo-k8s-secret
