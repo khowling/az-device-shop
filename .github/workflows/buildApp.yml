@@ -6,7 +6,6 @@ on:
         description: 'Build Container (true/false)'     
         required: true
         default: 'false'
-    inputs:
       environment:
         description: 'Environment to deploy to'     
         required: true
