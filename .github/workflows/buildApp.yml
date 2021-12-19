@@ -5,7 +5,7 @@ on:
       buildContainer:
         description: 'Build Container (true/false)'     
         required: true
-        default: 'true'
+        default: 'false'
 env:
   BUILD_ENV: true
   AKS_RG: "basic-dev-k8s-rg"
