@@ -29,21 +29,21 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
     - name: 2.deploy_app_dependencies
-      if: '${{ secrets.ENV_AZURE_DEPENDENCIES }}' == ''
+      if: secrets.ENV_AZURE_DEPENDENCIES == ''
       run: |
         echo "environment = ${{ job.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
         bash ./deploy/2.deploy_app_dependencies.sh ${{ job.environment }} >> $GITHUB_ENV
 
     - name: 2.set_app_dependency_vars
-      if: '${{ secrets.ENV_AZURE_DEPENDENCIES }}' != ''
+      if: secrets.ENV_AZURE_DEPENDENCIES  != ''
       run: |
         echo "environment = ${{ job.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
         echo "${{secrets.ENV_AZURE_DEPENDENCIES}}" >> $GITHUB_ENV
  
     - name: 3.build_app
-      if: ${{ github.event.inputs.buildContainer == 'true' }}
+      if: github.event.inputs.buildContainer == 'true'
       run: |
         az acr build -r ${{ env.ACRNAME }} -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
         az acr build -r ${{ env.ACRNAME }} -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .
