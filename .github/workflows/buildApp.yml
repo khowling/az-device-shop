@@ -40,7 +40,7 @@ jobs:
     - name: 2.set_app_dependency_vars
       env:
         ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
-      if: secrets.ENV_AZURE_DEPENDENCIES  != null
+      if: env.ENV_AZURE_DEPENDENCIES  != null
       run: |
         echo "environment = ${{ job.environment }}"
         echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
