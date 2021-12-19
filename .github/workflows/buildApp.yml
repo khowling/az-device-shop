@@ -22,8 +22,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: 
-      name: 'kh-emp-dev'
-      url: https://${{ inputs.environment }}.${{ env.APP_DOMAIN }}
+      name: ${{ github.event.inputs.environment }}
+      url: https://${{ github.event.inputs.environment }}.${{ env.APP_DOMAIN }}
     steps:
     - uses: actions/checkout@main
     
@@ -37,18 +37,18 @@ jobs:
         ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
       if: env.ENV_AZURE_DEPENDENCIES == null
       run: |
-        echo "environment = ${{ inputs.environment }}"
-        echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
-        bash ./deploy/2.deploy_app_dependencies.sh ${{ inputs.environment }} >> $GITHUB_ENV
+        echo "environment = ${{ github.event.inputs.environment }}"
+        echo "${{ secrets.ENV_AZURE_PREREQS }}" >> $GITHUB_ENV
+        bash ./deploy/2.deploy_app_dependencies.sh ${{ github.event.inputs.environment }} >> $GITHUB_ENV
 
     - name: 2.set_app_dependency_vars
       env:
         ENV_AZURE_DEPENDENCIES: ${{ secrets.ENV_AZURE_DEPENDENCIES }}
       if: env.ENV_AZURE_DEPENDENCIES  != null
       run: |
-        echo "environment = ${{ inputs.environment }}"
-        echo "${{secrets.ENV_AZURE_PREREQS}}" >> $GITHUB_ENV
-        echo "${{secrets.ENV_AZURE_DEPENDENCIES}}" >> $GITHUB_ENV
+        echo "environment = ${{ github.event.inputs.environment }}"
+        echo "${{ secrets.ENV_AZURE_PREREQS }}" >> $GITHUB_ENV
+        echo "${{ secrets.ENV_AZURE_DEPENDENCIES }}" >> $GITHUB_ENV
  
     - name: 3.build_app
       if: github.event.inputs.buildContainer == 'true'
@@ -66,7 +66,7 @@ jobs:
     - uses: Azure/k8s-bake@v2
       with:
         renderEngine: 'helm'
-        releaseName: ${{ inputs.environment }}
+        releaseName: ${{ github.event.inputs.environment }}
         helmChart: './helm/az-device-shop/'
         overrides: |     
           global.registryHost:${{ env.ACRNAME }}.azurecr.io/
@@ -75,7 +75,7 @@ jobs:
           global.env.STORAGE_CONTAINER:${{ env.STORAGE_CONTAINER }}
           global.env.STORAGE_MASTER_KEY:${{ env.STORAGE_MASTER_KEY }}
           global.env.STORAGE_DOWNLOAD_SAS:${{ env.STORAGE_DOWNLOAD_SAS }}
-          global.ingressHost:${{ inputs.environment }}
+          global.ingressHost:${{ github.event.inputs.environment }}
           global.ingressDomain:${{ env.APP_DOMAIN }}
           az-device-shop-web.env.B2C_RESETPWD_POLICY:${{ env.B2C_RESETPWD_POLICY }}
           az-device-shop-web.env.B2C_TENANT:${{ env.B2C_TENANT }}
