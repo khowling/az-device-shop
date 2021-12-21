@@ -82,13 +82,14 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
 @minValue(400)
 @maxValue(1000000)
 param throughput int = 400
+param dbname string = 'az-shop'
 
 resource mongoDB 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2021-06-15' = {
   parent: cosmosAccount
-  name: 'az-shop'
+  name: dbname
   properties: {
     resource: {
-      id: 'az-shop'
+      id: dbname
     }
     options: {
       throughput: throughput
@@ -131,4 +132,6 @@ output storagedownloadSAS string = listAccountSAS(fnstore.name, '2021-04-01', {
 }).accountSasToken
 
 output storageKey string = first(fnstore.listKeys().keys).value
-output cosmosConnectionURL string = first(listConnectionStrings(cosmosAccount.id, '2021-06-15').connectionStrings).connectionString
+
+var connectionStrNoDB = split(first(listConnectionStrings(cosmosAccount.id, '2021-06-15').connectionStrings).connectionString, '/?')
+output cosmosConnectionURL string = '${connectionStrNoDB[0]}/${dbname}?${connectionStrNoDB[1]}'
