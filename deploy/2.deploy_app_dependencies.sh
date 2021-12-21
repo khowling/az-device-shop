@@ -1,6 +1,6 @@
 #set -x
 #
-export AZ_APPNAME=${1:-kh-dev-az-shop-01}
+export AZ_APPNAME=${1:-kh-local-dev-az-shop}
 az group create -n ${AZ_APPNAME}-rg -l westeurope >/dev/null
 
 DEPLOY_OUTPUT=$(az deployment group create -g ${AZ_APPNAME}-rg  --template-file ./deploy/az-device.bicep  --parameters name=${AZ_APPNAME} --query [properties.outputs.cosmosConnectionURL.value,properties.outputs.storageKey.value,properties.outputs.storagedownloadSAS.value,properties.outputs.storageAccountName.value] -o tsv)
@@ -16,5 +16,5 @@ export AZ_USE_COSMOS=true
 
 
 #FILE=".env_azure"
-printenv | grep AZ_.*= | sed 's/AZ_\([^=]*=\)\(.*\)/\1"\2"/' # > $FILE
+printenv | grep AZ_.*= | sed 's/AZ_\([^=]*=\)\(.*\)/\1\2/' # > $FILE
 #cat ./.env_azure_prereqs #>> $FILE

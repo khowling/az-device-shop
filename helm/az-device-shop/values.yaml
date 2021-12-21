@@ -4,8 +4,6 @@
 
 global:
   registryHost: ""
-  ingressDomain: ""
-  ingressHost: ""
   env:
     MONGO_DB: ""
     STORAGE_ACCOUNT: ""
@@ -14,6 +12,8 @@ global:
     STORAGE_DOWNLOAD_SAS: ""
 
 az-device-shop-web:
+  ingressDomain: ""
+  ingressHost: ""
   env:
     B2C_RESETPWD_POLICY: ""
     B2C_TENANT: ""

@@ -1,5 +1,6 @@
 {{- if .Values.ingress.enabled -}}
-{{- $ingressDomain  := .Values.global.ingressDomain -}}
+{{- $ingressDomain  := .Values.az-device-shop-web.ingressDomain -}}
+{{- $ingressHost  := .Values.az-device-shop-web.ingressHost -}}
 {{- $fullName := include "az-device-shop-web.fullname" . -}}
 {{- $svcPort := .Values.service.port -}}
 {{- $factoryService := printf "%s-%s" $.Release.Name "az-device-shop-factory" | trunc 63 | trimSuffix "-" }}
@@ -14,25 +15,22 @@ metadata:
   name: {{ $fullName }}
   labels:
     {{- include "az-device-shop-web.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    #  kubernetes.io/ingress.class: contour
+    projectcontour.io/websocket-routes: "/ws/factory/,/ws/ordering/"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    kubernetes.io/tls-acme: "true"
 spec:
   ingressClassName: contour
-  {{- if .Values.ingress.tls }}
+  {{- if .Values.ingress.tls.enabled }}
   tls:
-    {{- range .Values.ingress.tls }}
     - hosts:
-        {{- range .hosts }}
-        - "{{ . }}.{{ $ingressDomain }}"
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
+        - "{{ $ingressHost }}.{{ $ingressDomain }}"
+      secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.hosts }}
-    - host: "{{ .host }}.{{ $ingressDomain }}"
+    - host: "{{ $ingressHost }}.{{ $ingressDomain }}"
       http:
         paths:
         - path: /
@@ -56,5 +54,4 @@ spec:
               name: {{ $orderingService }}
               port:
                 name: http
-    {{- end }}
   {{- end }}
