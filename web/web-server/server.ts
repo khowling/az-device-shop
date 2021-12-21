@@ -720,6 +720,7 @@ async function createTenant(ctx, value) {
 
     if (value.catalog === 'bike') {
 
+        console.log(`/createtenent: create bike with partition_key: ${new_tenent.insertedId}`)
         const { images, products } = await fetch('https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json')
         const { Product, Category } = products
 
