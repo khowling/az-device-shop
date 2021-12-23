@@ -82,11 +82,11 @@ jobs:
         helmChart: './helm/az-device-shop/'
         overrides: |     
           global.registryHost:${{ env.ACRNAME }}.azurecr.io/
-          global.env.MONGO_DB:"${{ env.MONGO_DB }}"
+          global.env.MONGO_DB:${{ env.MONGO_DB }}
           global.env.STORAGE_ACCOUNT:${{ env.STORAGE_ACCOUNT }}
           global.env.STORAGE_CONTAINER:${{ env.STORAGE_CONTAINER }}
-          global.env.STORAGE_MASTER_KEY:"${{ env.STORAGE_MASTER_KEY }}"
-          global.env.STORAGE_DOWNLOAD_SAS:"${{ env.STORAGE_DOWNLOAD_SAS }}"
+          global.env.STORAGE_MASTER_KEY:${{ env.STORAGE_MASTER_KEY }}
+          global.env.STORAGE_DOWNLOAD_SAS:${{ env.STORAGE_DOWNLOAD_SAS }}
           az-device-shop-web.ingressHost:${{ github.event.inputs.environment }}
           az-device-shop-web.ingressDomain:${{ env.APP_DOMAIN }}
           az-device-shop-web.env.B2C_RESETPWD_POLICY:${{ env.B2C_RESETPWD_POLICY }}
