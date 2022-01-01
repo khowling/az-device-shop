@@ -25,7 +25,8 @@ export async function watchProcessorTriggerWithTimeStamp(cs: EventStoreConnectio
     return cs.db.collection(watchCollection).watch(
         [
             { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
-            , { $project: { 'ns': 1, 'documentKey': 1, "operationType": 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
+            // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
+            , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
         { fullDocument: 'updateLookup', ...(continuation && { ...continuation }) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.

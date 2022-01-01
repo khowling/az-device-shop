@@ -478,7 +478,8 @@ async function init() {
     console.log ("init(): setting tenant watcher, will process.exit() if removed")
     app.context.businessWatcher = db.collection(StoreDef["business"].collection).watch([
         { $match: { $and: [{ 'operationType': { $in: ['insert', 'update', 'replace'] } }, { 'fullDocument.partition_key': 'root' }, { 'fullDocument.type': 'business' }] } },
-        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1, "operationType": 1 } }
+        // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
+        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1, ...(!USE_COSMOS && {"operationType": 1 } ) }}
     ],
         { fullDocument: "updateLookup" }
     ).on('change', async change => {
