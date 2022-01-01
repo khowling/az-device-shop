@@ -37,7 +37,9 @@ export default class ServiceWebServer extends EventEmitter {
         console.log(`listening on ${this.port}`)
         this.httpServer = http.createServer(function (req, res) {
             const { headers, method, url } = req
-            console.log(`ServiceWebServer: got request method=${method}, url=${url}`)
+            if (url !== '/healthz') {
+                console.log(`ServiceWebServer: got request method=${method}, url=${url}`)
+            }
             const routeIdx = this.routes.findIndex(r => r.method === method && url.includes(r.route))
             if (routeIdx >= 0) {
                 return this.routes[routeIdx].fn(req, res)

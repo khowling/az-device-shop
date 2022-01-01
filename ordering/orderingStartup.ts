@@ -153,12 +153,14 @@ async function init() {
             status: 'tbc',
         }))
     })
+    /* ** defined on the ServiceWebServer constructor
     web.addRoute('GET', '/healthz', (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             status: 'All Good'
         }))
     })
+    */
     web.createServer()
 
 

@@ -18,7 +18,7 @@ export function createServiceSAS(key, storageacc, container, minutes, file?) {
         canonicalizedresource = file ? `/blob/${storageacc}/${container}/${file}` : `/blob/${storageacc}/${container}`,
         signedidentifier = '', //if you are associating the request with a stored access policy.
         signedIP = '',
-        signedProtocol = 'https',
+        signedProtocol = storageacc === 'devstoreaccount1' ? 'http':  'https',
         signedversion = '2018-03-28',
         rscc = '', // Blob Service and File Service Only, To define values for certain response headers, Cache-Control
         rscd = '', // Content-Disposition
@@ -45,7 +45,7 @@ export function createServiceSAS(key, storageacc, container, minutes, file?) {
     //console.log (`createServiceSAS stringToSign : ${stringToSign}`)
     return {
         exp_date: exp_date.getTime(),
-        container_url: `https://${storageacc}.blob.core.windows.net/${container}`,
+        container_url: `${storageacc === 'devstoreaccount1' ? 'http://127.0.0.1:10000' : `https://${storageacc}.blob.core.windows.net`}/${container}`,
         sas:
             //`st=2016-08-15T11:03:04Z&" +
             // signed expire 2017-08-15T19:03:04Z
@@ -64,6 +64,32 @@ export function createServiceSAS(key, storageacc, container, minutes, file?) {
             `sig=${encodeURIComponent(sig)}`
     }
 }
+
+function SharedKeyAuth(storageacc, key ) {
+    const now =  new Date()
+    let sig = ''
+
+//    const stringtoSign = 'VERB' + "\n" +  
+//        Content-Encoding + "\n" +  
+//        Content-Language + "\n" +  
+//        Content-Length + "\n" +  
+//        Content-MD5 + "\n" +  
+//        Content-Type + "\n" +  
+//        Date + "\n" +  
+ //       If-Modified-Since + "\n" +  
+ //       If-Match + "\n" +  
+ //       If-None-Match + "\n" +  
+//        If-Unmodified-Since + "\n" +  
+ //       Range + "\n" +  
+//        CanonicalizedHeaders +   
+//        CanonicalizedResource;  
+    
+        return {
+            "Authorization": `SharedKey ${storageacc}:${sig}`,
+            "x-ms-date": now.toUTCString()
+        }
+}
+
 
 // Provides a FlushWritable class which is used exactly like stream.Writable but supporting a new _flush method 
 // which is invoked after the consumer calls .end() but before the finish event is emitted.

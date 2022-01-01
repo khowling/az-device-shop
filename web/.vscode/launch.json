@@ -10,7 +10,7 @@
             "name": "Launch web (Full client build)",
             "program": "${workspaceFolder}/web-server/server.ts",
             "preLaunchTask": "build_all",
-            "envFile": "${workspaceFolder}/../.env_azure",
+            "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/web-server/lib/*.js",
                 "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
@@ -22,7 +22,7 @@
             "name": "Launch web",
             "program": "${workspaceFolder}/web-server/server.ts",
             "preLaunchTask": "npm: build",
-            "envFile": "${workspaceFolder}/../.env_azure",
+            "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/web-server/lib/*.js",
                 "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"

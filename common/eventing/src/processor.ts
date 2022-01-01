@@ -333,12 +333,12 @@ export class Processor extends EventEmitter {
 
     }
 
-    async initiateWorkflow(new_ctx, trigger): Promise<ReducerInfo> {
+    async initiateWorkflow(update_ctx, trigger): Promise<ReducerInfo> {
         console.log('initiateWorkflow: creating process event')
 
         const { processor } = await this._stateManager.dispatch({
             type: ProcessActionType.New,
-            options: { update_ctx: new_ctx },
+            options: { update_ctx },
             ...(trigger && { trigger })
         })
         this.launchHandler(processor.id)//.then(r => console.log(r))

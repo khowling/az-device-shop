@@ -420,17 +420,17 @@ async function init() {
         maxAge: 86400000,
         //secure: false, // DEVELOPMENT ONLY!
         store: {
-            get: async function (key) {
+            get: async function (key: string) {
                 console.log(`server.ts: session get ${key}`)
-                return await db.collection(StoreDef["session"].collection).findOne({ _id: key, partition_key: "session" })
+                return await db.collection(StoreDef["session"].collection).findOne({ _id: key, partition_key: "session" } as any)
             },
-            set: async function (key, sess, maxAge, { rolling, changed }) {
+            set: async function (key: string, sess, maxAge, { rolling, changed }) {
                 //console.log(`session set ${key} ${JSON.stringify(sess)}`)
-                await db.collection(StoreDef["session"].collection).replaceOne({ _id: key, partition_key: "session" }, { ...sess, ...{ _id: key, partition_key: "session" } }, { upsert: true })
+                await db.collection(StoreDef["session"].collection).replaceOne({ _id: key, partition_key: "session" } as any, { ...sess, ...{ _id: key, partition_key: "session" } }, { upsert: true })
             },
-            destroy: async function (key) {
+            destroy: async function (key: string) {
                 //console.log(`session destroy ${key}`)
-                await db.collection(StoreDef["session"].collection).deleteOne({ _id: key, partition_key: "session" })
+                await db.collection(StoreDef["session"].collection).deleteOne({ _id: key, partition_key: "session" } as any)
             }
         }
     }, app))
@@ -442,6 +442,14 @@ async function init() {
     app.context.openid_configuration = await fetch(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/${signin_policy}/v2.0/.well-known/openid-configuration`)
     const signing_keys: any = await fetch(app.context.openid_configuration.jwks_uri)
     app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
+
+    console.log ("init(): Setting Azure Storage container client...")
+    const sharedKeyCredential = new StorageSharedKeyCredential(process.env.STORAGE_ACCOUNT, process.env.STORAGE_MASTER_KEY);
+    const storeHost =  process.env.STORAGE_ACCOUNT === 'devstoreaccount1' ? `http://127.0.0.1:10000/${process.env.STORAGE_ACCOUNT}`: `https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net`
+    const blobServiceClient = new BlobServiceClient(storeHost, sharedKeyCredential)
+    app.context.sharedKeyCredential = sharedKeyCredential
+    app.context.containerClient = blobServiceClient.getContainerClient(process.env.STORAGE_CONTAINER)
+
 
     // Init Settings (currently single tenent)
     console.log ("init(): getting tenant config from db...")
@@ -690,12 +698,48 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
     })
     .routes()
 
+
+import { SASProtocol, BlobSASPermissions, generateBlobSASQueryParameters, ContainerClient, BlobServiceClient, BlockBlobClient, StorageSharedKeyCredential } from "@azure/storage-blob"
+// https://github.com/Azure/azure-sdk-for-js/tree/@azure/storage-blob_12.8.0/sdk/storage/storage-blob/#import-the-package
+
+function getFileClient(containerClient : ContainerClient, store : string, filename: string) : BlockBlobClient {
+    const extension = encodeURIComponent(filename.substring(1 + filename.lastIndexOf(".")))
+    const pathname = `${store}/${(new ObjectId()).toString()}.${extension}`
+
+    return containerClient.getBlockBlobClient(pathname);
+}
+
+function getFileSaS ({containerClient, sharedKeyCredential}, store, filename) {
+// Generate service level SAS for a blob
+    const extension = encodeURIComponent(filename.substring(1 + filename.lastIndexOf(".")))
+    const blobName = `${store}/${(new ObjectId()).toString()}.${extension}`
+    const sas = generateBlobSASQueryParameters({
+        containerName: containerClient.containerName, // Required
+        blobName, // Required
+        permissions: BlobSASPermissions.parse("racwd"), // Required
+        startsOn: new Date(), // Optional
+        expiresOn: new Date(new Date().valueOf() + 86400), // Required. Date type
+        //cacheControl: "cache-control-override", // Optional
+        //contentDisposition: "content-disposition-override", // Optional
+        //contentEncoding: "content-encoding-override", // Optional
+        //contentLanguage: "content-language-override", // Optional
+        //contentType: "content-type-override", // Optional
+        //ipRange: { start: "0.0.0.0", end: "255.255.255.255" }, // Optional
+        protocol: SASProtocol.HttpsAndHttp, // Optional
+        version: "2016-05-31" // Optional
+    },
+        sharedKeyCredential // StorageSharedKeyCredential - `new StorageSharedKeyCredential(account, accountKey)`
+    ).toString()
+    return {sas, pathname: blobName, extension, container_url: containerClient.url}
+}
+/*
 function getFileSaS(store, filename) {
     const extension = encodeURIComponent(filename.substring(1 + filename.lastIndexOf(".")))
     const pathname = `${store}/${(new ObjectId()).toString()}.${extension}`
     const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10, pathname)
     return Object.assign({ pathname, extension }, retsas)
 }
+*/
 
 async function ensureInit(ctx, next) {
     if (!ctx.tenentKey)
@@ -709,9 +753,10 @@ async function createTenant(ctx, value) {
     // clear down any old details
     if (ctx.tenentKey) {
         console.log(`/createtenent: tear down current tenent: ${ctx.tenentKey}`)
-        for (let coll of Object.keys(StoreDef).filter(c => StoreDef[c].collection).map(c => StoreDef[c].collection)) {
-            console.log(`/createtenent: tear down collection=${coll}`)
-            await ctx.db.collection(coll).deleteMany({})
+        for (let collname of Object.keys(StoreDef).filter(c => StoreDef[c].collection)) {
+            const collection = StoreDef[collname].collection
+            console.log(`/createtenent: tear down collection=${collection}`)
+            await ctx.db.collection(collection).deleteMany({partition_key: collname === "business" ? "root" : ctx.tenentKey})
         }
     }
 
@@ -724,7 +769,7 @@ async function createTenant(ctx, value) {
         const { images, products } = await fetch('https://khcommon.z6.web.core.windows.net/az-device-shop/setup/bikes.json')
         const { Product, Category } = products
 
-        const imagemap = await writeimages(new_tenent, images)
+        const imagemap = await writeimages(ctx.containerClient, new_tenent, images)
 
         const catmap = new Map()
         const newcats = Category.map(function (c) {
@@ -785,18 +830,29 @@ async function createTenant(ctx, value) {
     return {...value, _id: new_tenent.insertedId}
 }
 
-async function writeimages(new_tenent, images: any) {
+async function writeimages(containerClient: ContainerClient, new_tenent, images: any) {
     let imagemap = new Map()
     for (const pathname of Object.keys(images)) {
 
         const b64 = Buffer.from(images[pathname], 'base64'),
             bstr = b64.toString('utf-8'),
             file_stream = Stream.Readable.from(b64),
-            new_blob_info = getFileSaS(new_tenent.insertedId.toHexString(), pathname),
-            blobStream = new AzBlobWritable(new_blob_info)
+            new_blob_info = getFileClient(containerClient, new_tenent.insertedId.toHexString(), pathname)
 
         console.log(`/createtenent: Importing ${pathname} (${bstr.length})`)
-
+        try {
+            await new_blob_info.uploadStream(file_stream, 4 * 1024 * 1024, 20, {
+              //abortSignal: AbortController.timeout(30 * 60 * 1000), // Abort uploading with timeout in 30mins
+              onProgress: (ev) => console.log(ev)
+            });
+            console.log("uploadStream succeeds");
+            imagemap.set(pathname, { pathname: new_blob_info.name })
+          } catch (err) {
+            console.log(
+              `uploadStream failed, requestId - ${err.details.requestId}, statusCode - ${err.statusCode}, errorCode - ${err.details.errorCode}`
+            );
+          }
+/*
         await new Promise(function (resolve, reject) {
             let error
             file_stream.pipe(blobStream)
@@ -815,7 +871,8 @@ async function writeimages(new_tenent, images: any) {
             })
 
         })
-        imagemap.set(pathname, { pathname: new_blob_info.pathname })
+ */
+        
 
     }
     return imagemap
@@ -984,12 +1041,20 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(400, `No filename provided`)
         }
 
-        ctx.body = getFileSaS(userdoc.root ? 'root' : ctx.tenentKey.toHexString(), userdoc.filename)
+        ctx.body = getFileSaS(ctx, userdoc.root ? 'root' : ctx.tenentKey.toHexString(), userdoc.filename)
         await next()
     })
     .get('/file/:folder/:id', async function (ctx, next) {
+        const containerClient: ContainerClient = ctx.containerClient
         const pathname = ctx.params.folder + '/' + ctx.params.id
-        const url = `https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net/${process.env.STORAGE_CONTAINER}/${pathname}?${process.env.STORAGE_DOWNLOAD_SAS}`
+        const downloadBlockBlobResponse = await containerClient.getBlockBlobClient(pathname).download()
+
+        await new Promise((acc, rej) => {
+            downloadBlockBlobResponse.readableStreamBody.pipe(ctx.res).on('finish', acc)
+        })
+        await next()
+/*
+        const url = `${process.env.STORAGE_ACCOUNT === 'devstoreaccount1' ? 'http://127.0.0.1:10000': `https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net`}/${process.env.STORAGE_CONTAINER}/${pathname}?${process.env.STORAGE_DOWNLOAD_SAS}`
         console.log (`/file : url=${url}`)
         try {
             await new Promise((acc, rej) => {
@@ -1009,9 +1074,10 @@ const api = new Router({ prefix: '/api' })
             ctx.throw(400, `Request Failed: error: ${JSON.stringify(e)}`)
             await next()
         }
+*/
     })
     .get('/export', async function (ctx, next) {
-        const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10)
+        //const retsas = createServiceSAS(process.env.STORAGE_MASTER_KEY, process.env.STORAGE_ACCOUNT, process.env.STORAGE_CONTAINER, 10)
 
         const products = await FetchOperation.get(ctx, "products")
 
@@ -1045,7 +1111,7 @@ const api = new Router({ prefix: '/api' })
                 process.exit()
             })
 
-            createTenant(ctx, value)
+            await createTenant(ctx, value)
 
             console.log("/createtenent: Finished")
             ctx.body = { status: 'success', description: 'done' }

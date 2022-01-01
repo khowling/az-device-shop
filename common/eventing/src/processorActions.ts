@@ -63,9 +63,9 @@ export async function watchDispatchWithSequence(cs: EventStoreConnection, stateM
     ],
         { fullDocument: "updateLookup", ...(continuation && { ...continuation }) }
     ).on('change', async doc => {
-        //const { _id, partition_key, sequence, ...spec } = doc.fullDocument
-        console.log(`watchDispatchWithSequence: Got doc _id=${JSON.stringify(doc._id)}`)
-        await stateManager.dispatch({ type: actiontype, id: doc.fullDocument[docIdPath], spec: doc.fullDocument[specPath], trigger: { sequence: doc.sequence, continuation: { /*startAfter*/ resumeAfter: doc._id } } })
+        const { sequence } = doc.fullDocument
+        console.log(`watchDispatchWithSequence "${collection}": Got doc _id=${JSON.stringify(doc._id)} (sequence=${sequence})`)
+        await stateManager.dispatch({ type: actiontype, id: doc.fullDocument[docIdPath], spec: doc.fullDocument[specPath], trigger: { sequence, continuation: { /*startAfter*/ resumeAfter: doc._id } } })
     })
 
 }

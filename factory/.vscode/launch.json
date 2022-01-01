@@ -10,7 +10,7 @@
             "name": "Launch Factory",
             "program": "${workspaceFolder}/factoryStartup.ts",
          //   "preLaunchTask": "npm: build",
-            "envFile": "${workspaceFolder}/../.env_azure",
+            "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/lib/*.js",
                 "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"

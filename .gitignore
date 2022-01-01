@@ -5,3 +5,6 @@ dist
 **/out
 .env_*
 lib
+__blobstorage__
+__azurite*
+__mongo_data__

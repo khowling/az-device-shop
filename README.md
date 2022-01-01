@@ -139,7 +139,12 @@ One member is deemed the _primary node_, receiving all write operations, while t
 
 When a primary does not communicate with the other members for 10seconds, an eligible secondary calls for an election to nominate itself as the new primary
 
+NOTE: Not using Docker anymore!
 
+```
+mongod --replSet rs0  --dbpath ./__mongo_data__/ &
+mongo --eval 'rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "localhost:27017" } ] } )'
+```
 ```
 docker volume create --name=mongodata
 ## its not a sharded cluster, its a Replica Set single instance, 
