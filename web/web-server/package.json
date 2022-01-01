@@ -22,6 +22,7 @@
     "@types/koa-router": "^7.4.4",
     "@types/koa-session": "^5.10.4",
     "@types/node": "^16.11.1",
+    "dotenv": "^10.0.0",
     "typescript": "^4.6.0-dev.20211119"
   }
 }

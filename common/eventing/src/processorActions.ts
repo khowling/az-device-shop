@@ -5,6 +5,8 @@ import { EventStoreConnection } from './eventStoreConnection.js'
 import { Processor } from './processor.js'
 import { StateManagerInterface } from './flux.js'
 
+import { ObjectId } from 'bson'
+
 // inventory_spec & order_spec, nether have 'sequence' fields, so order by '_ts' Timestamp
 // TODO : need 'update' operation, to detect orders that change to status : 30 :(
 export async function watchProcessorTriggerWithTimeStamp(cs: EventStoreConnection, watchCollection: string, processor: Processor, filter: any) {
@@ -23,17 +25,21 @@ export async function watchProcessorTriggerWithTimeStamp(cs: EventStoreConnectio
     return cs.db.collection(watchCollection).watch(
         [
             { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
-            , { $project: { 'ns': 1, 'documentKey': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
+            , { $project: { 'ns': 1, 'documentKey': 1, "operationType": 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
         { fullDocument: 'updateLookup', ...(continuation && { ...continuation }) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
-    ).on('change', async doc => {
-        // doc._id == event document includes a resume token as the _id field
-        // doc.clusterTime == 
-        // doc.opertionType == "insert"
-        // doc.ns.coll == "Collection"
-        // doc.documentKey == A document that contains the _id of the document created or modified 
-        await processor.initiateWorkflow({ trigger: { doc_id: doc.documentKey._id.toHexString() } }, { continuation: { /*startAfter*/ resumeAfter: doc._id } })
+    ).on('change', async change => {
+        // change._id == event document includes a resume token as the _id field
+        // change.clusterTime == 
+        // change.opertionType == "insert"
+        // change.ns.coll == "Collection"
+        // change.documentKey == A document that contains the _id of the document created or modified 
+
+        // Typescript error: https://jira.mongodb.org/browse/NODE-3621
+        const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
+
+        await processor.initiateWorkflow({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /*startAfter*/ resumeAfter: change._id } })
     })
 
 }
@@ -62,10 +68,10 @@ export async function watchDispatchWithSequence(cs: EventStoreConnection, stateM
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
     ],
         { fullDocument: "updateLookup", ...(continuation && { ...continuation }) }
-    ).on('change', async doc => {
-        const { sequence } = doc.fullDocument
-        console.log(`watchDispatchWithSequence "${collection}": Got doc _id=${JSON.stringify(doc._id)} (sequence=${sequence})`)
-        await stateManager.dispatch({ type: actiontype, id: doc.fullDocument[docIdPath], spec: doc.fullDocument[specPath], trigger: { sequence, continuation: { /*startAfter*/ resumeAfter: doc._id } } })
+    ).on('change', async change => {
+        const { sequence } = change.fullDocument
+        console.log(`watchDispatchWithSequence collection="${collection}": change _id=${JSON.stringify(change._id)} (sequence=${sequence})`)
+        await stateManager.dispatch({ type: actiontype, id: change.fullDocument[docIdPath], spec: change.fullDocument[specPath], trigger: { sequence, continuation: { /*startAfter*/ resumeAfter: change._id } } })
     })
 
 }

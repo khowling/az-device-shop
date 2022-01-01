@@ -25,7 +25,9 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 
 // Mongo require
 import mongodb from 'mongodb'
-const { MongoClient, Timestamp, ObjectId } = mongodb
+const { MongoClient, Timestamp } = mongodb
+import { ObjectId } from 'bson'
+
 const MongoURL = process.env.MONGO_DB
 const USE_COSMOS = process.env.USE_COSMOS === "false" ? false : true
 
@@ -476,12 +478,16 @@ async function init() {
     console.log ("init(): setting tenant watcher, will process.exit() if removed")
     app.context.businessWatcher = db.collection(StoreDef["business"].collection).watch([
         { $match: { $and: [{ 'operationType': { $in: ['insert', 'update', 'replace'] } }, { 'fullDocument.partition_key': 'root' }, { 'fullDocument.type': 'business' }] } },
-        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1, "operationType": 1 } }
     ],
         { fullDocument: "updateLookup" }
     ).on('change', async change => {
-        console.log(`TENENT Change -  operationType=${change.operationType} key=${JSON.stringify(change.documentKey)}`)
-        if (!change.documentKey.equals(app.context.tenentKey)) {
+
+        // Typescript error: https://jira.mongodb.org/browse/NODE-3621
+        const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
+         
+        console.log(`TENENT Change -  operationType=${change.operationType} key=${JSON.stringify(documentKey)}`)
+        if (!documentKey._id.equals(app.context.tenentKey)) {
             console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
             process.exit()
         }
