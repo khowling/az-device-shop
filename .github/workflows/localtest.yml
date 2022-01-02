@@ -1,0 +1,82 @@
+name: deploy
+on:
+  workflow_dispatch:
+    inputs:
+      mongoVersion:
+        description: 'Mongo Version'     
+        required: true
+        default: '4.0'
+env:
+  BUILD_ENV: true
+  AKS_RG: "basic-dev-k8s-rg"
+  AKS_NAME: "aks-basic-dev-k8s"
+  ACRNAME: "crbasicdevk8sskihvrpgaysr2"
+  APP_DOMAIN: "labhome.biz"
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ github.event.inputs.environment }}
+      url: https://${{ github.event.inputs.environment }}.${{ env.APP_DOMAIN }}
+    steps:
+    - uses: actions/checkout@main
+    
+    - name: Start MongoDB
+      uses: supercharge/mongodb-github-action@1.7.0
+      with:
+        mongodb-version: ${{ github.event.inputs.mongoVersion }}
+    
+    - name: Build
+      run: |
+
+        npm -g install npm@latest
+        npm i
+
+        echo "Build Eventing.."
+        cd common/eventing
+        #npm i
+        npm run build
+
+        echo "Build Factory.."
+        cd ../../factory 
+        #npm i
+        npm run build
+
+        echo "Build Ordering.."
+        cd ../ordering
+        #npm i
+        npm run build
+
+        echo "Build Web.."
+        cd ../web/web-react
+        #npm i --legacy-peer-deps
+        npm run-script build_lib
+        npm run-script build_assets_prod
+
+        cd ../web-server
+        #npm i 
+        npm run build
+
+
+    - name: Run
+      env:
+        REACT_APP_FACTORY_PORT:"9091"
+        REACT_APP_ORDERING_PORT:"9090"
+        STORAGE_ACCOUNT:"devstoreaccount1"
+        STORAGE_CONTAINER:"az-shop-images"
+        STORAGE_MASTER_KEY:"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+        MONGO_DB:"mongodb://localhost:27017/dbdev?replicaSet=rs0"
+        USE_COSMOS:"true"
+
+      run: |
+       cd ./web
+       PORT=30001 NODE_PATH=../node_modules node ./web-server/lib/server.js 
+ 
+    - name: Test
+
+      run: |
+        curl localhost:30001
+    
+ 
