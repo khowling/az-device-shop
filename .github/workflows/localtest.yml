@@ -20,7 +20,7 @@ jobs:
 
     - name: Start Azure Storage Emulation
       run: |
-        docker run -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob
+        docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob
         az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://127.0.0.1:10000/${{ env.AZURITE_ACCOUNT }};"
     
     - name: Start MongoDB
