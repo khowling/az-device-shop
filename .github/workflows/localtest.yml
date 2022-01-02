@@ -18,6 +18,7 @@ jobs:
       uses: supercharge/mongodb-github-action@1.7.0
       with:
         mongodb-version: ${{ github.event.inputs.mongoVersion }}
+        mongodb-replica-set: rs0
     
     - name: Build
       run: |
