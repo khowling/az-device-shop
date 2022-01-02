@@ -21,20 +21,21 @@ jobs:
         image: mcr.microsoft.com/azure-storage/azurite
         ports:
           - 10000:10000
-        options: --entrypoint azurite-blob --blobHost 0.0.0.0 --blobPort 10000
+        options: --entrypoint "azurite-blob --blobHost 0.0.0.0 --blobPort 10000"
 
     steps:
     - uses: actions/checkout@main
     
+    - name: Create Azure Storage Container
+      run: |
+        az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://localhost:10000/${{ env.AZURITE_ACCOUNT }};"
+
     - name: Start MongoDB
       uses: supercharge/mongodb-github-action@1.7.0
       with:
         mongodb-version: ${{ github.event.inputs.mongoVersion }}
         mongodb-replica-set: rs0
     
-    - name: Create Azure Storage Container
-      run: |
-        az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://localhost:10000/${{ env.AZURITE_ACCOUNT }};"
 
     - name: Build
       run: |
