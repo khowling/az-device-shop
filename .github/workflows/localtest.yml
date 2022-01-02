@@ -15,15 +15,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # Service containers to run with `runner-job`
+    services:
+      azurite:
+        # Docker Hub image
+        image: mcr.microsoft.com/azure-storage/azurite
+        #
+        ports:
+          # Opens tcp port 6379 on the host and service container
+          - 10000:10000
+        options: --entrypoint azurite-blob
+        
     steps:
     - uses: actions/checkout@main
-
-    - name: Start Azure Storage Emulation
-      uses: addnab/docker-run-action@v3
-      with:
-        registry: mcr.microsoft.com
-        image: azure-storage/azurite
-        options: -p 10000:10000 azurite-blob
 
     - name: Create Azure Storage Container
       run: |
