@@ -6,20 +6,11 @@ on:
         description: 'Mongo Version'     
         required: true
         default: '4.0'
-env:
-  BUILD_ENV: true
-  AKS_RG: "basic-dev-k8s-rg"
-  AKS_NAME: "aks-basic-dev-k8s"
-  ACRNAME: "crbasicdevk8sskihvrpgaysr2"
-  APP_DOMAIN: "labhome.biz"
-
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: 
-      name: ${{ github.event.inputs.environment }}
-      url: https://${{ github.event.inputs.environment }}.${{ env.APP_DOMAIN }}
+
     steps:
     - uses: actions/checkout@main
     
@@ -71,8 +62,8 @@ jobs:
         USE_COSMOS: "true"
 
       run: |
-       cd ./web
-       PORT=30001 NODE_PATH=../node_modules node ./web-server/lib/server.js 
+        cd ./web
+        PORT=30001 NODE_PATH=../node_modules node ./web-server/lib/server.js 
  
     - name: Test
 
