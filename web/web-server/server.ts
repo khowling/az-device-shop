@@ -440,11 +440,13 @@ async function init() {
     // app.context is the prototype from which ctx is created. 
     // You may add additional properties to ctx by editing app.context. 
     // This is useful for adding properties or methods to ctx to be used across your entire app
-    console.log ("init(): getting openid config from b2c tenant...")
-    app.context.openid_configuration = await fetch(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/${signin_policy}/v2.0/.well-known/openid-configuration`)
-    const signing_keys: any = await fetch(app.context.openid_configuration.jwks_uri)
-    app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
-
+    if (b2c_tenant) {
+        console.log ("init(): getting openid config from b2c tenant...")
+        app.context.openid_configuration = await fetch(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/${signin_policy}/v2.0/.well-known/openid-configuration`)
+        const signing_keys: any = await fetch(app.context.openid_configuration.jwks_uri)
+        app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
+    }
+    
     console.log ("init(): Setting Azure Storage container client...")
     const sharedKeyCredential = new StorageSharedKeyCredential(process.env.STORAGE_ACCOUNT, process.env.STORAGE_MASTER_KEY);
     const storeHost =  process.env.STORAGE_ACCOUNT === 'devstoreaccount1' ? `http://127.0.0.1:10000/${process.env.STORAGE_ACCOUNT}`: `https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net`
