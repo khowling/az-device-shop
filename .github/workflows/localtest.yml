@@ -19,9 +19,14 @@ jobs:
     - uses: actions/checkout@main
 
     - name: Start Azure Storage Emulation
-      run: |
-        docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob
-        az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://127.0.0.1:10000/${{ env.AZURITE_ACCOUNT }};"
+      uses: addnab/docker-run-action@v3
+      with:
+        registry: mcr.microsoft.com
+        image: azure-storage/azurite
+        options: -p 10000:10000 azurite-blob
+        run: |
+          # docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob
+          az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://127.0.0.1:10000/${{ env.AZURITE_ACCOUNT }};"
     
     - name: Start MongoDB
       uses: supercharge/mongodb-github-action@1.7.0
