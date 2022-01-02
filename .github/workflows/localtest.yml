@@ -62,13 +62,13 @@ jobs:
 
     - name: Run
       env:
-        REACT_APP_FACTORY_PORT:"9091"
-        REACT_APP_ORDERING_PORT:"9090"
-        STORAGE_ACCOUNT:"devstoreaccount1"
-        STORAGE_CONTAINER:"az-shop-images"
-        STORAGE_MASTER_KEY:"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-        MONGO_DB:"mongodb://localhost:27017/dbdev?replicaSet=rs0"
-        USE_COSMOS:"true"
+        REACT_APP_FACTORY_PORT: "9091"
+        REACT_APP_ORDERING_PORT: "9090"
+        STORAGE_ACCOUNT: "devstoreaccount1"
+        STORAGE_CONTAINER: "az-shop-images"
+        STORAGE_MASTER_KEY: "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+        MONGO_DB: "mongodb://localhost:27017/dbdev?replicaSet=rs0"
+        USE_COSMOS: "true"
 
       run: |
        cd ./web
