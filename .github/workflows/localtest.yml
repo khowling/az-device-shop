@@ -25,14 +25,13 @@ jobs:
           # Opens tcp port 6379 on the host and service container
           - 10000:10000
         options: --entrypoint azurite-blob
-        
+
     steps:
     - uses: actions/checkout@main
 
     - name: Create Azure Storage Container
       run: |
-        # docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob
-        az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://127.0.0.1:10000/${{ env.AZURITE_ACCOUNT }};"
+        az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://localhost:10000/${{ env.AZURITE_ACCOUNT }};"
     
     - name: Start MongoDB
       uses: supercharge/mongodb-github-action@1.7.0
