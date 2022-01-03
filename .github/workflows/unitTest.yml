@@ -1,4 +1,4 @@
-name: Local Test
+name: Unit Test
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +30,8 @@ jobs:
     
     - name: Create Azure Storage Container
       run: |
-        AZURITE_CONTAINER=$(docker create  -p 10000:10000 --entrypoint azurite-blob -e GITHUB_ACTIONS=true -e CI=true mcr.microsoft.com/azure-storage/azurite --blobHost 0.0.0.0 --blobPort 10000)
+        # https://mcr.microsoft.com/v2/azure-storage/azurite/tags/list
+        AZURITE_CONTAINER=$(docker create  -p 10000:10000 --entrypoint azurite-blob -e GITHUB_ACTIONS=true -e CI=true mcr.microsoft.com/azure-storage/azurite:3.15.0 --blobHost 0.0.0.0 --blobPort 10000)
         docker start $AZURITE_CONTAINER
         sleep 2
         az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://localhost:10000/${{ env.AZURITE_ACCOUNT }};"
