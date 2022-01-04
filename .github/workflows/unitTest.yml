@@ -84,10 +84,11 @@ jobs:
         STORAGE_CONTAINER: ${{ env.STORAGE_CONTAINER }}
         MONGO_DB: "mongodb://localhost:27017/dbdev?replicaSet=rs0"
         USE_COSMOS: "true"
-
+        PORT: 30001
       run: |
         cd ./web
-        PORT=30001 NODE_PATH=../node_modules node ./web-server/lib/server.js 
+        NODE_PATH=../node_modules node ./web-server/lib/server.js &
+        while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$PORT)" != "200" ]]; do sleep 2; done
  
     - name: Test
 

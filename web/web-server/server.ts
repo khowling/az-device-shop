@@ -401,7 +401,30 @@ async function serve_static(ctx, next) {
 }
 
 
+class ApplicationState {
+    private error: boolean
+    private healthCode: number
+    private complete: boolean
+    private auditlog: Array<string>
 
+    constructor() {
+        this.error = false
+        this.complete = false
+        this.auditlog = []
+    }
+
+    log (message: string, complete: boolean = false, error: boolean = false) {
+        const alog = `${(new Date()).toLocaleString([], {hour12: true})}: ${error ? 'ERROR: ' : ''}${message}`
+        this.auditlog.push(alog)
+        console.log (alog)
+        this.error = error
+        this.complete = complete
+    }
+
+    healthz() {
+        return { body:  this.auditlog, status: this.error? 500 : this.complete? 200: 503}
+    }
+}
 
 
 import { order_state_startup } from './orderingFollower.js'
@@ -412,6 +435,7 @@ async function init() {
     // Init Web
 
     app.use(bodyParser())
+    const appState = app.context.appState = new ApplicationState()
 
     // Init DB
     const db = app.context.db = await dbInit()
@@ -441,13 +465,15 @@ async function init() {
     // You may add additional properties to ctx by editing app.context. 
     // This is useful for adding properties or methods to ctx to be used across your entire app
     if (b2c_tenant) {
-        console.log ("init(): getting openid config from b2c tenant...")
+        appState.log ("init(): getting openid config from b2c tenant...")
         app.context.openid_configuration = await fetch(`https://${b2c_tenant}.b2clogin.com/${b2c_tenant}.onmicrosoft.com/${signin_policy}/v2.0/.well-known/openid-configuration`)
         const signing_keys: any = await fetch(app.context.openid_configuration.jwks_uri)
         app.context.jwks = Object.assign({}, ...signing_keys.keys.map(k => ({ [k.kid]: k })))
+    } else{
+        appState.log ("init(): WARNING Skipping openid config from b2c tenant, missing environment variable B2C_TENANT")
     }
-    
-    console.log ("init(): Setting Azure Storage container client...")
+
+    appState.log ("init(): Setting Azure Storage container client...")
     const sharedKeyCredential = new StorageSharedKeyCredential(process.env.STORAGE_ACCOUNT, process.env.STORAGE_MASTER_KEY);
     const storeHost =  process.env.STORAGE_ACCOUNT === 'devstoreaccount1' ? `http://127.0.0.1:10000/${process.env.STORAGE_ACCOUNT}`: `https://${process.env.STORAGE_ACCOUNT}.blob.core.windows.net`
     const blobServiceClient = new BlobServiceClient(storeHost, sharedKeyCredential)
@@ -456,11 +482,11 @@ async function init() {
 
 
     // Init Settings (currently single tenent)
-    console.log ("init(): getting tenant config from db...")
+    appState.log ("init(): getting tenant config from db...")
     app.context.tenent = await db.collection(StoreDef["business"].collection).findOne({ type: "business", partition_key: "root" })
 
     if (!app.context.tenent) {
-        console.log ("init(): no tenant creating default config")
+        appState.log ("init(): no tenant creating default config")
         app.context.tenent = await createTenant( app.context, {
             "name": "Demo Bike Shop",
             "image": {"url": "https://assets.onestore.ms/cdnfiles/onestorerolling-1511-11008/shell/v3/images/logo/microsoft.png"},
@@ -477,7 +503,7 @@ async function init() {
 
     app.context.tenentKey =  app.context.tenent._id
 
-    console.log ("init(): setting tenant watcher, will process.exit() if removed")
+    appState.log ("init(): setting tenant watcher, will process.exit() if removed")
     app.context.businessWatcher = db.collection(StoreDef["business"].collection).watch([
         { $match: { $and: [{ 'operationType': { $in: ['insert', 'update', 'replace'] } }, { 'fullDocument.partition_key': 'root' }, { 'fullDocument.type': 'business' }] } },
         // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
@@ -489,7 +515,7 @@ async function init() {
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
          
-        console.log(`TENENT Change -  operationType=${change.operationType} key=${JSON.stringify(documentKey)}`)
+        appState.log(`TENENT Change -  operationType=${change.operationType} key=${JSON.stringify(documentKey)}`)
         if (!documentKey._id.equals(app.context.tenentKey)) {
             console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
             process.exit()
@@ -501,7 +527,7 @@ async function init() {
     //app.use(cors({ credentials: true }))
 
 
-    console.log ("init(): setting routes....")
+    appState.log ("init(): setting routes....")
     //const STATIC_URL_PREFIX = "/static"
     app.use(new Router()
         .get(`/(static)/(.*)`, serve_static)
@@ -516,12 +542,14 @@ async function init() {
     app.use(ssr)
 
     const port = process.env.PORT || 3000
-    console.log(`init(): starting webserver on ${port}..`)
+    appState.log(`init(): starting webserver on ${port}..`)
     app.listen(port)
 
 
     // Init order status (dont await, incase no tenent! )
+    appState.log(`init(): Init order status`)
     order_state_startup({db: app.context.db, tenent: app.context.tenent }).then(val => {
+        appState.log(`init(): Init order status complete`, true)
         app.context.orderState = val
     })
 
@@ -613,8 +641,9 @@ async function ssr(ctx, next) {
 // ----------------------------------------------------------- HealthZ
 const healthz = new Router({ prefix: "/healthz" })
     .get('/', async function (ctx, next) {
-        ctx.body = { status: 'All Good' }
-        ctx.status = 200
+        const {body, status} = ctx.appState.healthz()
+        ctx.body = body
+        ctx.status = status
         next()
     }).routes()
 // ----------------------------------------------------------- AUTH

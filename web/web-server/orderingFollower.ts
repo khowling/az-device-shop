@@ -23,9 +23,11 @@ export async function order_state_startup({ db, tenent }) {
     ])
     console.log(`orderingProcessor (4): Restored "${cs.collection}" to sequence=${cs.sequence},  "orderState" restored state to head_sequence=${orderState.stateStore.state._control.head_sequence}  #orders=${orderState.stateStore.state.orders.items.length} #onhand=${orderState.stateStore.state.inventory.onhand.length}`)
 
-    const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
-        orderState.stateStore
-    ])
+    if (false) {
+        const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
+            orderState.stateStore
+        ])
+    }
 
     console.log(`orderingFollower (5):  start watch "${cs.collection}" (filter watch to sequence>${cs.sequence}) continuation=${/*continuation*/null}`)
 
