@@ -334,7 +334,7 @@ async function dbInit() {
     //const murl = new URL(MongoURL as string)
     //console.log(`connecting with ${murl.toString()}`)
     console.log(`connecting with ${MongoURL}`)
-    const client = await MongoClient.connect(MongoURL)
+    const client = await MongoClient.connect(MongoURL, { useUnifiedTopology: true } )
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     const _db = client.db()
     // If Cosmos, need to pre-create the collections, becuse it enforces a partitioning strategy.
@@ -401,31 +401,8 @@ async function serve_static(ctx, next) {
 }
 
 
-class ApplicationState {
-    private error: boolean
-    private healthCode: number
-    private complete: boolean
-    private auditlog: Array<string>
 
-    constructor() {
-        this.error = false
-        this.complete = false
-        this.auditlog = []
-    }
-
-    log (message: string, complete: boolean = false, error: boolean = false) {
-        const alog = `${(new Date()).toLocaleString([], {hour12: true})}: ${error ? 'ERROR: ' : ''}${message}`
-        this.auditlog.push(alog)
-        console.log (alog)
-        this.error = error
-        this.complete = complete
-    }
-
-    healthz() {
-        return { body:  this.auditlog, status: this.error? 500 : this.complete? 200: 503}
-    }
-}
-
+import {ApplicationState} from "@az-device-shop/eventing/webserver"
 
 import { order_state_startup } from './orderingFollower.js'
 const app = new Koa();

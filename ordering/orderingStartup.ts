@@ -38,18 +38,18 @@ async function complete({ flow_id, spec }, next) {
 }
 
 // ---------------------------------------------------------------------------------------
-import ServiceWebServer from "@az-device-shop/eventing/webserver"
+import {ApplicationState, default as ServiceWebServer} from "@az-device-shop/eventing/webserver"
 import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
 import { startCheckpointing, restoreState } from "@az-device-shop/eventing/state-restore"
 import { watchDispatchWithSequence, watchProcessorTriggerWithTimeStamp } from "@az-device-shop/eventing/processor-actions"
 
-async function orderingStartup(cs: EventStoreConnection) {
+async function orderingStartup(cs: EventStoreConnection, appState: ApplicationState) {
 
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
-    console.log(`orderingStartup (1):  Create order state manager "orderState"`)
+    appState.log(`orderingStartup (1):  Create order state manager "orderState"`)
     const orderState = new OrderStateManager('emeaordering_v0', cs)
 
-    console.log(`orderingStartup (2):  create ordering processor "orderProcessor" & add workflow tasks`)
+    appState.log(`orderingStartup (2):  create ordering processor "orderProcessor" & add workflow tasks`)
     const orderProcessor = new Processor('emeaprocessor_v001', cs, { statePlugin: orderState })
     // add connection to ctx, to allow middleware access, (maybe not required!)
     orderProcessor.context.connection = cs
@@ -60,15 +60,15 @@ async function orderingStartup(cs: EventStoreConnection) {
     orderProcessor.use(shipping)
     orderProcessor.use(complete)
 
-    console.log(`orderingStartup (3): Hydrate local stateStores "orderState" & "orderProcessor" from snapshots & event log`)
+    appState.log(`orderingStartup (3): Hydrate local stateStores "orderState" & "orderProcessor" from snapshots & event log`)
     const chkdir = `${process.env.FILEPATH || '.'}/order_checkpoint`
     let last_checkpoint = await restoreState(cs, chkdir, [
         orderState.stateStore,
         orderProcessor.stateStore
     ])
-    console.log(`orderingStartup (3): Complete Hydrate, restored "${cs.collection}" to sequence=${cs.sequence},  "orderState" restored state to head_sequence=${orderState.stateStore.state._control.head_sequence}  #orders=${orderState.stateStore.state.orders.items.length} #onhand=${orderState.stateStore.state.inventory.onhand.length}, "orderProcessor" restored to flow_sequence=${orderProcessor.processorState.flow_sequence}`)
+    appState.log(`orderingStartup (3): Complete Hydrate, restored "${cs.collection}" to sequence=${cs.sequence},  "orderState" restored state to head_sequence=${orderState.stateStore.state._control.head_sequence}  #orders=${orderState.stateStore.state.orders.items.length} #onhand=${orderState.stateStore.state.inventory.onhand.length}, "orderProcessor" restored to flow_sequence=${orderProcessor.processorState.flow_sequence}`)
 
-    console.log(`orderingStartup (4): Re-start active "orderProcessor" workflows, #flows=${orderProcessor.processorState.proc_map.length}`)
+    appState.log(`orderingStartup (4): Re-start active "orderProcessor" workflows, #flows=${orderProcessor.processorState.proc_map.length}`)
     const prInterval = orderProcessor.initProcessors(function ({ id, stage }) {
         const oidx = orderState.stateStore.state.orders.items.findIndex(o => o.id === id)
         if (oidx < 0) {
@@ -87,19 +87,19 @@ async function orderingStartup(cs: EventStoreConnection) {
     }
 
 
-    console.log(`orderingStartup (5): Starting Interval to run "PickingProcess" control loop (5 seconds)`)
+    appState.log(`orderingStartup (5): Starting Interval to run "PickingProcess" control loop (5 seconds)`)
     const pickInterval = setInterval(async function () {
         await orderState.dispatch({ type: OrderActionType.PickingProcess })
     }, 5000)
 
 
-    console.log(`orderingStartup (6): Starting new "inventory_complete" watch"`)
+    appState.log(`orderingStartup (6): Starting new "inventory_complete" watch"`)
     const iwatch = watchDispatchWithSequence(cs, orderState, 'inventory', 'inventory_complete', 'inventoryId', 'spec', OrderActionType.InventryNew)
 
-    console.log(`orderingStartup (7): Starting new "orders_spec" watch"`)
+    appState.log(`orderingStartup (7): Starting new "orders_spec" watch"`)
     const mwatch = watchProcessorTriggerWithTimeStamp(cs, 'orders_spec', orderProcessor, { "status": 30 })
 
-    console.log(`orderingStartup: FINISHED`)
+    appState.log(`orderingStartup: FINISHED`, true)
     return { orderProcessor, orderState }
 }
 
@@ -107,17 +107,19 @@ async function orderingStartup(cs: EventStoreConnection) {
 // ---------------------------------------------------------------------------------------
 async function init() {
 
+    const appState = new ApplicationState()
+
     const murl = process.env.MONGO_DB
-    console.log(`Initilise EventStoreConnection with 'order_events' (MONGO_DB=${murl})`)
+    appState.log(`Initilise EventStoreConnection with 'order_events' (MONGO_DB=${murl})`)
     const connection = new EventStoreConnection(murl, 'order_events')
 
     connection.on('tenent_changed', async (oldTenentId) => {
-        console.error(`EventStoreConnection: TENENT CHANGED - DELETING existing ${connection.collection} documents partition_id=${oldTenentId} & existing`)
+        appState.log(`EventStoreConnection: TENENT CHANGED - DELETING existing ${connection.collection} documents partition_id=${oldTenentId} & existing`, false, true)
         await connection.db.collection(connection.collection).deleteMany({ partition_key: oldTenentId })
         process.exit()
     })
 
-    let { orderState, orderProcessor } = await orderingStartup(await connection.init())
+    let { orderState, orderProcessor } = await orderingStartup(await connection.init(), appState)
 
     // Http health + monitoring + API
     const web = new ServiceWebServer({ port: process.env.PORT || 9090 })

@@ -5,12 +5,12 @@
   "types": "lib/orderingState.d.ts",
   "version": "0.1.0",
   "dependencies": {
-    "mongodb": "^3.7.0",
-    "ws": "^7.5.4"
+    "mongodb": "^3.5.4",
+    "ws": "^8.4.0"
   },
   "devDependencies": {
-    "@types/node": "^14.17.14",
-    "typescript": "^4.6.0-dev.20211119"
+    "@types/node": "^17.0.8",
+    "typescript": "^4.6.0-dev.20220105"
   },
   "scripts": {
     "build": "npx tsc",

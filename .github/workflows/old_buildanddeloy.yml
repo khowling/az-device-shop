@@ -1,4 +1,4 @@
-name: buildanddeploy
+name: DEPRICATED Build and Deploy
 on:
   workflow_dispatch:
     inputs:

@@ -50,12 +50,8 @@
   "dependencies": {
     "@fluentui/merge-styles": "^8.2.0",
     "@fluentui/react": "^8.37.0",
-    "react": "^18.0.0-beta-fdc1d617a-20211118",
-    "react-dom": "^18.0.0-beta-fdc1d617a-20211118"
-  },
-  "peerDependencies": {
-    "react": "^18.0.0-beta-fdc1d617a-20211118",
-    "react-dom": "^18.0.0-beta-fdc1d617a-20211118"
+    "react": "^18.0.0-rc.0",
+    "react-dom": "^18.0.0-rc.0"
   },
   "proxy": "http://localhost:3000"
 }

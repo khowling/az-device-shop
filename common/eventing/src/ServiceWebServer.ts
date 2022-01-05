@@ -5,24 +5,54 @@ import { EventEmitter } from 'events'
 
 type WS_ServerClientType = Record<string, any>;
 
+export class ApplicationState {
+    private error: boolean
+    private healthCode: number
+    private complete: boolean
+    private auditlog: Array<string>
+
+    constructor() {
+        this.error = false
+        this.complete = false
+        this.auditlog = []
+    }
+
+    log (message: string, complete: boolean = false, error: boolean = false) : void {
+        const alog = `${(new Date()).toLocaleString([], {hour12: true})}: ${error ? 'ERROR: ' : ''}${message}`
+        this.auditlog.push(alog)
+        console.log (alog)
+        this.error = error
+        this.complete = complete
+    }
+
+    healthz() : { body: Array<string>, status: number} {
+        return { body:  this.auditlog, status: this.error? 500 : this.complete? 200: 503}
+    }
+}
+
 export default class ServiceWebServer extends EventEmitter {
 
     //private context
     private httpServer: http.Server
     private port: string
     private routes
+    private healthFn
 
     constructor(options) {
         super();
         this.port = options.port
+        this.healthFn = options.healthFn
+
         this.routes = [
             {   // liveleness - for restart
                 // readiness - for traffic
                 method: 'GET',
                 route: '/healthz',
                 fn: (req, res) => {
-                    res.writeHead(200, { 'Content-Type': 'text/plain' });
-                    res.end()
+                    const {body, status} = this.healthFn ? this.healthFn() : {status: 200, body: {}}
+
+                    res.writeHead(status, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(body))
                 }
             }
         ]

@@ -1,4 +1,4 @@
-name: Unit Test
+name: Integration Test
 on:
   workflow_dispatch:
     inputs:
@@ -48,7 +48,7 @@ jobs:
       run: |
 
         npm -g install npm@latest
-        npm i
+        npm i --legacy-peer-deps
 
         echo "Build Eventing.."
         cd common/eventing
@@ -85,13 +85,21 @@ jobs:
         STORAGE_MASTER_KEY: ${{ env.AZURITE_MASTER_KEY }}
         STORAGE_CONTAINER: ${{ env.STORAGE_CONTAINER }}
         MONGO_DB: "mongodb://localhost:27017/dbdev?replicaSet=rs0"
-        USE_COSMOS: "true"
+        USE_COSMOS: "false"
         PORT: 30001
       run: |
         cd ./web
         NODE_PATH=../node_modules node ./web-server/lib/server.js &
         while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$PORT/healthz)" != "200" ]]; do sleep 2; done
  
+        cd ../factory
+        node ./lib/factoryStartup.js &
+
+        cd ../ordering
+        node ./lib/orderingStartup.js &
+
+
+
     - name: Test
 
       run: |

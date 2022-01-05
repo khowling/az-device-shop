@@ -1,10 +1,12 @@
 import { Atomic, AtomicInterface } from './atomic.js'
 import mongodb from 'mongodb'
-const { MongoClient, ObjectID } = mongodb
+const { MongoClient } = mongodb
+
+import { ObjectId } from 'bson'
 import { EventEmitter } from 'events'
 
 interface Tenent {
-    _id: any; //typeof ObjectID;
+    _id: ObjectId; //typeof ObjectID;
     email: string;
 }
 export class EventStoreConnection extends EventEmitter {
