@@ -93,10 +93,13 @@ jobs:
         while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$PORT/healthz)" != "200" ]]; do sleep 2; done
  
         cd ../factory
-        node ./lib/factoryStartup.js &
+        PORT=$REACT_APP_FACTORY_PORT node ./lib/factoryStartup.js &
 
         cd ../ordering
-        node ./lib/orderingStartup.js &
+        PORT=$REACT_APP_ORDERING_PORT node ./lib/orderingStartup.js &
+
+        while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$REACT_APP_FACTORY_PORT/healthz)" != "200" ]]; do sleep 2; done
+        while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:$REACT_APP_ORDERING_PORT/healthz)" != "200" ]]; do sleep 2; done
 
 
 
