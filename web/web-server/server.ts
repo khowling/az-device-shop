@@ -334,7 +334,7 @@ async function dbInit() {
     //const murl = new URL(MongoURL as string)
     //console.log(`connecting with ${murl.toString()}`)
     console.log(`connecting with ${MongoURL}`)
-    const client = await MongoClient.connect(MongoURL, { useUnifiedTopology: true } )
+    const client = await MongoClient.connect(MongoURL)
     // !! IMPORTANT - Need to urlencode the Cosmos connection string
     const _db = client.db()
     // If Cosmos, need to pre-create the collections, becuse it enforces a partitioning strategy.

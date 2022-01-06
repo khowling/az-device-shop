@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@az-device-shop/eventing": "*",
-    "mongodb": "^3.5.4",
+    "mongodb": "^4.2.2",
     "ws": "^8.4.0"
   },
   "devDependencies": {
