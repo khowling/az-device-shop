@@ -13,7 +13,7 @@
     "koa": "^2.13.3",
     "koa-bodyparser": "^4.3.0",
     "koa-session": "^6.2.0",
-    "mongodb": "^4.2.2"
+    "mongodb": "^4.3.0"
   },
   "scripts": {
     "build": "npx tsc",

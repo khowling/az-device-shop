@@ -5,7 +5,7 @@
   "types": "lib/orderingState.d.ts",
   "version": "0.1.0",
   "dependencies": {
-    "mongodb": "^4.2.2",
+    "mongodb": "^4.3.0",
     "ws": "^8.4.0"
   },
   "devDependencies": {

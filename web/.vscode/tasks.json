@@ -22,6 +22,22 @@
             "label": "npm: build",
             "options": {
                 "cwd": "${workspaceFolder}/web-server"
+            },
+            "dependsOn": [
+                "npm: build common"
+            ]
+        },
+        {
+            "type": "npm",
+            "script": "build",
+            "group": "build",
+            "problemMatcher": {
+                "base": "$tsc",
+                "fileLocation": ["relative", "${workspaceFolder}/../common/eventing"]
+            },
+            "label": "npm: build common",
+            "options": {
+                "cwd": "${workspaceFolder}/../common/eventing"
             }
         },
         {
