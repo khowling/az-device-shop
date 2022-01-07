@@ -32,7 +32,7 @@ export function Nav({ tenent, auth, cartCount }) {
           </Link>
         }
 
-        <Text nowrap variant="xLarge" className={titleClass} >{tenent ? tenent.name : 'no tenent'}</Text>
+        <Text data-testid="TenentName" nowrap variant="xLarge" className={titleClass} >{tenent ? tenent.name : 'no tenent'}</Text>
 
         <form className="c-search" autoComplete="off" name="form1" target="_self" style={{ display: "inline-block", left: "5%", minWidth: "350px", horizontalAlign: "middle", verticalAlign: "middle", marginTop: "0" }}>
           <input aria-label="Enter your search" type="search" name="search-field" placeholder="Search *TBC*" />

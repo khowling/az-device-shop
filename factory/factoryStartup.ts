@@ -117,7 +117,7 @@ async function init() {
     let { factoryState, factoryProcessor } = await factoryStartup(await esConnection.init(), appState)
 
     // Http health + monitoring + API
-    const web = new ServiceWebServer({ port: process.env.PORT || 9091, healthFn:  appState.healthz})
+    const web = new ServiceWebServer({ port: process.env.PORT || 9091, appState})
 
     // curl -XPOST "http://localhost:9091/submit" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'
     web.addRoute('POST', '/submit', (req, res) => {

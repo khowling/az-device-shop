@@ -36,12 +36,12 @@ export default class ServiceWebServer extends EventEmitter {
     private httpServer: http.Server
     private port: string
     private routes
-    private healthFn
+    private appState: ApplicationState
 
     constructor(options) {
         super();
         this.port = options.port
-        this.healthFn = options.healthFn
+        this.appState = options.appState
 
         this.routes = [
             {   // liveleness - for restart
@@ -49,7 +49,7 @@ export default class ServiceWebServer extends EventEmitter {
                 method: 'GET',
                 route: '/healthz',
                 fn: (req, res) => {
-                    const {body, status} = this.healthFn ? this.healthFn() : {status: 200, body: {}}
+                    const {body, status} = this.appState ? this.appState.healthz() : {status: 200, body: {}}
 
                     res.writeHead(status, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify(body))

@@ -122,7 +122,7 @@ async function init() {
     let { orderState, orderProcessor } = await orderingStartup(await connection.init(), appState)
 
     // Http health + monitoring + API
-    const web = new ServiceWebServer({ port: process.env.PORT || 9090 })
+    const web = new ServiceWebServer({ port: process.env.PORT || 9090, appState })
 
     // curl -XPOST "http://localhost:9090/submit" -d '{"name":"New record 1"}' -H 'Content-Type: application/json'
     web.addRoute('POST', '/submit', (req, res) => {

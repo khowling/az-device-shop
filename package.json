@@ -6,5 +6,9 @@
     "factory",
     "web/web-react",
     "web/web-server"
-  ]
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.17.1",
+    "playright": "^0.0.22"
+  }
 }

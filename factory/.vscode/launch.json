@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Launch Factory",
             "program": "${workspaceFolder}/factoryStartup.ts",
-         //   "preLaunchTask": "npm: build",
+            "preLaunchTask": "npm: build",
             "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/lib/*.js",
