@@ -9,6 +9,9 @@
   ],
   "devDependencies": {
     "@playwright/test": "^1.17.1",
-    "playright": "^0.0.22"
+    "azurite": "^3.15.0",
+    "dotenv": "^16.0.0",
+    "playright": "^0.0.22",
+    "pm2": "^5.2.0"
   }
 }

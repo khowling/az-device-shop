@@ -5,6 +5,7 @@ dist
 **/out
 .env_*
 lib
+nohup.out
 __blobstorage__
 __azurite*
 __mongo_data__

@@ -1,29 +1,28 @@
 import https from 'https'
 import http from 'http'
 
-export default function (url: string, method = 'GET', headers = {}, body?): Promise<any> {
+export default async function (url: string, opts = {} as http.RequestOptions, body?: string | object): Promise<any> {
 
-    let opts: any = { method }, req_body
+    let options = {method: body? 'POST' : 'GET',  ...opts }
+    let bodystr: string 
+
     if (body) {
-        if (typeof body === 'object' && !headers['x-ms-blob-content-type']) {
-            req_body = JSON.stringify(body)
-            opts.headers = {
-                'content-type': 'application/json',
-                'content-length': Buffer.byteLength(req_body),
-                ...headers
-            }
-        } else {
-            req_body = body
-            opts.headers = {
-                'content-length': Buffer.byteLength(req_body),
-                ...headers
+        const contentType = (typeof body === 'object'  && !(options.headers && options.headers['x-ms-blob-content-type'])) ? "application/json": ""
+        bodystr = contentType ? JSON.stringify(body) : body as string
+
+        options = {
+            ...options,
+            headers: {
+                ...(contentType && { 'content-type': contentType}),
+                'content-length': Buffer.byteLength(bodystr),
+                ...(options.headers && { ...options.headers })
             }
         }
     }
 
     return new Promise(function (resolve, reject) {
 
-        const req_callback = (res) => {
+        function req_callback(res)  {
 
             if (res.statusCode !== 200 && res.statusCode !== 201) {
                 let error = new Error(`Request Failed: Status Code: ${res.statusCode}`)
@@ -31,7 +30,7 @@ export default function (url: string, method = 'GET', headers = {}, body?): Prom
                 // Consume response data to free up memory
                 res.resume();
                 //throw new Error(error)
-                reject(error.message)
+                reject(error)
             } else {
 
                 // required to process binary image data into base64
@@ -59,36 +58,32 @@ export default function (url: string, method = 'GET', headers = {}, body?): Prom
                                 return resolve(parsedData)
                             } catch (e) {
                                 console.error(`server_fetch: ${e}`)
-                                reject(e)
+                                reject(new Error(e as string))
                             }
                         } else if (/^application\/xml/.test(contentType)) {
                             return resolve(body)
                         } else if (/^image/.test(contentType)) {
                             return resolve(Buffer.from(body, 'binary').toString('base64'))
                         } else {
-                            return reject(`Unknown content-type : ${contentType}`)
+                            return reject(new Error(`Unknown content-type : ${contentType}`))
                         }
                     }
                 })
             }
         }
 
-        let req;
-        if (url.startsWith('http://')) {
-            req = http.request(url, opts, req_callback).on('error', (e) => {
-                console.error(`server_fetch: ${e.message}`)
-                reject(e.message)
-            })
-        } else {
-            req = https.request(url, opts, req_callback).on('error', (e) => {
-                console.error(`server_fetch: ${e.message}`)
-                reject(e.message)
-            })
+        function req_onerr(e) {
+            console.error(`server_fetch: ${e.message}`)
+            reject(e)
         }
 
-        if (opts.method === 'POST' || opts.method === 'PUT') {
+        const req = url.startsWith('http://') ?
+                http.request(url, options, req_callback).on('error', req_onerr) :
+                https.request(url, options, req_callback).on('error',req_onerr)
+
+        if (options.method === 'POST' || options.method === 'PUT') {
             // Write data to request body
-            req.end(req_body)
+            req.end(bodystr)
         } else {
             req.end()
         }

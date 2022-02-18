@@ -7,38 +7,9 @@
             "label": "build_all",
             "dependsOn": [
                 "build_lib",
-                "npm: build",
-                "build_assets_dev"
+                "build_assets_dev",
+                "npm: build - web-server"
             ]
-        },
-        {
-            "type": "npm",
-            "script": "build",
-            "group": "build",
-            "problemMatcher": {
-                "base": "$tsc",
-                "fileLocation": ["relative", "${workspaceFolder}/web-server"]
-            },
-            "label": "npm: build",
-            "options": {
-                "cwd": "${workspaceFolder}/web-server"
-            },
-            "dependsOn": [
-                "npm: build common"
-            ]
-        },
-        {
-            "type": "npm",
-            "script": "build",
-            "group": "build",
-            "problemMatcher": {
-                "base": "$tsc",
-                "fileLocation": ["relative", "${workspaceFolder}/../common/eventing"]
-            },
-            "label": "npm: build common",
-            "options": {
-                "cwd": "${workspaceFolder}/../common/eventing"
-            }
         },
         {
             "label": "build_lib",
@@ -55,7 +26,15 @@
             "options": {
                 "cwd": "${workspaceFolder}/web-react"
             }
+        },
+        {
+            "type": "npm",
+            "script": "build",
+            "path": "web-server/",
+            "group": "build",
+            "problemMatcher": [],
+            "label": "npm: build - web-server",
+            "detail": "npx tsc"
         }
-        
     ]
   }

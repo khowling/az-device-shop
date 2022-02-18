@@ -21,7 +21,7 @@
             "request": "launch",
             "name": "Launch web",
             "program": "${workspaceFolder}/web-server/server.ts",
-            "preLaunchTask": "npm: build",
+            "preLaunchTask": "npm: build - web-server",
             "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/web-server/lib/*.js",

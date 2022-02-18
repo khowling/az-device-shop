@@ -69,7 +69,7 @@ jobs:
         cd ../web/web-react
         #npm i --legacy-peer-deps
         npm run-script build_lib
-        npm run-script build_assets_prod
+        npm run-script build_assets_dev
 
         cd ../web-server
         #npm i 

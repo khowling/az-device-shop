@@ -13,7 +13,6 @@ import Joi from 'joi'
 // Auth & SAS require
 import jwkToPem from 'jwk-to-pem'
 import jws from 'jws'
-import https from 'https'
 
 const app_host_url = process.env.APP_HOST_URL
 const client_id = process.env.B2C_CLIENT_ID
@@ -200,9 +199,14 @@ function webToDb (webdoc: any, store: string, userId: string) : DbObject {
         collection: storedef.collection, 
         ...(_id && { _id: new ObjectId(_id)}),
         value: { 
+            ...(!_id && {
+                _id: new ObjectId(), 
+                _ts: new Timestamp(0,0), 
+                _createdBy: userId, 
+                owner: { _id: userId}
+            }), 
             _lastModified: new Timestamp(0,0), 
             _lastModifiedBy:  userId,
-            ...(!_id && {_ts: new Timestamp(0,0), _createdBy: userId, owner: { _id: userId}}), 
             ...Object.keys(value).reduce((a,c) => {
                 return c.endsWith('_ref') ? {...a,  [`${c.slice(0, -4)}_id`] : new ObjectId(value[c]._id)} : {...a, [c]: value[c]}
             }, {})
@@ -229,8 +233,8 @@ const FetchOperation = {
     },
     "myorders": async function (ctx): Promise<any> {
         if (!ctx.tenentKey) throw `Requires init`
-        if (!ctx.session.auth) throw 'Requires logged in'
-        const orders = await ctx.db.collection(StoreDef["orders"].collection).find({ owner: { _id: ctx.session.auth.sub }, status: { $gte: 30 }, partition_key: ctx.tenentKey }, { projection: StoreProjections["orders"] }).toArray()
+        if (b2c_tenant && !ctx.session.auth) throw 'Requires logged in'
+        const orders = await ctx.db.collection(StoreDef["orders"].collection).find({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: { $gte: 30 }, partition_key: ctx.tenentKey }, { projection: StoreProjections["orders"] }).toArray()
 
         return orders.map(o => {
             const orderState = ctx.orderState ? ctx.orderState.stateStore.state.orders.items.find(os => o._id.equals(os.spec._id)) : { status: { error: `orderState not initialied` } }
@@ -550,7 +554,7 @@ async function getSession(ctx) {
 // ----------------------------------------------------------- Server SSR
 import { Stream } from 'stream'
 import fetch from './server_fetch.js'
-import { AzBlobWritable, createServiceSAS } from './AzBlobWritable.js'
+//import { AzBlobWritable, createServiceSAS } from './AzBlobWritable.js'
 
 // all requires after this will use babel transpile, using 'babel.config.json'
 /*
@@ -578,7 +582,7 @@ async function ssr(ctx, next) {
 
         if (!ctx.tenentKey && routekey != '/init') {
             ctx.redirect('/init')
-        } else if (requireAuth && !ctx.session.auth) {
+        } else if (b2c_tenant && requireAuth && !ctx.session.auth) {
             ctx.redirect(`/connect/microsoft?surl=${encodeURIComponent(ctx.request.href)}`)
         } else {
             /*
@@ -645,8 +649,8 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
             try {
                 const flow_body = `client_id=${client_id}&client_secret=${client_secret}&scope=openid&code=${encodeURIComponent(ctx.query.code)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(`${(app_host_url ? app_host_url : 'http://localhost:3000') + '/connect/microsoft/callback'}`)}`
 
-                const { access_token, id_token } = await fetch(ctx.openid_configuration.token_endpoint, 'POST',
-                    { 'content-type': 'application/x-www-form-urlencoded' }, flow_body)
+                const { access_token, id_token } = await fetch(ctx.openid_configuration.token_endpoint, {method: 'POST', headers: {
+                    'content-type': 'application/x-www-form-urlencoded' }}, flow_body)
 
                 // Validated the signature of the ID token
                 // https://docs.microsoft.com/en-us/azure/active-directory-b2c/active-directory-b2c-reference-oidc#validate-the-id-token
@@ -942,13 +946,13 @@ const api = new Router({ prefix: '/api' })
     })
     // side effect, requires auth (force sign-in, so any cart data will be against auth.sub)
     .put('/checkout', async function (ctx, next) {
-        if (!ctx.session.auth) {
+        if (b2c_tenant && !ctx.session.auth) {
             ctx.throw(401, 'please login')
         } else {
             try {
                 const { value, error } = Joi.object({ 'shipping': Joi.string().valid('A', 'B').required() }).validate(ctx.request.body, { allowUnknown: true })
 
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth.sub }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $set: { _ts: new Timestamp(0,0), status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $set: { _ts: new Timestamp(0,0), status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
                 ctx.body = { _id: order.value._id }
                 await next()
             } catch (e) {

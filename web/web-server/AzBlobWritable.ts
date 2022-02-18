@@ -145,10 +145,10 @@ export class AzBlobWritable extends Stream.Writable {
 
 
 
-            fetch(`${this.saslocator}&comp=block&blockid=${Buffer.from(blockid).toString('base64')}`, 'PUT', {
+            fetch(`${this.saslocator}&comp=block&blockid=${Buffer.from(blockid).toString('base64')}`, {method: 'PUT', headers: {
                 "x-ms-blob-content-type": this.filetype,
                 "x-ms-version": "2018-03-28"
-            }, this.blockBuffer.slice(0, this.blockBuffer_length))
+            }}, this.blockBuffer.slice(0, this.blockBuffer_length))
 
                 //.catch(err => {
                 //    console.error(`AzBlobWritable _write caught: ${err}`)
@@ -165,8 +165,8 @@ export class AzBlobWritable extends Stream.Writable {
                     }
                     done() // send done data (add a error string if error)
                 }, (err) => {
-                    console.error(`AzBlobWritable _write reject: ${err}`)
-                    done(new Error(err))
+                    console.error(`AzBlobWritable _write reject: ${err.message}`)
+                    done(err)
                 })
         }
     }
@@ -175,11 +175,11 @@ export class AzBlobWritable extends Stream.Writable {
 
         const finalBlockFn = () => {
             return fetch(
-                `${this.saslocator}&comp=blocklist`, 'PUT', {
+                `${this.saslocator}&comp=blocklist`, {method: 'PUT', headers: {
                 "content-type": "application/xml",
                 "x-ms-blob-content-type": this.filetype,
                 "x-ms-version": "2018-03-28",
-            },
+            }},
                 '<?xml version="1.0" encoding="utf-8"?>' +
                 '<BlockList>' + this.sendblockids.map((l) => `<Latest>${Buffer.from(l).toString('base64')}</Latest>`).join('') +
                 '</BlockList>'
@@ -193,11 +193,10 @@ export class AzBlobWritable extends Stream.Writable {
             console.log(`AzBlobWritable _final putting block (${this.sendblockids.length})b ${blockid}`)
 
             fetch(
-                `${this.saslocator}&comp=block&blockid=${Buffer.from(blockid).toString('base64')}`,
-                'PUT', {
+                `${this.saslocator}&comp=block&blockid=${Buffer.from(blockid).toString('base64')}`, {method: 'PUT', headers: {
                 "x-ms-blob-content-type": this.filetype,
                 "x-ms-version": "2018-03-28"
-            }, this.blockBuffer.slice(0, this.blockBuffer_length))
+            }}, this.blockBuffer.slice(0, this.blockBuffer_length))
                 //    .catch(err => {
                 //        console.error(`AzBlobWritable _final caught: ${err}`)
                 //        done(new Error(err))
@@ -213,12 +212,12 @@ export class AzBlobWritable extends Stream.Writable {
                             console.log(`AzBlobWritable _final finalBlockFn success`)
                             done()
                         }, (err) => {
-                            console.error(`AzBlobWritable _final finalBlockFn reject: ${err}`)
-                            done(new Error(err))
+                            console.error(`AzBlobWritable _final finalBlockFn reject: ${err.message}`)
+                            done(err)
                         })
                 }, (err) => {
-                    console.error(`AzBlobWritable _final reject: ${err}`)
-                    done(new Error(err))
+                    console.error(`AzBlobWritable _final reject: ${err.message}`)
+                    done(err)
                 })
 
         } else {
@@ -232,8 +231,8 @@ export class AzBlobWritable extends Stream.Writable {
                     console.log(`AzBlobWritable _final finalBlockFn success`)
                     done()
                 }, (err) => {
-                    console.error(`AzBlobWritable _final finalBlockFn reject: ${err}`)
-                    done(new Error(err))
+                    console.error(`AzBlobWritable _final finalBlockFn reject: ${err.message}`)
+                    done(err)
                 })
         }
     }
