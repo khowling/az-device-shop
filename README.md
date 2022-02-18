@@ -41,12 +41,13 @@ One member is deemed the _primary node_, receiving all write operations, while t
 Start:
 
 ```
+mkdir __mongo_data__
 nohup mongod --replSet rs0  --dbpath ./__mongo_data__/ &
 ```
 
-NOTE: On FIRST using mongo, run to setup the replicaset:
+NOTE: First time only, run to setup the replicaset:
 ```
-mongo --eval 'rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "localhost:27017" } ] } )'
+mongo --eval 'rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "localhost:27017" }]})'
 ```
 
 
@@ -69,8 +70,21 @@ USE_COSMOS="false"
 ```
 
 Now launch the microservices using the node process manager `pm2`
+
+
+NOTE: First time only, run to create the storage container:
 ```
-npx pm2 start ./pm2.config.js
+# Mkdir for `azurite` storage local emulator
+mkdir ./__blobstorage__
+# Start azurity only
+npx pm2 start blob
+# Create Container
+AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
+```
+
+All other times:
+```
+npx pm2 start all
 ```
 
 Navigate to `http://localhost:3000` and you should see the start page
