@@ -7,7 +7,7 @@
 Ecommerce - Example application highlighting the following architectural patterns
 
  :heavy_check_mark:  Cloud agnostic, open-source, open-protocols  
- :heavy_check_mark:  Server-side rendering for site performance and SEO  
+ :heavy_check_mark:  Server-side rendering with React18 for site performance and SEO  
  :heavy_check_mark:  Microservices with CRUD and Event Sourcing patterns  
  :heavy_check_mark:  Cloud provider SLA backed Messaging, Persistance, Identity, and Analytics services  
  :heavy_check_mark:  Complete with devops toolchain, real-time Monitoring and analytics  
@@ -40,10 +40,19 @@ One member is deemed the _primary node_, receiving all write operations, while t
 
 Start:
 
-```
-mkdir __mongo_data__
-nohup mongod --replSet rs0  --dbpath ./__mongo_data__/ &
-```
+If using Docker:
+
+    ```
+    docker volume create --name=mongodata
+    # a Replica Set single instance
+    docker run --restart always --name mongo_dev -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0
+    ```
+else
+
+    ```
+    mkdir __mongo_data__
+    nohup mongod --replSet rs0  --dbpath ./__mongo_data__/ &
+    ```
 
 NOTE: First time only, run to setup the replicaset:
 ```
@@ -79,6 +88,7 @@ mkdir ./__blobstorage__
 # Start azurity only
 npx pm2 start blob
 # Create Container
+sleep 2
 AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
 ```
 
@@ -87,11 +97,16 @@ All other times:
 npx pm2 start all
 ```
 
+See logs:
+```
+npx pm2 logs
+```
+
 Navigate to `http://localhost:3000` and you should see the start page
 
 To ensure all the services are started correctly, run the `playwright` test script
 ```
-npx playwright test ./test
+npx playwright test
 ```
 
 

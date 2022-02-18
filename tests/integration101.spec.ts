@@ -46,17 +46,18 @@ test('basic full system test integration test 101', async ({ page }) => {
   // checkout
   const co = await page.locator('text=Checkout');
   await co.waitFor();
-  co.click()
+  await co.click()
 
   // Place Order
   const po = await page.locator('text=Place Order');
   await po.waitFor();
-  po.click()
+  await po.click()
 
   // My Orders
+  // NOTE: This will FAIL if B2C_TENANT Identity is enabled!
   const mo = await page.locator('text=My Orders');
   await mo.waitFor();
-  po.click()
+  await po.click()
 
   const rows = page.locator('table tr');
   const count = await rows.count()
