@@ -70,6 +70,9 @@ jobs:
         # Start everything
         npx pm2 start ./pm2.config.js
 
+        # Print logs
+        npx pm2 logs --nostream
+
     - name: Test
 
       run: |

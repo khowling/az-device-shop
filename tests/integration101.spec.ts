@@ -1,16 +1,38 @@
 const { test, expect } = require ( '@playwright/test');
 
+// If one of the serial tests fails, all subsequent tests are skipped. All tests in a group are retried together.
+test.describe.configure({ mode: 'serial' });
 
-test('all services running', async ({ request }) => {
-  const web = await request.get(`http://localhost:3000/healthz`)
-  expect(web.ok()).toBeTruthy();
+test('all services health check', async ({ request }) => {
 
-  const ordering = await request.get(`http://localhost:9090/healthz`)
-  expect(ordering.ok()).toBeTruthy();
+  // wait for 200 from all services
+  // 500 = error, 503 = not ready
+  let web, ordering, factory
 
-  
-  const factory = await request.get(`http://localhost:9091/healthz`)
-  expect(factory.ok()).toBeTruthy();
+  // Allow 20 seconds for all services to be initialised (including business creation)
+  let remainingWait = 20
+  test.setTimeout((5+remainingWait)*1000);
+  const checkEvery = 2
+  while (remainingWait > 0) {
+    try {
+      web = await request.get(`http://localhost:3000/healthz`)
+      if (!web.ok()) throw new Error(`web error ${web.status()} ${web.statusText()} - ${web.text()}`)
+      ordering = await request.get(`http://localhost:9090/healthz`)
+      if (!ordering.ok()) throw new Error(`ordering error ${ordering.status()} ${ordering.statusText()} - ${ordering.text()}`)
+      factory = await request.get(`http://localhost:9091/healthz`)
+      if (!factory.ok()) throw new Error(`factory error ${factory.status()} ${factory.statusText()} - ${factory.text()}`)
+      // success
+      break
+      
+    } catch (e) {
+      console.warn (`Not ready: ${e.message},  (${remainingWait}seconds)`)
+      await new Promise(resolve => setTimeout(resolve, checkEvery*1000)); remainingWait=remainingWait-checkEvery
+    }
+  }
+
+  expect(web?.ok() || false).toBeTruthy();
+  expect(ordering?.ok()).toBeTruthy();
+  expect(factory?.ok()).toBeTruthy();
 });
 
 
@@ -53,7 +75,6 @@ test('end-to-end order creation', async ({ page }) => {
   let remainingWait = 30
   test.setTimeout((5+remainingWait)*1000);
   const checkEvery = 5
-  console.log (`${ await a2c.isEnabled()} - ${remainingWait}`)
   while (!await a2c.isEnabled() && remainingWait > 0) {
     console.log (`No stock avaiable, wanting for stock to be creatd by the factory process (${remainingWait}seconds)...`)
     await new Promise(resolve => setTimeout(resolve, checkEvery*1000)); remainingWait=remainingWait-checkEvery
@@ -96,10 +117,10 @@ test('end-to-end order creation', async ({ page }) => {
 
   const rows = await page.locator('table tbody tr');
   const count = await rows.count()
-  console.log (`orders count = ${count}`)
+  //console.log (`orders count = ${count}`)
   expect (count >0 ).toBeTruthy()
 
-  console.log(await rows.nth(0).textContent())
+  //console.log(await rows.nth(0).textContent())
   
 })
 
