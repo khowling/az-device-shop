@@ -1,4 +1,4 @@
-name: Integration Test
+name: Full End-2-End integration test
 on:
   workflow_dispatch:
     inputs:
@@ -12,44 +12,23 @@ env:
   STORAGE_CONTAINER: "az-shop-images"
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
-
-    # Service containers to run with `runner-job`
-    # Feature: https://github.community/t/any-ways-to-pass-arguments-to-service-containers/16826/2
-    #services:
-    #  azurite:
-    #    image: mcr.microsoft.com/azure-storage/azurite
-    #    ports:
-    #      - 10000:10000
-    #    options: --entrypoint azurite-blob 
-    #    args: --blobHost 0.0.0.0 --blobPort 10000
-
     steps:
     - uses: actions/checkout@main
     
-    - name: Create Azure Storage Container
-      run: |
-        # https://mcr.microsoft.com/v2/azure-storage/azurite/tags/list (why not a actions service)
-        # https://github.com/Azure/Azurite/issues/676 (--loose)
-        AZURITE_CONTAINER=$(docker create  -p 10000:10000 --entrypoint azurite-blob -e GITHUB_ACTIONS=true -e CI=true mcr.microsoft.com/azure-storage/azurite:3.15.0 --blobHost 0.0.0.0 --blobPort 10000 --loose)
-        docker start $AZURITE_CONTAINER
-        sleep 2
-        az storage container create -n ${{ env.STORAGE_CONTAINER }} --connection-string "DefaultEndpointsProtocol=http;AccountName=${{ env.AZURITE_ACCOUNT }};AccountKey=${{ env.AZURITE_MASTER_KEY }};BlobEndpoint=http://localhost:10000/${{ env.AZURITE_ACCOUNT }};"
-
     - name: Start MongoDB
       uses: supercharge/mongodb-github-action@1.7.0
       with:
         mongodb-version: ${{ github.event.inputs.mongoVersion }}
         mongodb-replica-set: rs0
     
-
-    - name: Build
+    - name: Microservices build
       run: |
         npm -g install npm@latest
         sh ./workflows/dev.1.build.sh
 
-    - name: Run
+    - name: Microservices Launch
       timeout-minutes: 1
       env:
         STORAGE_ACCOUNT: ${{ env.AZURITE_ACCOUNT }}
@@ -73,7 +52,7 @@ jobs:
         # Print logs
         npx pm2 logs --nostream
 
-    - name: Test
+    - name: Playwright End-to-End
 
       run: |
         npx playwright test
