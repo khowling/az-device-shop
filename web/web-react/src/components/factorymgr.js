@@ -47,9 +47,9 @@ function WorkItem({ resource, dismissPanel, refstores }) {
 
             <Slider
                 label="Number to build"
-                min={0}
-                max={1000}
-                step={10}
+                min={1}
+                max={20}
+                step={1}
                 defaultValue={inventory.qty}
                 showValue={true}
                 onChange={(val) => _onChange({ target: { name: "qty" } }, val)}

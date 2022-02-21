@@ -1,6 +1,4 @@
 #!/bin/bash
-
-sudo npm -g install npm@latest
 npm i --legacy-peer-deps
 
 echo "Build Eventing.."

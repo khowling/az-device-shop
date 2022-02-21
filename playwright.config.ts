@@ -12,7 +12,7 @@ const config: PlaywrightTestConfig = {
   forbidOnly: !!process.env.CI,
 
   // Two retries for each test
-  retries: 1,
+  retries: 0,
 
   // Limit the number of workers on CI, use default locally
   workers: process.env.CI ? 2 : undefined,

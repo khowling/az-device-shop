@@ -64,7 +64,7 @@ mongo --eval 'rs.initiate({ _id: "rs0", members: [ { _id: 0, host : "localhost:2
 
 Clone the repo locally, and from the project root directory, build the project
 ```
-sh ./workflows/local.1.build.sh
+sh ./workflows/dev.1.build.sh
 ```
 
 Create a local environment file `./env_local` and populate with the required environment variables to run the microservices services locally:
@@ -87,14 +87,14 @@ NOTE: First time only, run to create the storage container:
 mkdir ./__blobstorage__
 # Start azurity only
 npx pm2 start blob
-# Create Container
+# Wait for azurite to launch, then create container
 sleep 2
 AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
 ```
 
 All other times:
 ```
-npx pm2 start all
+npx pm2 start ./pm2.config.js
 ```
 
 See logs:

@@ -1023,11 +1023,11 @@ const api = new Router({ prefix: '/api' })
     .post('/store/:store', async function (ctx, next) {
         try {
             if (!ctx.request.body) throw new Error(`no body`)
-            if (!ctx.session.auth) throw new Error(`unauthenticated`)
+            if (b2c_tenant && !ctx.session.auth) throw new Error(`unauthenticated`)
             if (!ctx.tenentKey) throw new Error(`no tenent`)
 
 
-            const {_id, value, error, collection} = webToDb (ctx.request.body, ctx.params.store, ctx.session.auth.sub)
+            const {_id, value, error, collection} = webToDb (ctx.request.body, ctx.params.store, ctx.session.auth?.sub)
             if (error) throw new Error(error)
             const partition_key = ctx.tenentKey
 
@@ -1067,9 +1067,14 @@ const api = new Router({ prefix: '/api' })
         const containerClient: ContainerClient = ctx.containerClient
         const pathname = ctx.params.folder + '/' + ctx.params.id
         const downloadBlockBlobResponse = await containerClient.getBlockBlobClient(pathname).download()
+        ctx.status = 200;
+        ctx.response.set("content-type", downloadBlockBlobResponse.contentType);
 
-        await new Promise((acc, rej) => {
-            downloadBlockBlobResponse.readableStreamBody.pipe(ctx.res).on('finish', acc)
+        await new Promise((resolve, rej) => {
+            downloadBlockBlobResponse.readableStreamBody.pipe(ctx.res).on('finish', () => {
+                ctx.res.end()
+                resolve('done')
+                })
         })
         await next()
 /*

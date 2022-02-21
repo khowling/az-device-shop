@@ -22,12 +22,12 @@ async function inFactory({ flow_id, spec }, next) {
 }
 
 async function moveToWarehouse({ flow_id, spec }, next) {
-    await next({ type: WorkItemActionType.StatusUpdate, id: flow_id, spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: { time: Date.now() + 1000 * 10 /* 10 secs */ } } as ProcessorOptions)
+    await next({ type: WorkItemActionType.StatusUpdate, id: flow_id, spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } } as ProcessorOptions)
 }
 
 
 async function publishInventory({ flow_id, spec }, next) {
-    await next({ type: WorkItemActionType.CompleteInventry, id: flow_id, spec }, { sleep_until: { time: Date.now() + 1000 * 10 /* 10 secs */ } }, OperationLabel.NEWINV)
+    await next({ type: WorkItemActionType.CompleteInventry, id: flow_id, spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } }, OperationLabel.NEWINV)
 }
 
 async function tidyUp({ flow_id, spec }, next) {

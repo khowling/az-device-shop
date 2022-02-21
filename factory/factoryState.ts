@@ -134,7 +134,7 @@ interface FactoryReducerState {
     capacity_allocated: number;
 }
 
-function initFactoryReducer(timeToProcess = 30 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryReducerState, WorkItemAction> {
+function initFactoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryReducerState, WorkItemAction> {
 
     return {
         sliceKey: 'factory',
