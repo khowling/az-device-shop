@@ -86,7 +86,7 @@ NOTE: First time only, run to create the storage container:
 # Mkdir for `azurite` storage local emulator
 mkdir ./__blobstorage__
 # Start azurity only
-npx pm2 start blob
+npx pm2 start ./pm2.config.js --only blob
 # Wait for azurite to launch, then create container
 sleep 2
 AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
