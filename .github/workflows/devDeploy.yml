@@ -66,11 +66,12 @@ jobs:
         az acr build -r ${{ env.ACRNAME }} -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .
         az acr build -r ${{ env.ACRNAME }} -t az-device-shop/ordering:0.1.0  -f ./ordering/Dockerfile .
     
-    - uses: Azure/aks-set-context@v1
-      with:
-        creds: '${{ secrets.AZURE_CREDENTIALS }}'
-        cluster-name: '${{env.AKS_NAME}}'
-        resource-group: '${{env.AKS_RG}}'
+    - name: Kubelogin
+      run: |
+        wget -q https://github.com/Azure/kubelogin/releases/download/v0.0.11/kubelogin.zip
+        unzip kubelogin.zip
+        sudo mv bin/linux_amd64/kubelogin /usr/bin
+        kubelogin convert-kubeconfig -l azurecli
 
     - uses: Azure/k8s-bake@v2
       with:
