@@ -71,6 +71,8 @@ jobs:
         wget -q https://github.com/Azure/kubelogin/releases/download/v0.0.11/kubelogin.zip
         unzip kubelogin.zip
         sudo mv bin/linux_amd64/kubelogin /usr/bin
+
+        az aks get-credentials -n $AKS_NAME -g $AKS_RG --overwrite-existing
         kubelogin convert-kubeconfig -l azurecli
 
     - uses: Azure/k8s-bake@v2
