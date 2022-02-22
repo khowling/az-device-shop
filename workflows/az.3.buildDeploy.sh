@@ -1,9 +1,20 @@
+#!/bin/sh
+#set -x
+#
+[ "$#" -eq 1 ] || {
+    echo "aks-name parameter required"
+    exit 1
+}
 
 
+aks=$1
+export AKS_RG=${aks}-rg
+
+## Load in settings from dependencies for helm chart
 FILE=".env_azure"
 source $FILE
 
-export ACRNAME=$(az acr list -g ${AKS_RG} --query [0].name -o tsv)
+export ACRNAME=$(az acr list -g ${AKS_RG}-rg --query [0].name -o tsv)
 
 az acr build -r $ACRNAME -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
 az acr build -r $ACRNAME -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .

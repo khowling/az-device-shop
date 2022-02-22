@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 npm i --legacy-peer-deps
 
 echo "Build Eventing.."

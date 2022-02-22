@@ -1,8 +1,10 @@
 param name string
 var location = resourceGroup().location
 
+var uniqueSuffix = uniqueString(resourceGroup().id)
+
 resource fnstore 'Microsoft.Storage/storageAccounts@2021-01-01' = {
-  name: '${replace(name, '-', '')}'
+  name: '${replace(name, '-', '')}${uniqueSuffix}'
   location: location
   kind: 'StorageV2'
   sku: {
@@ -52,7 +54,7 @@ resource fnstoreContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
 
 
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
-  name: '${name}-db'
+  name: '${name}-${uniqueSuffix}'
   kind: 'MongoDB'
   location: location
   properties: {

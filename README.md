@@ -68,36 +68,41 @@ sh ./workflows/dev.1.build.sh
 ```
 
 Create a local environment file `./env_local` and populate with the required environment variables to run the microservices services locally:
-```
-#  Variables for the local azurite blob storage service
-STORAGE_ACCOUNT="devstoreaccount1"
-STORAGE_CONTAINER="az-shop-images"
-STORAGE_MASTER_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-#  Variables for the local mongodb
-MONGO_DB="mongodb://localhost:27017/dbdev?replicaSet=rs0"
-USE_COSMOS="false"
-```
+
+
+  ```
+  #  Variables for the local azurite blob storage service
+  STORAGE_ACCOUNT="devstoreaccount1"
+  STORAGE_CONTAINER="az-shop-images"
+  STORAGE_MASTER_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+  #  Variables for the local mongodb
+  MONGO_DB="mongodb://localhost:27017/dbdev?replicaSet=rs0"
+  USE_COSMOS="false"
+  ```
 
 Now launch the microservices using the node process manager `pm2`
 
 
 NOTE: First time only, run to create the storage container:
-```
-# Mkdir for `azurite` storage local emulator
-mkdir ./__blobstorage__
-# Start azurity only
-npx pm2 start ./pm2.config.js --only blob
-# Wait for azurite to launch, then create container
-sleep 2
-AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
-```
+
+    ```
+    # Mkdir for `azurite` storage local emulator
+    mkdir ./__blobstorage__
+    # Start azurity only
+    npx pm2 start ./pm2.config.js --only blob
+    # Wait for azurite to launch, then create container
+    sleep 2
+    AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
+    ```
 
 All other times:
+
 ```
 npx pm2 start ./pm2.config.js
 ```
 
 See logs:
+
 ```
 npx pm2 logs
 ```
@@ -105,6 +110,7 @@ npx pm2 logs
 Navigate to `http://localhost:3000` and you should see the start page
 
 To ensure all the services are started correctly, run the `playwright` test script
+
 ```
 npx playwright test
 ```
@@ -112,120 +118,35 @@ npx playwright test
 
 ## Cloud Deployment Instructions
 
+NOTE: Requires 'az' cli, authenitcated with a user with subscription ownership permissions
+
 ### Provisioning a cluster
 
-Use the [AKS helper](https://azure.github.io/Aks-Construction) to provision your cluster, and configure the helper as follows:
-
-Select you preferences for:
-  * __Operations Principles__
-  * __Security Principles__
-
-Now, to configure the TLS Ingress, go into the __Addon Details__ tab
-
-  In the section __Securely Expose your applications via Layer 7 HTTP(S) proxies__, select the following options, providing all the require information
-
-  * __Create FQDN URLs for your applications using external-dns__
-  * __Automatically Issue Certificates for HTTPS using cert-manager__
+This script uses the [AKS helper](https://azure.github.io/Aks-Construction) template to provision your cluster.  The helper was configured with the followiong settings:
 
 
-  __NOTE:__ In the section __CSI Secrets : Store Kubernetes Secrets in Azure Keyvault, using AKS Managed Identity__,  ensure the following option is selected: __Yes, provision a new Azure KeyVault & enable Secrets Store CSI Driver__.  Also, __Enable KeyVault Integration for TLS Certificates__ is selected, this will integrate Application Gateway access to KeyVault,  and 
+NOTE: Requires a Azure DNS Zone resource, to expose secure public endpoint on custom domain
 
-
-Now, under the __Deploy__ tab, execute the commands to provision your complete environment. __NOTE__: Once complete, please relember to run the script on the __Post Configuration__ tab to complete the deployment.
-
+```
+bash ./workflows/az.1.aks.sh -n < aks-name > -z <Azure DNS Zone Resource Id> -e <email>
+```
 
 ###  Provision the Application dependencies
 
-APPGROUP=az-shop-001
-az group create -l westeurope -n $APPGROUP
-az deployment group create -g az-k8s-hedw-rg  --template-file ./deploy/az-device.bicep  --parameters name=azdevshop001
 
-##  Create Storage Account - for eventhub checkpointing, and ecommerce media
-create 'Private' container for 'checkpointing'
-create 'Blob' container (Read annonoumous)  for media
-add POST&PUT CORS rules for : http://localhost:8000, with headers = *
-
-
-
-https://docs.microsoft.com/en-us/azure/cosmos-db/manage-mongodb-with-resource-manager
-
-resourceGroupName=kh-ecomm-dev
-location=westeurope
-databaseName=dbdev
-
-az group create --name $resourceGroupName --location $location
-ARM_OUTPUT=$(az group deployment create --resource-group $resourceGroupName \
-    --template-file infra/services.json  \
-    --parameters databaseName=$databaseName \
-    --query "[properties.outputs.accountName.value,properties.outputs.documentDbPrimaryMasterKey.value]" \
-    --output tsv)
-
-if [ $? -eq 0 ] ; then
-    out_array=($(echo $ARM_OUTPUT | tr " " "\n"))
-    accountName=${out_array[0]}
-    documentDbPrimaryMasterKey=${out_array[1]}
-else
-    echo "Create Infra failed"
-    exit 1
-fi
+```
+bash ./workflows/az.2.dependencies.sh < app name > > ./.env.azure
+cat ./.env_azure_prereqs >> ./.env.azure
+```
 
 
 ## Deploy App to Azure
 
-
-
 ```
-APP_NAME=az-shop
-APP_DOMAIN=
-APP_HOST_URL="https://${APP_NAME}.${APP_DOMAIN}"
+bash ./workflows/az.3.buildDeploy.sh < aks-name > 
 ```
 
-### Deploy Mongo
 
-NOTE: At the moment we are using mongo 4 API for the oplog, so installing the mongo chat, will modify to use Cosmos Mongo API once version4 is available.
-
-```
-AZSHOP_NS=${APP_NAME}
-AZSHOP_DBUSERNAME=az-shop
-AZSHOP_DBNAME=az-shop
-
-# Get mongo chart
-helm repo add bitnami https://charts.bitnami.com/bitnami
-
-kubectl create ns $AZSHOP_NS
-
-helm install mongo-demo bitnami/mongodb --namespace  $AZSHOP_NS \
- --set architecture="replicaset" \
- --set persistence.storageClass="managed-premium" \
- --set auth.username=${AZSHOP_DBUSERNAME},auth.database=${AZSHOP_DBNAME}
-
-AZSHOP_DBPASSWD=$(kubectl get secret --namespace $AZSHOP_NS mongo-demo-mongodb -o jsonpath="{.data.mongodb-password}" | base64 --decode)
-
-##  Need to escape the comma for the helm set cli :(
-export MONGO_URL="mongodb://${AZSHOP_DBUSERNAME}:${AZSHOP_DBPASSWD}@mongo-demo-mongodb-0.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017\,mongo-demo-mongodb-1.mongo-demo-mongodb-headless.${AZSHOP_NS}.svc.cluster.local:27017/${AZSHOP_DBUSERNAME}?replicaSet=rs0"
-
-```
-
-### Deploy Storage Account
-
-Used for catalog images
-
-```
-# Create Storage Account
-AZSHOP_RG=${AZSHOP_NS}-rg
-STORAGE_ACCOUNT="azshopstorage"
-STORAGE_CONTAINER="images"
-
-az group create -n $AZSHOP_RG -l westeurope
-az storage account create -n $STORAGE_ACCOUNT -g $AZSHOP_RG -l westeurope --sku Standard_LRS
-
-STORAGE_MASTER_KEY=$(az storage account keys list -n $STORAGE_ACCOUNT -g $AZSHOP_RG --query "[0].value" -o tsv)
-az storage container create --public-access blob -n $STORAGE_CONTAINER --account-name $STORAGE_ACCOUNT --account-key $STORAGE_MASTER_KEY
-
-
-az storage cors add --methods GET HEAD MERGE OPTIONS POST PUT --allowed-headers 'x-ms-*,Access-Control*' --exposed-headers '*' --origins ${APP_HOST_URL} --services b --account-name ${STORAGE_ACCOUNT} --account-key ${STORAGE_MASTER_KEY}
-
-```
 
 # Link to B2C
 
@@ -261,37 +182,6 @@ B2C_RESETPWD_POLICY="<value>"
 
 NOTE: if developing locally, place values in local .env file
 ```
-
-```
-
-## Deploy app
-
-```
-ACR_NAME=<>
-
-## Get local B2C values from local file (not in repo)
-source ./web/.env
-
-helm install ${APP_NAME} ./helm/az-device-shop --namespace  ${AZSHOP_NS} \
-  --set global.registryHost="${ACR_NAME}.azurecr.io/" \
-  --set global.env.MONGO_DB="${MONGO_URL}" \
-  --set global.env.STORAGE_ACCOUNT="${STORAGE_ACCOUNT}" \
-  --set global.env.STORAGE_CONTAINER="${STORAGE_CONTAINER}" \
-  --set global.env.STORAGE_MASTER_KEY="${STORAGE_MASTER_KEY}" \
-  --set global.env.APP_HOST_URL="${APP_HOST_URL}" \
-  --set az-device-shop-web.env.B2C_RESETPWD_POLICY="${B2C_RESETPWD_POLICY}" \
-  --set az-device-shop-web.env.B2C_TENANT="${B2C_TENANT}" \
-  --set az-device-shop-web.env.B2C_CLIENT_SECRET="${B2C_CLIENT_SECRET}" \
-  --set az-device-shop-web.env.B2C_SIGNIN_POLICY="${B2C_SIGNIN_POLICY}" \
-  --set az-device-shop-web.env.B2C_CLIENT_ID="${B2C_CLIENT_ID}"
-
-```
-
-## Teardown
-
-```
-helm uninstall mongo-demo --namespace  $AZSHOP_NS
-helm uninstall ${APP_NAME} --namespace  $AZSHOP_NS
 ```
 
 
