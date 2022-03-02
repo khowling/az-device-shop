@@ -99,9 +99,9 @@ jobs:
           az-device-shop-web.env.B2C_CLIENT_SECRET:${{ env.B2C_CLIENT_SECRET }}
           az-device-shop-web.env.B2C_SIGNIN_POLICY:${{ env.B2C_SIGNIN_POLICY }}
           az-device-shop-web.env.B2C_CLIENT_ID:${{ env.B2C_CLIENT_ID }}
-          az-device-shop-web.image.tab:${{ github.run_number }}
-          az-device-shop-ordering.image.tab:${{ github.run_number }}
-          az-device-shop-factory.image.tab:${{ github.run_number }}
+          az-device-shop-web.image.tag:${{ github.run_number }}
+          az-device-shop-ordering.image.tag:${{ github.run_number }}
+          az-device-shop-factory.image.tag:${{ github.run_number }}
         helm-version: 'latest' 
       id: bake
 
