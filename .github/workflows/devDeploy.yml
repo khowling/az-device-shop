@@ -9,7 +9,7 @@ on:
 
   push:
 ## Post-PR approval, Deploy Helper to production
-    branches: [main]
+    branches: [master]
 
 env:
   APP_NAME: "device-dev"
@@ -27,7 +27,7 @@ jobs:
       name: "kh-emp-dev"
       url: https://${{ env.APP_NAME }}.${{ env.APP_DOMAIN }}
     steps:
-    - uses: actions/checkout@main
+    - uses: actions/checkout@v2
     
     - name: Azure Login
       uses: azure/login@v1
