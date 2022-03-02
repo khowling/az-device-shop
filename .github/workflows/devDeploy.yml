@@ -6,6 +6,11 @@ on:
         description: 'Build Container (true/false)'     
         required: true
         default: 'true'
+
+  push:
+## Post-PR approval, Deploy Helper to production
+    branches: [main]
+
 env:
   APP_NAME: "device-dev"
   BUILD_ENV: true
@@ -60,7 +65,7 @@ jobs:
         echo "MONGO_DB = ${{ env.MONGO_DB }}"
  
     - name: 3.build_app
-      if: github.event.inputs.buildContainer == 'true'
+#      if: github.event.inputs.buildContainer == 'true'
       run: |
         az acr build -r ${{ env.ACRNAME }} -t az-device-shop/web:0.1.0  -f ./web/Dockerfile .
         az acr build -r ${{ env.ACRNAME }} -t az-device-shop/factory:0.1.0  -f ./factory/Dockerfile .
