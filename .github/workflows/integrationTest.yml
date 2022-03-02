@@ -1,11 +1,10 @@
 name: Full End-2-End integration test
 on:
   workflow_dispatch:
-    inputs:
-      mongoVersion:
-        description: 'Mongo Version'     
-        required: true
-        default: '4.0'
+
+  pull_request:
+    branches: [master]
+
 env:
   AZURITE_ACCOUNT: "devstoreaccount1"
   AZURITE_MASTER_KEY: "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
@@ -20,7 +19,7 @@ jobs:
     - name: Start MongoDB
       uses: supercharge/mongodb-github-action@1.7.0
       with:
-        mongodb-version: ${{ github.event.inputs.mongoVersion }}
+        mongodb-version: '4.0'
         mongodb-replica-set: rs0
     
     - name: Microservices build
