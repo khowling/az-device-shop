@@ -42,17 +42,17 @@ Start:
 
 If using Docker:
 
-    ```
-    docker volume create --name=mongodata
-    # a Replica Set single instance
-    docker run --restart always --name mongo_dev -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0
-    ```
+```
+docker volume create --name=mongodata
+# a Replica Set single instance
+docker run --restart always --name mongo_dev -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0
+```
 else
 
-    ```
-    mkdir __mongo_data__
-    nohup mongod --replSet rs0  --dbpath ./__mongo_data__/ &
-    ```
+```
+mkdir __mongo_data__
+nohup mongod --replSet rs0  --dbpath ./__mongo_data__/ &
+```
 
 NOTE: First time only, run to setup the replicaset:
 ```
@@ -187,6 +187,11 @@ NOTE: if developing locally, place values in local .env file
 
 
 ## Design Rationals
+
+### Mono-repo
+
+This project is a tracked in a `mono-repo`, it uses vscode [multi-workspace](https://code.visualstudio.com/docs/editor/multi-root-workspacese) to organise the project into services using sub-folders.  When opening the project in vscode, ensure you use the `workspace.code-workspace` file
+
 
 ### Serivces Coupling
 

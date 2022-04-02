@@ -1,7 +1,11 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"name": "Other",
+			"path": "./"
+		},
+		{
+			"path": "workflows"
 		},
 		{
 			"path": "ordering"

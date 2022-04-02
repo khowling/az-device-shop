@@ -53,7 +53,9 @@
   },
   "dependencies": {
     "bson": "^4.6.0",
+    "level": "^7.0.1",
     "mongodb": "^4.3.0",
+    "subleveldown": "^6.0.1",
     "ws": "^8.4.0"
   },
   "main": "index.js"
