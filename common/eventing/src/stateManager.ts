@@ -3,7 +3,8 @@ import mongodb  from 'mongodb'
 const { Timestamp } = mongodb
 
 
-import { StateStore, StateUpdates, StateUpdateControl, JSStateStore } from './stateStore.js'
+import { StateStore, StateUpdates, UpdatesMethod, StateUpdateControl, JSStateStore } from './stateStore.js'
+export { StateUpdates, UpdatesMethod }
 
 export interface ReducerInfo {
     failed: boolean;

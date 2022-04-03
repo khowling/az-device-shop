@@ -3,9 +3,13 @@ set -e
 
 echo "Clean up.."
 rm -fr ./node_modules
-find -name node_modules -type d -exec rm -fr {} \;
+find . -name node_modules -type d -prune -exec rm -fr {} \;
+
+find . -name lib -type d -prune -exec rm -fr {} \;
+find . -name out -type d -prune -exec rm -fr {} \;
 
 echo "Install Dependencies.."
+# legacy-peer-deps required for @fluentui to work with react18 :(
 npm i --legacy-peer-deps
 
 echo "Build Eventing.."

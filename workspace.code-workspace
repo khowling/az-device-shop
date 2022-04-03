@@ -1,23 +1,24 @@
 {
 	"folders": [
 		{
-			"name": "Other",
-			"path": "./"
-		},
-		{
-			"path": "workflows"
-		},
-		{
-			"path": "ordering"
-		},
-		{
-			"path": "factory"
-		},
-		{
+			"name": "Common Eventing",
 			"path": "common/eventing"
 		},
 		{
+			"name": "Ordering",
+			"path": "ordering"
+		},
+		{
+			"name": "Factory",
+			"path": "factory"
+		},
+		{
+			"name": "Web",
 			"path": "web"
+		},
+		{
+			"name": "Root",
+			"path": "./"
 		}
 	],
 	"settings": {

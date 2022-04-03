@@ -17,8 +17,8 @@
       "import": "./lib/processorActions.js"
     },
     "./state": {
-      "types": "./lib/flux.d.ts",
-      "import": "./lib/flux.js"
+      "types": "./lib/stateManager.d.ts",
+      "import": "./lib/stateManager.js"
     },
     "./state-restore": {
       "types": "./lib/event_hydrate.d.ts",
