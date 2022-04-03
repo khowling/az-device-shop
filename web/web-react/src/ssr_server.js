@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { renderToPipeableStream } from 'react-dom';
+import { renderToPipeableStream } from 'react-dom/server';
 //const { renderToPipeableStream } = pkg;
 
 import { RenderContext, TenentContext } from './GlobalContexts.js'
