@@ -1,7 +1,8 @@
 import React from 'react'
 
-import { renderToPipeableStream } from 'react-dom/server';
-//const { renderToPipeableStream } = pkg;
+// https://reactjs.org/docs/react-dom-server.html
+import ReactDOMServer  from 'react-dom/server';
+
 
 import { RenderContext, TenentContext } from './GlobalContexts.js'
 import { App } from './App.js'
@@ -46,7 +47,38 @@ function createRenderData(ctx, renderContext, renderDataPromise) {
     }
 }
 
-// API change to "renderToPipeableStream" https://github.com/facebook/react/pull/22450
+export async function ssrRender_new(ctx, startURL, renderDataPromise) {
+
+    let controller = new AbortController();
+    try {
+      let stream = await renderToReadableStream(
+        <html>
+          <body>Success</body>
+        </html>,
+        {
+          signal: controller.signal,
+        }
+      );
+      
+      // This is to wait for all suspense boundaries to be ready. You can uncomment
+      // this line if you don't want to stream to the client
+      // await stream.allReady;
+    
+      return new Response(stream, {
+        headers: {'Content-Type': 'text/html'},
+      });
+    } catch (error) {
+      return new Response(
+        '<!doctype html><p>Loading...</p><script src="clientrender.js"></script>',
+        {
+          status: 500,
+          headers: {'Content-Type': 'text/html'},
+        }
+      );
+    }
+}
+
+
 export async function ssrRender(ctx, startURL, renderDataPromise) {
 
     const reqUrl = ctx.request.href
@@ -59,7 +91,10 @@ export async function ssrRender(ctx, startURL, renderDataPromise) {
 
         stylesheet.reset();
         resetIds();
-        const {pipe, abort} =  renderToPipeableStream(
+        // https://reactjs.org/docs/react-dom-server.html#rendertopipeablestream
+        // renderToPipeableStream is a Node.js specific API, modern server environments should use renderToReadableStream instead
+
+        const {pipe, abort} =  ReactDOMServer.renderToPipeableStream(
             <TenentContext.Provider value={ctx.tenent}>
                 <RenderContext.Provider value={createRenderData(ctx, { ssrContext: "server", reqUrl }, renderDataPromise)}>
                     <Html title="React18" hydrate_tenent={ctx.tenent} hydrate_data={{ ssrContext: "hydrate", reqUrl, ...(renderDataPromise && { serverInitialData: await renderDataPromise }) }} >
@@ -67,7 +102,7 @@ export async function ssrRender(ctx, startURL, renderDataPromise) {
                     </Html>
                 </RenderContext.Provider>
             </TenentContext.Provider>, {
-                onCompleteShell() {
+                onAllReady() {
                     // If something errored before we started streaming, we set the error code appropriately.
                     ctx.res.statusCode = didError ? 500 : 200
                     ctx.res.setHeader('Content-type', 'text/html')
@@ -78,7 +113,7 @@ export async function ssrRender(ctx, startURL, renderDataPromise) {
                     console.log(`ssr_server.ts: ssrRender startWriting`)
                     pipe(ctx.res);
                 },
-                onError(x) {
+                onShellError(x) {
                     didError = true;
                     console.error(x);
                 },
@@ -86,7 +121,8 @@ export async function ssrRender(ctx, startURL, renderDataPromise) {
                     console.log(`ssr_server.ts: ssrRender complete`)
                     resolve()
                 }
-            })
+            }
+        )
     })
 }
 
