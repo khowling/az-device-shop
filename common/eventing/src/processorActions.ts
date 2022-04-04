@@ -3,7 +3,7 @@
 
 import { EventStoreConnection } from './eventStoreConnection.js'
 import { Processor } from './processor.js'
-import { StateManagerInterface } from './flux.js'
+import { StateManagerInterface } from './stateManager.js'
 
 import { ObjectId } from 'bson'
 

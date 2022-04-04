@@ -17,8 +17,8 @@
       "import": "./lib/processorActions.js"
     },
     "./state": {
-      "types": "./lib/flux.d.ts",
-      "import": "./lib/flux.js"
+      "types": "./lib/stateManager.d.ts",
+      "import": "./lib/stateManager.js"
     },
     "./state-restore": {
       "types": "./lib/event_hydrate.d.ts",
@@ -49,11 +49,13 @@
   "description": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html",
   "devDependencies": {
     "@types/ws": "^8.2.0",
-    "typescript": "^4.6.0-dev.20220105"
+    "typescript": "^4.7.0-dev.20220404"
   },
   "dependencies": {
     "bson": "^4.6.0",
+    "level": "^7.0.1",
     "mongodb": "^4.3.0",
+    "subleveldown": "^6.0.1",
     "ws": "^8.4.0"
   },
   "main": "index.js"

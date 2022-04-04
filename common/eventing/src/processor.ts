@@ -14,7 +14,9 @@ export interface ProcessorOptions {
 }
 
 import { EventStoreConnection } from './eventStoreConnection.js'
-import { StateStore, StateManager, StateManagerInterface, UpdatesMethod, ReducerReturn, ReducerInfo, Reducer, StateUpdates } from './flux.js'
+import { StateManager, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer } from './stateManager.js'
+import { StateStore, StateUpdates, UpdatesMethod } from './stateStore.js'
+
 import { EventEmitter } from 'events'
 
 interface ProcessAction {

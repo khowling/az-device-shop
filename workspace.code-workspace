@@ -1,22 +1,28 @@
 {
 	"folders": [
 		{
-			"path": "."
-		},
-		{
-			"path": "ordering"
-		},
-		{
-			"path": "factory"
-		},
-		{
+			"name": "Common Eventing",
 			"path": "common/eventing"
 		},
 		{
+			"name": "Ordering",
+			"path": "ordering"
+		},
+		{
+			"name": "Factory",
+			"path": "factory"
+		},
+		{
+			"name": "Web",
 			"path": "web"
+		},
+		{
+			"name": "Root",
+			"path": "./"
 		}
 	],
 	"settings": {
-		"npm.packageManager": "npm"
+		"npm.packageManager": "npm",
+		"typescript.tsdk": "Common Eventing/node_modules/typescript/lib"
 	}
 }
