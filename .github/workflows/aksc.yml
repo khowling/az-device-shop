@@ -1,4 +1,4 @@
-name: Reusable workflow example
+name: Deploy AKS-Construction
 
 on:
   workflow_call:
@@ -15,9 +15,10 @@ env:
   dnsZoneId: /subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
 
 jobs:
-  example_job:
-    name: Pass input and secrets to my-action
+  aksc:
     runs-on: ubuntu-latest
+    steps:
+      
       # Log into Azure
     - uses: azure/login@v1
       with:
