@@ -1,0 +1,53 @@
+name: Reusable workflow example
+
+on:
+  workflow_call:
+    inputs:
+      username:
+        required: true
+        type: string
+    secrets:
+      token:
+        required: true
+
+env:
+  aks: kh-device-dev
+  dnsZoneId: /subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
+
+jobs:
+  example_job:
+    name: Pass input and secrets to my-action
+    runs-on: ubuntu-latest
+      # Log into Azure
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Set User ObjectId
+      run: |
+        echo "userObjectId=$(az ad signed-in-user show --query objectId --out tsv)" >> $GITHUB_ENV
+
+
+      # Deploy Bicep file
+    - name: AKS-Construction
+      uses: azure/arm-deploy@v1
+      with:
+        subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION }}
+        resourceGroupName: ${{ secrets.AZURE_RG }}
+        template: https://github.com/Azure/AKS-Construction/releases/download/0.6.2/main.json
+        parameters: 	resourceName=${{aks}} \
+                      agentCount=2 \
+                      JustUseSystemPool=true \
+                      custom_vnet=true \
+                      enable_aad=true \
+                      AksDisableLocalAccounts=true \
+                      enableAzureRBAC=true \
+                      adminprincipleid=${{ userObjectId }} \
+                      registries_sku=Standard \
+                      acrPushRolePrincipalId=${{ userObjectId }} \
+                      azurepolicy=audit \
+                      dnsZoneId=${{dnsZoneId}} \
+                      azureKeyvaultSecretsProvider=true \
+                      createKV=true \
+                      kvOfficerRolePrincipalId=${{ userObjectId }}
+        failOnStdErr: false
