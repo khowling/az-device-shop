@@ -49,7 +49,7 @@
   "description": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html",
   "devDependencies": {
     "@types/ws": "^8.2.0",
-    "typescript": "^4.6.0-dev.20220105"
+    "typescript": "^4.7.0-dev.20220404"
   },
   "dependencies": {
     "bson": "^4.6.0",

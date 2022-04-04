@@ -22,6 +22,7 @@
 		}
 	],
 	"settings": {
-		"npm.packageManager": "npm"
+		"npm.packageManager": "npm",
+		"typescript.tsdk": "Common Eventing/node_modules/typescript/lib"
 	}
 }
