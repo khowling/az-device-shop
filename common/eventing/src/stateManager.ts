@@ -68,8 +68,15 @@ export class StateManager extends EventEmitter implements StateManagerInterface 
         this._name = name
         this._connection = connection
 
+        // allReducers is array of all reducers returned objects <Reducer>
         const allReducers = [this.applyReducer()].concat(reducers as any)
-        this._stateStore = new JSStateStore(this._name, allReducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {}))
+
+        this._stateStore = new JSStateStore(
+            this._name, 
+            // construct the initstate of all reducers combined!
+            allReducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {})
+        )
+
         this._rootReducer = this.combineReducers(this._connection, allReducers)
         //console.log(`StateManager: ${JSON.stringify(this.state)}`)
     }

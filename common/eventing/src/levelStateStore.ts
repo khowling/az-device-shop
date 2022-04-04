@@ -10,9 +10,56 @@ class LevelStateStore implements StateStore {
     private _name
     private _state
 
+
     constructor(name, initstate) {
         this._name = name
         this._state = initstate
+
+
+        // LevelDB doesn't support structured values, or partially updating a value.
+            /* factory : initstate = 
+                {
+                    _control: {
+                    head_sequence: 0,
+                    lastupdated: null,
+                    },
+                    workItems: {
+                    items: [
+                    ],
+                    workitem_sequence: 0,
+                    },
+                    factory: {
+                    items: [
+                    ],
+                    capacity_allocated: 0,
+                    },
+                    inventory_complete: {
+                    inventry_sequence: 0,
+                    },
+                }
+            */
+           
+        const db = level(process.env.DBPATH || './mydb')
+
+        const cameradb = sub(db, 'cameras', {
+            valueEncoding : 'json',
+            keyEncoding: {
+                type: 'lexicographic-integer',
+                encode: (n) => lexint.pack(n, 'hex'),
+                decode: lexint.unpack,
+                buffer: false
+            }
+        })
+        
+        const movementdb = sub(db, 'movements', {
+            valueEncoding : 'json',
+            keyEncoding: {
+                type: 'lexicographic-integer',
+                encode: (n) => lexint.pack(n, 'hex'),
+                decode: lexint.unpack,
+                buffer: false
+            }
+        })
     }
 
     get name() {
