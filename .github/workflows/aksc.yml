@@ -17,6 +17,7 @@ on:
 
 env:
   aks: kh-device-dev
+  AZURE_RG: "kh-device-dev-rg"
   dnsZoneId: /subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
 
 jobs:
@@ -36,13 +37,16 @@ jobs:
       run: |
         echo "userObjectId=$(az ad signed-in-user show --query objectId --out tsv)" >> $GITHUB_ENV
 
+    - name: Create Resource Group
+      run: |
+        az group create -l WestEurope -n ${{ env.AZURE_RG }} 
 
       # Deploy Bicep file
     - name: AKS-Construction
       uses: azure/arm-deploy@v1
       with:
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION }}
-        resourceGroupName: ${{ secrets.AZURE_RG }}
+        resourceGroupName: ${{ env.AZURE_RG }}
         template: https://github.com/Azure/AKS-Construction/releases/download/0.6.2/main.json
         parameters: 	resourceName=${{ env.aks }} \
                       agentCount=2 \
