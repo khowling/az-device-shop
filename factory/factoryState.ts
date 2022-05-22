@@ -30,82 +30,76 @@ export enum WorkItemStage {
 
 
 
-import { StateManager, StateUpdates, UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer } from '@az-device-shop/eventing/state'
+import { StateManager, StateUpdates, StateStoreDefinition,  UpdatesMethod, ReducerReturnWithSlice, ReducerReturn, ReducerWithPassin, Reducer, StateStoreValueType } from '@az-device-shop/eventing/state'
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
 export { StateUpdates } from '@az-device-shop/eventing/state'
 
 // Mutate state in a Consistant, Safe, recorded mannore
-export interface WorkItemAction {
-    type: WorkItemActionType;
-    id?: string;
+export interface FactoryAction {
+    type: FactoryActionType;
+    _id?: number;
     spec?: any;
     status?: any;
 }
-export enum WorkItemActionType {
-    New = 'workItems/New',
-    StatusUpdate = 'workItems/StatusUpdate',
-    FactoryProcess = 'factory/Process',
-    CompleteInventry = 'workItems/InventoryAvailable',
-    INventoryNew = 'inventry/New',
-    TidyUp = 'tidyUp'
+export enum FactoryActionType {
+    New,
+    StatusUpdate,
+    FactoryProcess,
+    CompleteInventry,
+    INventoryNew,
+    TidyUp
 }
 
-interface WorkItemReducerState {
-    items: Array<WorkItemObject>;
-    workitem_sequence: number;
-}
-
-// This returns a 'Reducer' function that performs an 'action <WorkItemAction>' on the 'workItems <WorkItemReducerState>' 'slice' of the factory State
+// This returns a 'Reducer' function that performs an 'action <FactoryAction>' on the 'workItems <WorkItemReducerState>' 'slice' of the factory State
 // and returns an array of 'state updates <StateUpdate>' that can be applied to a current state view by another function
 // It also provides a 'initState' for the slice.
 // It is a 'ReducerWithPassin', as the function it allows an attitional parameter 'passInSlice', this contains another Reducer & State that that  
-function workItemsReducer(): ReducerWithPassin<WorkItemReducerState, WorkItemAction> {
+function workItemsReducer(): ReducerWithPassin<FactoryAction> {
 
     return {
         sliceKey: 'workItems',
         passInSlice: 'inventory_complete',
-        initState: { items: [], workitem_sequence: 0 } as WorkItemReducerState,
-        fn: async function (connection, state: WorkItemReducerState, action: WorkItemAction, passInSlice): Promise<ReducerReturnWithSlice> {
-            const { spec, id, status } = action
+        initState: {
+            "items" : {
+                type: StateStoreValueType.List
+            }
+        } as StateStoreDefinition,
+        fn: async function (/*connection,*/ state, action, passInSlice): Promise<ReducerReturnWithSlice> {
+            const { spec, _id, status } = action
             switch (action.type) {
-                case 'workItems/New':
+                case FactoryActionType.New:
                     const required_props = ['productId', 'qty', 'warehouse']
                     if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true)) {
-                        if (state.items.findIndex(w => w.id === id) < 0) {
-                            return [[{ failed: false }, [
-                                { method: UpdatesMethod.Inc, doc: { workitem_sequence: 1 } },
-                                { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: false, workItemId: 'WI' + String(state.workitem_sequence).padStart(5, '0'), stage: WorkItemStage.New } } }
-                            ]]]
-                        } else {
-                            return [[{ failed: true }, [
-                                { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: true, message: `Adding workItem with "id" that already exists id=${id}`, stage: WorkItemStage.New } } }
-                            ]]]
-                        }
+
+                        return [[{ failed: false }, [
+                            { method: UpdatesMethod.Add, path: 'items', doc: { spec: action.spec, status: { failed: false, /*workItemId: 'WI' + String(state.workitem_sequence).padStart(5, '0'),*/ stage: WorkItemStage.New } } }
+                        ]]]
+                        
                     } else {
                         return [[{ failed: true }, [
-                            { method: UpdatesMethod.Add, path: 'items', doc: { id, spec: action.spec, status: { failed: true, message: `Require properties missing. ${required_props.map(i => `"${i}"`).join(',')}`, stage: WorkItemStage.New } } }
+                            { method: UpdatesMethod.Add, path: 'items', doc: { spec: action.spec, status: { failed: true, message: `Require properties missing. ${required_props.map(i => `"${i}"`).join(',')}`, stage: WorkItemStage.New } } }
                         ]]]
                     }
-                case 'workItems/StatusUpdate':
+                case FactoryActionType.StatusUpdate:
                     return [[{ failed: false }, [
-                        { method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status } }
+                        { method: UpdatesMethod.Update, path: 'items', filter: { _id }, doc: { "$set": {status} } }
                     ]]]
-                case 'tidyUp':
+                case FactoryActionType.TidyUp:
                     return [[{ failed: false }, [
-                        { method: UpdatesMethod.Rm, path: 'items', filter: { id } }
+                        { method: UpdatesMethod.Rm, path: 'items', filter: { _id } }
                     ]]]
-                case 'workItems/InventoryAvailable':
+                case FactoryActionType.CompleteInventry:
 
-                    const wiidx = state.items.findIndex(w => w.id === id)
-                    if (wiidx >= 0) {
+                    const wi = state.getValue('workItems', 'items', _id)
+                    if (wi) {
                         const [inventoryState, inventoryReducer] = passInSlice
 
                         return [[{ failed: false }, [
-                            { method: UpdatesMethod.Merge, path: 'items', filter: { id }, doc: { status: { failed: false, stage: WorkItemStage.InventoryAvailable } } }
-                        ]], await inventoryReducer(connection, inventoryState, { type: 'inventry/New', id, spec })]
+                            { method: UpdatesMethod.Update, path: 'items', filter: { _id }, doc: { "$set": {status: { failed: false, stage: WorkItemStage.InventoryAvailable }} } }
+                        ]], await inventoryReducer(/*connection, */ inventoryState, { type: 'inventry/New', _id, spec })]
                     } else {
                         return [[{ failed: true }, [
-                            { method: UpdatesMethod.Add, path: 'items', doc: { id, status: { stage: WorkItemStage.InventoryAvailable, failed: true, message: `workItem missing in store id=${id}` } } }
+                            { method: UpdatesMethod.Add, path: 'items', doc: { _id, status: { stage: WorkItemStage.InventoryAvailable, failed: true, message: `workItem missing in store id=${_id}` } } }
                         ]]]
                     }
                 default:
@@ -134,20 +128,30 @@ interface FactoryReducerState {
     capacity_allocated: number;
 }
 
-function initFactoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryReducerState, WorkItemAction> {
+function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryAction> {
 
     return {
         sliceKey: 'factory',
         passInSlice: 'workItems',
-        initState: { items: [], capacity_allocated: 0 } as FactoryReducerState,
-        fn: async function (connection, state: FactoryReducerState, action: WorkItemAction, passInSlice): Promise<ReducerReturnWithSlice> {
+        initState: {
+            "items" : {
+                type: StateStoreValueType.List
+            },
+            "factoryStatus": {
+                type: StateStoreValueType.Hash,
+                values: {
+                    "capacity_allocated": 0
+                }
+            }
+        } as StateStoreDefinition,
+        fn: async function (/*connection, */state, action, passInSlice): Promise<ReducerReturnWithSlice> {
 
             switch (action.type) {
-                case 'tidyUp':
+                case FactoryActionType.TidyUp:
                     return [[{ failed: false }, [
-                        { method: UpdatesMethod.Rm, path: 'items', filter: { id: action.id } }
+                        { method: UpdatesMethod.Rm, path: 'items', filter: { _id: action._id } }
                     ]]]
-                case 'factory/Process':
+                case FactoryActionType.FactoryProcess:
 
                     const [workItemsState, workItemsReducer] = passInSlice
                     //console.log(`workItemsState=${JSON.stringify(workItemsState)}`)
@@ -158,17 +162,17 @@ function initFactoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, fa
                     let workitem_updates: Array<StateUpdates> = []
 
                     // check wi in factory_status status look for for completion to free up capacity
-                    for (let item of state.items.filter(o => o.stage === FactoryStage.Building)) {
+                    for (let item of state.getValue('factory', 'items').filter(o => o.stage === FactoryStage.Building)) {
                         // all wi in Picking status
                         //const { id, status } = ord
                         const timeleft = (timeToProcess /* * qty */) - (now - item.starttime)
 
                         if (timeleft > 0) { // not finished, just update progress
-                            factory_updates.push({ method: UpdatesMethod.Merge, path: 'items', filter: { id: item.id }, doc: { progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) } })
+                            factory_updates.push({ method: UpdatesMethod.Update, path: 'items', filter: { _id: item.id }, doc: { "$set": {progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) }} })
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - item.allocated_capacity
-                            factory_updates.push({ method: UpdatesMethod.Merge, path: 'items', filter: { id: item.id }, doc: { stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } })
-                            const [[{ failed }, complete_updates]] = await workItemsReducer(connection, workItemsState, { type: 'workItems/StatusUpdate', id: item.id, status: { stage: WorkItemStage.FactoryComplete } })
+                            factory_updates.push({ method: UpdatesMethod.Update, path: 'items', filter: { _id: item.id }, doc: { "$set": {stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } }})
+                            const [[{ failed }, complete_updates]] = await workItemsReducer(/*connection,*/ state, { type: FactoryActionType.StatusUpdate, id: item.id, status: { stage: WorkItemStage.FactoryComplete } })
                             workitem_updates = workitem_updates.concat(complete_updates)
                         }
                         //statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
@@ -177,11 +181,12 @@ function initFactoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, fa
                     const required_capacity = 1
 
                     // new WorkItems that are ready for the Factory
-                    for (let wi of workItemsState.items.filter(i => i.status.stage === WorkItemStage.FactoryReady)) {
-                        const [[{ failed }, accept_updates]] = await workItemsReducer(connection, workItemsState, { type: 'workItems/StatusUpdate', id: wi.id, status: { stage: WorkItemStage.FactoryAccepted } })
+                    const {capacity_allocated} = state.getValue("factory", "factoryStatus")
+                    for (let wi of state.getValue('workItems', 'items').filter(i => i.status.stage === WorkItemStage.FactoryReady)) {
+                        const [[{ failed }, accept_updates]] = await workItemsReducer(/*connection, */ state, { type: FactoryActionType.StatusUpdate, id: wi.id, status: { stage: WorkItemStage.FactoryAccepted } })
                         workitem_updates = workitem_updates.concat(accept_updates)
 
-                        if ((factoryCapacity - (state.capacity_allocated + capacity_allocated_update)) >= required_capacity) {
+                        if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
                             // we have capacity, move to inprogress
                             factory_updates.push({ method: UpdatesMethod.Add, path: 'items', doc: { id: wi.id, stage: FactoryStage.Building, acceptedtime: now, starttime: now, allocated_capacity: required_capacity, progress: 0, waittime: 0 } })
                             capacity_allocated_update = capacity_allocated_update + required_capacity
@@ -192,20 +197,20 @@ function initFactoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, fa
                     }
 
                     // check wi in "waiting" status
-                    for (let item of state.items.filter(o => o.stage === FactoryStage.Waiting)) {
-                        if ((factoryCapacity - (state.capacity_allocated + capacity_allocated_update)) >= required_capacity) {
+                    for (let item of state.getValue('factory', 'items').filter(o => o.stage === FactoryStage.Waiting)) {
+                        if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
                             // we have capacity, move to inprogress
-                            factory_updates.push({ method: UpdatesMethod.Merge, path: 'items', filter: { id: item.id }, doc: { stage: FactoryStage.Building, allocated_capacity: required_capacity, progress: 0, waittime: now - item.acceptedtime } })
+                            factory_updates.push({ method: UpdatesMethod.Update, path: 'items', filter: { _id: item.id }, doc: { "$set": {stage: FactoryStage.Building, allocated_capacity: required_capacity, progress: 0, waittime: now - item.acceptedtime } }})
                             capacity_allocated_update = capacity_allocated_update + required_capacity
                         } else {
                             // still need to wait
-                            factory_updates.push({ method: UpdatesMethod.Merge, path: 'items', filter: { id: item.id }, doc: { waittime: now - item.acceptedtime } })
+                            factory_updates.push({ method: UpdatesMethod.Update, path: 'items', filter: { _id: item.id }, doc: { "$set": { waittime: now - item.acceptedtime }} })
                         }
                         //statechanges.push({ kind, metadata: { id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
                     }
 
                     if (capacity_allocated_update !== 0) {
-                        factory_updates.push({ method: UpdatesMethod.Inc, doc: { capacity_allocated: capacity_allocated_update } })
+                        factory_updates.push({ method: UpdatesMethod.Update, path: 'factoryStatus',  doc: {  "$set": {capacity_allocated: capacity_allocated_update }} })
                     }
 
                     return [factory_updates.length > 0 ? [{ failed: false }, factory_updates] : null, workitem_updates.length > 0 ? [{ failed: false }, workitem_updates] : null] as ReducerReturnWithSlice
@@ -233,30 +238,37 @@ interface InventoryReducerState {
     inventry_sequence: number;
 }
 
-function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
+function inventryReducer(): Reducer<FactoryAction> {
 
     return {
         sliceKey: 'inventory_complete',
-        initState: { /*items: [], */ inventry_sequence: 0 } as InventoryReducerState,
-        fn: async function (connection, state: InventoryReducerState, action: WorkItemAction): Promise<ReducerReturn> {
+        initState: { 
+            "inventry_sequence": {
+                type: StateStoreValueType.Counter,
+            }
+        },
+        fn: async function (/*connection,*/ state, action) {
 
-            const { spec, id, type } = action
+            const { spec, _id, type } = action
             switch (type) {
-                case 'inventry/New':
+                case FactoryActionType.INventoryNew:
+                    /*
                     const result = await connection.db.collection("inventory_complete").insertOne({
                         sequence: state.inventry_sequence + 1,
                         partition_key: connection.tenentKey,
                         inventoryId: 'INV' + String(state.inventry_sequence).padStart(5, '0'),
                         spec
                     })
-                    if (result && result.insertedId) {
-                        return [{ failed: false }, [
-                            { method: UpdatesMethod.Inc, doc: { inventry_sequence: 1 } }
-                            //{ method: UpdatesMethod.Add, path: 'items', doc: { ...spec, id: 'INV' + String(state.inventry_sequence).padStart(5, '0'), inventry_sequence: state.inventry_sequence } }
-                        ]]
-                    } else {
-                        return [{ failed: true }, null]
-                    }
+                    */
+
+                    //if (result && result.insertedId) {
+                    return [{ failed: false }, [
+                        { method: UpdatesMethod.Inc, path: 'inventry_sequence' }
+                        //{ method: UpdatesMethod.Add, path: 'items', doc: { ...spec, id: 'INV' + String(state.inventry_sequence).padStart(5, '0'), inventry_sequence: state.inventry_sequence } }
+                    ]]
+                    //} else {
+                    //    return [{ failed: true }, null]
+                    //}
                 default:
                     // action not for this reducer, so no updates
                     return null
@@ -265,12 +277,12 @@ function inventryReducer(): Reducer<InventoryReducerState, WorkItemAction> {
     }
 }
 
-export class FactoryStateManager extends StateManager {
+export class FactoryStateManager extends StateManager<FactoryAction> {
 
     constructor(name: string, connection: EventStoreConnection) {
         super(name, connection, [
             workItemsReducer(),
-            initFactoryReducer(),
+            factoryReducer(),
             inventryReducer()
         ])
     }

@@ -1,11 +1,11 @@
 import mongodb from 'mongodb';
 const { ObjectId } = mongodb;
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
-import { WorkItemActionType, WorkItemAction, FactoryStateManager, WorkItemStage } from './factoryState.js'
+import { FactoryActionType, FactoryAction, FactoryStateManager, WorkItemStage, WorkItemObject } from './factoryState.js'
 
 export enum OperationLabel { NEWINV = "NEWINV" }
 
-async function validateRequest({ esConnection, trigger, flow_id }, next: (action: WorkItemAction, options: ProcessorOptions, event_label?: string) => any) {
+async function validateRequest({ esConnection, trigger }, next: (action: FactoryAction, options: ProcessorOptions, event_label?: string) => any) {
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
@@ -14,30 +14,39 @@ async function validateRequest({ esConnection, trigger, flow_id }, next: (action
         spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
     }
 
-    await next({ type: WorkItemActionType.New, id: flow_id, spec }, { update_ctx: { spec } } as ProcessorOptions)
+    return await next({ type: FactoryActionType.New, spec }, { update_ctx: { spec } } as ProcessorOptions)
 }
 
-async function inFactory({ flow_id, spec }, next) {
-    await next({ type: WorkItemActionType.StatusUpdate, id: flow_id, spec, status: { stage: WorkItemStage.FactoryReady } }, { sleep_until: { id: flow_id, stage: WorkItemStage.FactoryComplete } } as ProcessorOptions)
+async function sendToFactory(ctx, next) {
+    const added  = ctx.lastLinkedRes.workItems.added as WorkItemObject
+    return await next(
+        { type: FactoryActionType.StatusUpdate, id: added.id, status: { stage: WorkItemStage.FactoryReady } }, { update_ctx: { wi_id: added.id } } as ProcessorOptions
+    )
 }
 
-async function moveToWarehouse({ flow_id, spec }, next) {
-    await next({ type: WorkItemActionType.StatusUpdate, id: flow_id, spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } } as ProcessorOptions)
+async function waitforFactoryComplete(ctx, next) {
+    const currentVal : WorkItemObject = ctx.linkedStateManager.getValue('workItems', 'items', ctx.wi_id)
+    return await next(null, 
+        { retry_until: { isTrue: currentVal.status.stage === WorkItemStage.FactoryComplete, interval: 1} } as ProcessorOptions
+    )
+}
+
+async function moveToWarehouse(ctx, next) {
+    return await next({ type: FactoryActionType.StatusUpdate, id: ctx.wi_id, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: Date.now() + 1000 * 5 /* 5 secs */  } as ProcessorOptions)
 }
 
 
-async function publishInventory({ flow_id, spec }, next) {
-    await next({ type: WorkItemActionType.CompleteInventry, id: flow_id, spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } }, OperationLabel.NEWINV)
+async function publishInventory(ctx, next) {
+    return await next({ type: FactoryActionType.CompleteInventry, id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } }, OperationLabel.NEWINV)
 }
 
-async function tidyUp({ flow_id, spec }, next) {
-    await next({ type: WorkItemActionType.TidyUp, id: flow_id })
+async function tidyUp(ctx, next) {
+    return await next({ type: FactoryActionType.TidyUp, id: ctx.wi_id })
 }
 
 // ---------------------------------------------------------------------------------------
 import {ApplicationState, default as ServiceWebServer}  from '@az-device-shop/eventing/webserver'
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { startCheckpointing, restoreState } from '@az-device-shop/eventing/state-restore'
 import { watchProcessorTriggerWithTimeStamp } from '@az-device-shop/eventing/processor-actions'
 
 async function factoryStartup(cs: EventStoreConnection, appState: ApplicationState) {
@@ -46,49 +55,35 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     const factoryState = new FactoryStateManager('emeafactory_v0', cs)
 
     appState.log(`factoryStartup (2):  create factory processor "factoryProcessor" & add workflow tasks`)
-    const factoryProcessor = new Processor('emeaprocessor_v001', cs, { statePlugin: factoryState })
+    const factoryProcessor = new Processor('emeaprocessor_v001', cs, { linkedStateManager: factoryState })
     // add esConnection to ctx, to allow middleware access, (maybe not required!)
     factoryProcessor.context.esConnection = cs
     // add workflow actions
     factoryProcessor.use(validateRequest)
-    factoryProcessor.use(inFactory)
+    factoryProcessor.use(sendToFactory)
+    factoryProcessor.use(waitforFactoryComplete)
     factoryProcessor.use(moveToWarehouse)
     factoryProcessor.use(publishInventory)
     factoryProcessor.use(tidyUp)
 
-
+/*
     appState.log(`factoryStartup (3): Hydrate local stateStores "factoryState" & "factoryProcessor" from snapshots & event log`)
-    const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
-    const last_checkpoint = await restoreState(cs, chkdir, [
-        factoryState.stateStore,
-        factoryProcessor.stateStore
-    ])
-    appState.log(`factoryStartup (3): Complete Hydrate, restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
-
-
-
-    appState.log(`factoryStartup (4): Re-start active "factoryProcessor" workflows, #flows=${factoryProcessor.processorState.proc_map.length}`)
-    const prInterval = factoryProcessor.initProcessors(function ({ id, stage }) {
-        const widx = factoryState.stateStore.state.workItems.items.findIndex(o => o.id === id)
-        if (widx < 0) {
+    //const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
+    const last_checkpoint = await factoryProcessor.listen(function ({ id, stage }) {
+        const wi = factoryState.stateStore.getValue('workItems', id)
+        if (!wi) {
             throw new Error(`factoryStartup: Got a processor state without the state: id=${id}`)
         } else if (stage !== factoryState.stateStore.state.workItems.items[widx].status.stage) {
             return true
         }
         return false
     })
-
-    if (false) {
-        const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
-            factoryState.stateStore,
-            factoryProcessor.stateStore
-        ])
-    }
-
+    //appState.log(`factoryStartup (3): Complete Hydrate, restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
+*/
     appState.log(`factoryStartup (5): Starting Interval to run "FactoryProcess" control loop (5 seconds)`)
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
-        await factoryState.dispatch({ type: WorkItemActionType.FactoryProcess })
+        await factoryState.dispatch({ type: FactoryActionType.FactoryProcess })
     }, 5000)
 
     appState.log(`factoryStartup (6): Starting new "inventory_spec" watch"`)

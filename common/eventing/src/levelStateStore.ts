@@ -3,67 +3,108 @@ import assert from 'assert'
 import level from 'level'
 import sub from 'subleveldown'
 
-import { StateStore, StateUpdates, StateUpdateControl } from './stateStore.js'
+import { StateStore, StateUpdates, StateUpdateControl, ApplyReturnInfo } from './stateStore.js'
+import { StateStoreDefinition, StateStoreValueType } from './stateManager.js'
 
-class LevelStateStore implements StateStore {
+export class LevelStateStore implements StateStore {
 
     private _name
+    private _stateDefinition
     private _state
 
 
-    constructor(name, initstate) {
+    constructor(name: string, stateDefinition: { [sliceKey: string]: StateStoreDefinition}) {
         this._name = name
-        this._state = initstate
+        this._stateDefinition = stateDefinition
+
+        const db = this._state = level(process.env.DBPATH || `./${name}.levelss`)
 
 
         // LevelDB doesn't support structured values, or partially updating a value.
             /* factory : initstate = 
                 {
                     _control: {
-                    head_sequence: 0,
-                    lastupdated: null,
+                        head_sequence: 0,
+                        lastupdated: null,
                     },
+
                     workItems: {
-                    items: [
-                    ],
-                    workitem_sequence: 0,
+                        items: [
+                        ],
+                        workitem_sequence: 0,
                     },
+
                     factory: {
-                    items: [
-                    ],
-                    capacity_allocated: 0,
+                        items: [
+                        ],
+                        capacity_allocated: 0,
                     },
+
+
                     inventory_complete: {
-                    inventry_sequence: 0,
+                        inventry_sequence: 0,
                     },
                 }
+
+                translates to 
+                sublevel = _control
+                  key = head_sequence
+                  key = lastupdated
+
+                
+                key: workItems.next_sequence = =
+                sublevel: workitems key = 0 val: workitem
+
+                key: factory.capactiy_allocated = 0
+                
+                {
+                "_control":
+                    type: "Hash"
+                    values: {
+                        head_sequence: 0
+                        lastupdated: null
+                    }
+                }
+                "workItems": 
+                    type: "List"
+                 - values
+                  -  counter_name = sum("object.field", where)
+                  -  counter_name = count("object.field", where)
+                 - operations
+                  - append <oject> 
+                  - set <key> <object>
+                  - delete <key>
+                  
             */
            
-        const db = level(process.env.DBPATH || './mydb')
 
-        const cameradb = sub(db, 'cameras', {
-            valueEncoding : 'json',
-            keyEncoding: {
-                type: 'lexicographic-integer',
-                encode: (n) => lexint.pack(n, 'hex'),
-                decode: lexint.unpack,
-                buffer: false
+        for (let sliceKey of Object.keys(stateDefinition)) {
+            for (let key of Object.keys(stateDefinition[sliceKey])) {
+                const {type, values} = stateDefinition[sliceKey][key]
+                if (type === StateStoreValueType.Hash) {
+                    for (let hkey of Object.keys(values)) {
+                        db.put (`${sliceKey}:${key}!${hkey}`, values[hkey])
+                    }
+                } else if (type === StateStoreValueType.List) {
+                    db.put (`${sliceKey}:${key}:_next_sequence`, 0)
+                    if (values) for (let hkey of Object.keys(values)) {
+                        db.put (`${sliceKey}:${key}!${hkey}`, 0)
+                    }
+                }
             }
-        })
-        
-        const movementdb = sub(db, 'movements', {
-            valueEncoding : 'json',
-            keyEncoding: {
-                type: 'lexicographic-integer',
-                encode: (n) => lexint.pack(n, 'hex'),
-                decode: lexint.unpack,
-                buffer: false
-            }
-        })
+        }
     }
 
     get name() {
         return this._name
+    }
+
+    getValue(reducerKey: string, path: string, idx?: number) {
+
+    }
+
+    debugState(): void {
+        console.log ('tbc')
     }
 
     get state() {
@@ -96,7 +137,7 @@ class LevelStateStore implements StateStore {
         }
     }
 
-    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void {
+    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo {
 
         const state = this._state
         const _control: StateUpdateControl = statechanges._control as StateUpdateControl
@@ -146,7 +187,7 @@ class LevelStateStore implements StateStore {
                         assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
                         pathKeyState = LevelStateStore.imm_splice(pathKeyState, update_idx, null)
                         break
-                    case 'merge':
+                    case 'update':
                         if (update.filter) { // array
                             assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
                             const
@@ -183,6 +224,6 @@ class LevelStateStore implements StateStore {
             newstate[stateKey] = reducerKeyState
         }
         this._state = { ...this._state, ...newstate }
-        //console.log(`apply: ${JSON.stringify(this._state)}`)
+        return {}
     }
 }

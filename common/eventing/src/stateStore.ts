@@ -1,4 +1,6 @@
 import assert from 'assert'
+import { StateStoreDefinition, StateStoreValueType } from './stateManager.js'
+
 
 export interface StateUpdateControl {
     head_sequence: number;
@@ -7,48 +9,97 @@ export interface StateUpdateControl {
 
 export interface StateStore {
     name: string;
-    state: any;
+    getValue(reducerKey: string, path: string, idx?: number): any;
+    debugState(): void;
     serializeState(): any;
     deserializeState(newstate: any): void
-    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
+    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo
 }
 
 
 export interface StateUpdates {
     method: UpdatesMethod;
-    path?: string; // state path to process (optional)
-    filter?: any; // fiilter object
+    path: string; // state path to process (optional)
+    filter?: {
+        _id: number
+    }; // fiilter object
     doc?: any;
 }
 export enum UpdatesMethod {
     Inc = 'inc',
+    Set = 'set',
     Rm = 'rm',
     Add = 'add',
-    Merge = 'merge',
-    Set = 'set'
+    Update = 'update',
+}
+
+export interface ApplyReturnInfo {
+    [reducerKey: string]: {}
 }
 
 export class JSStateStore implements StateStore {
 
-    private _name
+    private _name: string
+    private _stateDefinition: { [sliceKey: string]: StateStoreDefinition}
+
     private _state
 
-    constructor(name, initstate) {
+    constructor(name: string, stateDefinition: { [sliceKey: string]: StateStoreDefinition}) {
         this._name = name
-        this._state = initstate
+        this._stateDefinition = stateDefinition
+
+        let state = {}
+
+
+        for (let sliceKey of Object.keys(stateDefinition)) {
+            for (let key of Object.keys(stateDefinition[sliceKey])) {
+                const {type, values} = stateDefinition[sliceKey][key]
+                if (type === StateStoreValueType.Hash) {
+                    state = {...state, [`${sliceKey}:${key}`]: values}
+
+                } else if (type == StateStoreValueType.Counter) {
+                    state = {...state, [`${sliceKey}:${key}`]: 0}
+
+                }else if (type === StateStoreValueType.List) {
+                    state = {...state, [`${sliceKey}:${key}:_all_keys`]: []}
+                    state = {...state, [`${sliceKey}:${key}:_next_sequence`]: 0}
+                }
+            }
+        }
+
+        console.log (`JSStateStore: name=${name}, state=${JSON.stringify(state)}`)
+        this._state = state
     }
 
     get name() {
         return this._name
     }
 
-    get state() {
+    private get state() {
         return this._state
     }
 
-    set state(newstate) {
+    private set state(newstate) {
         this._state = newstate
     }
+
+    debugState() {
+        console.log(`debugState name=${this.name}: ${JSON.stringify(this.state, null, 2)}`)
+    }
+
+    getValue(reducerKey: string, path: string, idx?: number) {
+        if (this._stateDefinition[reducerKey][path].type == StateStoreValueType.List) {
+            if (isNaN(idx)) {
+                // return all values in array
+                return this.state[`${reducerKey}:${path}:_all_keys`].map(key => this.state[`${reducerKey}:${path}:${key}`])
+            } else {
+                return this.state[`${reducerKey}:${path}:${idx}`]
+            }
+        } else {
+            return this.state[`${reducerKey}:${path}`]
+        }
+    }
+
 
     get serializeState() {
         return { ...this._state }
@@ -72,30 +123,38 @@ export class JSStateStore implements StateStore {
         }
     }
 
-    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void {
+    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo {
 
         const state = this._state
         const _control: StateUpdateControl = statechanges._control as StateUpdateControl
 
+        let returnInfo = {}
+        //assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
+        let newstate = {} // { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
 
-        assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
-        let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
+        //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
-        console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
-
-        for (let stateKey of Object.keys(statechanges)) {
-            if (stateKey === '_control') continue
+        for (let reducerKey of Object.keys(statechanges)) {
+            returnInfo = {...returnInfo, [reducerKey]: {} }
+            if (reducerKey === '_control') continue
             // get the relevent section of the state
-            const stateKeyChanges: Array<StateUpdates> = statechanges[stateKey] as Array<StateUpdates>
-            let reducerKeyState = this._state[stateKey]
+            const stateKeyChanges: Array<StateUpdates> = statechanges[reducerKey] as Array<StateUpdates>
+            //let reducerKeyState = this._state[reducerKey]
 
-            for (let i = 0; i < stateKeyChanges.length; i++) {
-                const update: StateUpdates = stateKeyChanges[i]
-                let pathKeyState = update.path ? reducerKeyState[update.path] : reducerKeyState
+            for (let update of stateKeyChanges) {
+                assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
+                const valueType = this._stateDefinition[reducerKey][update.path].type
 
                 switch (update.method) {
-                    case 'inc':
-                    case 'set':
+                    case UpdatesMethod.Set:
+                        assert (valueType === StateStoreValueType.Hash || (valueType === StateStoreValueType.List && update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
+                        if (valueType === StateStoreValueType.List) {
+                            newstate[`${reducerKey}:${update.path}:${update.filter._id}`] = update.doc
+                        } else {
+                            newstate[`${reducerKey}:${update.path}`] = update.doc
+                        }
+                        
+                        /*
                         if (update.filter) { // array
                             assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
                             const
@@ -107,12 +166,28 @@ export class JSStateStore implements StateStore {
                         } else { // object
                             pathKeyState = JSStateStore.apply_incset(update as any, pathKeyState)
                         }
+                        */
+
                         break
-                    case 'add':
-                        assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
-                        pathKeyState = [...pathKeyState, update.doc]
+                    case UpdatesMethod.Add:
+                        
+                        assert (valueType === StateStoreValueType.List, `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
+                        //assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
+                        //pathKeyState = [...pathKeyState, update.doc]
+                        const next_seq = this._state[`${reducerKey}:${update.path}:_next_sequence`]
+                        const all_keys = this._state[`${reducerKey}:${update.path}:_all_keys`]
+
+                        const added = {_id: next_seq, ...update.doc}
+                        newstate[`${reducerKey}:${update.path}:${next_seq}`] = added
+                        newstate[`${reducerKey}:${update.path}:_all_keys`] = all_keys.concat(next_seq)
+
+                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], added }}
+
+                        newstate[`${reducerKey}:${update.path}:_next_sequence`] = next_seq + 1
+
                         break
-                    case 'rm':
+                    case UpdatesMethod.Rm:
+                        /*
                         assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Rm" to non-Array on "${stateKey}"`)
                         assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
                         const
@@ -121,33 +196,53 @@ export class JSStateStore implements StateStore {
                             update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
                         assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
                         pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, null)
+                        */
                         break
-                    case 'merge':
-                        if (update.filter) { // array
-                            assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                            const
-                                filter_key = Object.keys(update.filter)[0],
-                                filter_val = update.filter[filter_key],
-                                update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
+                    case UpdatesMethod.Update:
+                        assert (valueType === StateStoreValueType.List && !isNaN(update.filter._id), `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter': "${reducerKey}.${update.path}"`)
+                        assert (Object.keys(update.doc).reduce((a: number,i: string) => {
+                                return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
+                            }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
 
-                            assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                            const new_doc_updates = Object.keys(update.doc).map(k => {
-                                return {
-                                    [k]:
-                                        update.doc[k] && Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && pathKeyState[update_idx][k] && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ?
-                                            { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k]
-                                }
-                            }).reduce((a, i) => { return { ...a, ...i } }, {})
-                            const new_doc = { ...pathKeyState[update_idx], ...new_doc_updates }
-                            pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, new_doc)
-                        } else {
-                            assert(false, 'applyToLocalState, "UpdatesMethod.Update" requires a filter (its a array operator)')
-                        }
+                        const existing_doc = this._state[`${reducerKey}:${update.path}:${update.filter._id}`]
+
+                        assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (filter _id=${update.filter._id})`)
+                        
+                        // For each key in update doc, create new key, and set value
+                            // if value is !null & its a Object -- If existing doc has the key, and its a Object, MERGE the 2 objects, Otherwise, just use the update doc value
+
+                        const merge_keys = update.doc['$merge']
+                        const new_merge_updates = merge_keys ? Object.keys(merge_keys).filter(f => f !== '_id').map(k => {
+                            return {
+                                [k]:
+                                    merge_keys[k] && Object.getPrototypeOf(merge_keys[k]).isPrototypeOf(Object) && existing_doc[k] && Object.getPrototypeOf(existing_doc[k]).isPrototypeOf(Object) ?
+                                            { ...existing_doc[k], ...merge_keys[k] } 
+                                        : 
+                                            merge_keys[k]
+                            }
+                        }).reduce((a, i) => { return { ...a, ...i } }, {}) : {}
+
+                        // Add the rest of the existing doc to the new doc
+                        const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
+
+                        //pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, new_doc)
+                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], merged }}
+                        newstate[`${reducerKey}:${update.path}:${update.filter._id}`] = merged
+
+                        
                         break
+                    case UpdatesMethod.Inc:
+                        assert (valueType === StateStoreValueType.Counter, `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
+                        
+                        const inc = this._state[`${reducerKey}:${update.path}`]++
+
+                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], inc }}
+                        newstate[`${reducerKey}:${update.path}`] = inc
+
                     default:
                         assert(false, `applyToLocalState: Cannot apply update seq=${_control.head_sequence}, unknown method=${update.method}`)
                 }
-
+/*
                 if (update.path) {
                     // if path, the keystate must be a object
                     reducerKeyState = { ...reducerKeyState, [update.path]: pathKeyState }
@@ -155,10 +250,14 @@ export class JSStateStore implements StateStore {
                     // keystate could be a object or value or array
                     reducerKeyState = pathKeyState
                 }
+*/
             }
+/*
             newstate[stateKey] = reducerKeyState
+*/
         }
+        // swap into live
         this._state = { ...this._state, ...newstate }
-        //console.log(`apply: ${JSON.stringify(this._state)}`)
+        return returnInfo
     }
 }

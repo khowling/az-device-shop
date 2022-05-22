@@ -4,10 +4,10 @@ import fs from 'fs'
 import { StateStore } from './stateStore.js'
 import { EventStoreConnection } from './eventStoreConnection.js'
 
-export async function restoreState(sc: EventStoreConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
+/*export async function restoreState(sc: EventStoreConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
 
     const last_checkpoint = enableCheckpointing ? await restoreLatestSnapshot(sc, chkdir, stateStores) : 0
-    sc.sequence = await rollForwardState(sc, last_checkpoint, stateStores)
+    sc.sequence = await sc.rollForwardState(stateStores)
     return last_checkpoint
 }
 
@@ -27,33 +27,7 @@ export function startCheckpointing(cs: EventStoreConnection, chkdir: string, chk
     }, 1000 * 60 * loopMins, cs, chkdir)
 }
 
-async function rollForwardState(cs: EventStoreConnection, from_sequence: number, stateStores: StateStore[]): Promise<number> {
 
-    let processed_seq = from_sequence
-    console.log(`rollForwardState: reading "${cs.collection}" from database from_sequence#=${from_sequence}`)
-
-    const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
-
-    await cs.db.collection(cs.collection).createIndex({ sequence: 1 })
-    const cursor = await cs.db.collection(cs.collection).aggregate([
-        { $match: { $and: [{ "partition_key": cs.tenentKey }, { sequence: { $gte: from_sequence } }] } },
-        { $sort: { "sequence": 1 /* assending */ } }
-    ])
-
-    while (await cursor.hasNext()) {
-        const { _id, partition_key, sequence, ...changedata } = await cursor.next()
-
-        for (let key of Object.keys(changedata)) {
-
-            if (stateStoreByName.hasOwnProperty(key)) {
-                stateStoreByName[key].apply(changedata[key])
-            }
-        }
-        processed_seq = sequence
-    }
-    return processed_seq
-
-}
 
 
 async function restoreLatestSnapshot(cs: EventStoreConnection, chkdir: string, stateStores: StateStore[]): Promise<number> {
@@ -96,6 +70,7 @@ async function restoreLatestSnapshot(cs: EventStoreConnection, chkdir: string, s
     }
 }
 
+
 export async function snapshotState(cs: EventStoreConnection, chkdir: string, stateStores: StateStore[]): Promise<any> {
     const now = new Date()
     let release = await cs.mutex.aquire()
@@ -110,7 +85,7 @@ export async function snapshotState(cs: EventStoreConnection, chkdir: string, st
     release()
     //return this.state.sequence
 }
-
+*/
 
 /* ////////////////////////////////////////////////////// AZURE STORAGE  //////////////
 import {

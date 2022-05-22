@@ -6,7 +6,7 @@ import { Processor } from './processor.js'
 import { StateManagerInterface } from './stateManager.js'
 
 import { ObjectId } from 'bson'
-
+/*
 // inventory_spec & order_spec, nether have 'sequence' fields, so order by '_ts' Timestamp
 // TODO : need 'update' operation, to detect orders that change to status : 30 :(
 export async function watchProcessorTriggerWithTimeStamp(cs: EventStoreConnection, watchCollection: string, processor: Processor, filter: any) {
@@ -40,7 +40,7 @@ export async function watchProcessorTriggerWithTimeStamp(cs: EventStoreConnectio
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
 
-        await processor.initiateWorkflow({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /*startAfter*/ resumeAfter: change._id } })
+        await processor.initiateWorkflow({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { / * startAfter * / resumeAfter: change._id } })
     })
 
 }
@@ -72,7 +72,7 @@ export async function watchDispatchWithSequence(cs: EventStoreConnection, stateM
     ).on('change', async change => {
         const { sequence } = change.fullDocument
         console.log(`watchDispatchWithSequence collection="${collection}": change _id=${JSON.stringify(change._id)} (sequence=${sequence})`)
-        await stateManager.dispatch({ type: actiontype, id: change.fullDocument[docIdPath], spec: change.fullDocument[specPath], trigger: { sequence, continuation: { /*startAfter*/ resumeAfter: change._id } } })
+        await stateManager.dispatch({ type: actiontype, id: change.fullDocument[docIdPath], spec: change.fullDocument[specPath], trigger: { sequence, continuation: { / * startAfter * / resumeAfter: change._id } } })
     })
 
 }
@@ -96,7 +96,7 @@ async function readCollectionfromSequence(cs: EventStoreConnection, collection: 
 
     const gotRecords = await cursor.hasNext()
     while (gotRecords) {
-        const doc /*{ _id, partition_key, sequence, ...spec }*/ = await cursor.next()
+        const doc / *{ _id, partition_key, sequence, ...spec }* / = await cursor.next()
         const isLast = !await cursor.hasNext()
         callback(doc, isLast)
         //await stateManager.dispatch({ type: actiontype, id: _id.toHexString(), spec, trigger: { sequence, ...(isLast && { continuation }) } })
@@ -105,3 +105,4 @@ async function readCollectionfromSequence(cs: EventStoreConnection, collection: 
         }
     }
 }
+*/
