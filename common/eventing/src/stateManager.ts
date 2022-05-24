@@ -13,15 +13,17 @@ export interface ReducerInfo {
     message?: string;
 }
 
-export type ReducerReturnWithSlice = [ReducerInfo, Array<StateUpdates>][];
 export type ReducerReturn = [ReducerInfo, Array<StateUpdates>];
+export type ReducerReturnWithSlice = [ReducerInfo, Array<StateUpdates>][];
 
+export type ReducerFunction<A> = (state: StateStore, action: A) => Promise<ReducerReturn>;
+export type ReducerFunctionWithSlide<A> = (state: StateStore, action: A, passInSlice?: (state: StateStore, action?: A) => Promise<ReducerReturn> | Promise<ReducerReturnWithSlice>) => Promise<ReducerReturnWithSlice>;
 
 // Interface for a Reducer, operating on the state sliceKey, defining an initial state
 export interface Reducer<A> {
     sliceKey: string;
     initState: StateStoreDefinition;
-    fn: (/*connection: any,*/ state: StateStore, action?: A) => Promise<ReducerReturn>
+    fn: ReducerFunction<A>
 }
 
 // Interface for a Reducer, that has a Passin Slice
@@ -30,7 +32,7 @@ export interface ReducerWithPassin<A> {
     sliceKey: string;
     passInSlice: string;
     initState: StateStoreDefinition;
-    fn: (/*connection: any, */ state: StateStore, action: A, passInSlice: Array<any>) => Promise<ReducerReturnWithSlice>
+    fn: ReducerFunctionWithSlide<A>
 }
 
 export enum StateStoreValueType {
@@ -67,7 +69,7 @@ export interface StateManagerInterface {
     rootReducer: (state, action) => Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]>;
     dispatch(action, linkedStateAction?): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: ReducerInfo }]>
     stateStoreApply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
-
+    on(event: string, listener: Function): this;
 }
 
 import { EventEmitter } from 'events'
@@ -149,7 +151,7 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
 
                 // reducers return [ReducerInfo, Array<StateUpdates>]
                 // return for a Reducer that has a "passInSlice", it return a array of [ReducerInfo, Array<StateUpdates>]
-                const reducerRes = await fn(/*coonnection,*/ state, action, action && passInSlice ? [state[passInSlice], reducers.find(r => r.sliceKey === passInSlice).fn] : null)
+                const reducerRes = await fn(/*coonnection,*/ state, action, action && passInSlice ? reducers.find(r => r.sliceKey === passInSlice).fn : null)
 
                 // state changes
                 const sliceUpdates = passInSlice ? reducerRes[0] : reducerRes
@@ -200,8 +202,8 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
         let release = await cs.mutex.aquire()
         let applyInfo = {}, applyLinkInfo = {}
 
-        const [linkReducerInfo, linkChanges] = linkedStateAction ? await this._linkedStateManager.rootReducer(/*this.stateStore.state*/ null, linkedStateAction) : [{}, {}]
-        const [reducerInfo, changes] = await this.rootReducer(/*this.stateStore.state*/ null, action)
+        const [linkReducerInfo, linkChanges] = linkedStateAction ? await this._linkedStateManager.rootReducer(this._linkedStateManager.stateStore, linkedStateAction) : [{}, {}]
+        const [reducerInfo, changes] = await this.rootReducer(this.stateStore, action)
         
         // console.log(`Updates: \n${JSON.stringify(changes)}`)
 
@@ -229,8 +231,8 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
 
         release()
         // Combine reducerInfo with applyInfo
-        const allInfo = Object.keys(reducerInfo).reduce((acc, i) => { return { ...acc, [i]: {...reducerInfo[i], ...acc[i]} } }, applyInfo)
-        const allLinkInfo = Object.keys(linkReducerInfo).reduce((acc, i) => { return { ...acc, [i]: {...reducerInfo[i], ...acc[i]} } }, applyLinkInfo)
+        const allInfo = reducerInfo ? Object.keys(reducerInfo).reduce((acc, i) => { return { ...acc, [i]: {...reducerInfo[i], ...acc[i]} } }, applyInfo) : {}
+        const allLinkInfo = linkReducerInfo ? Object.keys(linkReducerInfo).reduce((acc, i) => { return { ...acc, [i]: {...reducerInfo[i], ...acc[i]} } }, applyLinkInfo) : {}
         return [allInfo, allLinkInfo]
         //console.log(`State: \n${JSON.stringify(this.state)}`)
     }

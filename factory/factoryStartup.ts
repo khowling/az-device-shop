@@ -1,5 +1,5 @@
 import mongodb from 'mongodb';
-const { ObjectId } = mongodb;
+import { ObjectId } from 'bson'
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
 import { FactoryActionType, FactoryAction, FactoryStateManager, WorkItemStage, WorkItemObject } from './factoryState.js'
 
@@ -18,36 +18,36 @@ async function validateRequest({ esConnection, trigger }, next: (action: Factory
 }
 
 async function sendToFactory(ctx, next) {
-    const added  = ctx.lastLinkedRes.workItems.added as WorkItemObject
+    const added : WorkItemObject  = ctx.lastLinkedRes.workItems.added as WorkItemObject
     return await next(
-        { type: FactoryActionType.StatusUpdate, id: added.id, status: { stage: WorkItemStage.FactoryReady } }, { update_ctx: { wi_id: added.id } } as ProcessorOptions
+        { type: FactoryActionType.StatusUpdate, _id: added._id, status: { stage: WorkItemStage.FactoryReady } }, { update_ctx: { wi_id: added._id } } as ProcessorOptions
     )
 }
 
 async function waitforFactoryComplete(ctx, next) {
-    const currentVal : WorkItemObject = ctx.linkedStateManager.getValue('workItems', 'items', ctx.wi_id)
+    const currentVal : WorkItemObject = ctx.linkedStore.getValue('workItems', 'items', ctx.wi_id)
     return await next(null, 
-        { retry_until: { isTrue: currentVal.status.stage === WorkItemStage.FactoryComplete, interval: 1} } as ProcessorOptions
+        { retry_until: { isTrue: currentVal.status.stage === WorkItemStage.FactoryComplete} } as ProcessorOptions
     )
 }
 
 async function moveToWarehouse(ctx, next) {
-    return await next({ type: FactoryActionType.StatusUpdate, id: ctx.wi_id, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: Date.now() + 1000 * 5 /* 5 secs */  } as ProcessorOptions)
+    return await next({ type: FactoryActionType.StatusUpdate, _id: ctx.wi_id, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: Date.now() + 1000 * 5 /* 5 secs */  } as ProcessorOptions)
 }
 
 
 async function publishInventory(ctx, next) {
-    return await next({ type: FactoryActionType.CompleteInventry, id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } }, OperationLabel.NEWINV)
+    return await next({ type: FactoryActionType.CompleteInventry, _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } }, OperationLabel.NEWINV)
 }
 
 async function tidyUp(ctx, next) {
-    return await next({ type: FactoryActionType.TidyUp, id: ctx.wi_id })
+    return await next({ type: FactoryActionType.TidyUp, _id: ctx.wi_id })
 }
 
 // ---------------------------------------------------------------------------------------
 import {ApplicationState, default as ServiceWebServer}  from '@az-device-shop/eventing/webserver'
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { watchProcessorTriggerWithTimeStamp } from '@az-device-shop/eventing/processor-actions'
+//import { watchProcessorTriggerWithTimeStamp } from '@az-device-shop/eventing/processor-actions'
 
 async function factoryStartup(cs: EventStoreConnection, appState: ApplicationState) {
 
@@ -66,31 +66,67 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     factoryProcessor.use(publishInventory)
     factoryProcessor.use(tidyUp)
 
-/*
-    appState.log(`factoryStartup (3): Hydrate local stateStores "factoryState" & "factoryProcessor" from snapshots & event log`)
-    //const chkdir = `${process.env.FILEPATH || '.'}/factory_checkpoint`
-    const last_checkpoint = await factoryProcessor.listen(function ({ id, stage }) {
-        const wi = factoryState.stateStore.getValue('workItems', id)
-        if (!wi) {
-            throw new Error(`factoryStartup: Got a processor state without the state: id=${id}`)
-        } else if (stage !== factoryState.stateStore.state.workItems.items[widx].status.stage) {
-            return true
-        }
-        return false
-    })
-    //appState.log(`factoryStartup (3): Complete Hydrate, restored to event sequence=${cs.sequence},  "factoryState" restored to head_sequence=${factoryState.stateStore.state._control.head_sequence}  #workItems=${factoryState.stateStore.state.workItems.items.length}, "factoryProcessor" restored to flow_sequence=${factoryProcessor.processorState.flow_sequence}`)
-*/
+    const submitFn = await factoryProcessor.listen()
+
+
     appState.log(`factoryStartup (5): Starting Interval to run "FactoryProcess" control loop (5 seconds)`)
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
         await factoryState.dispatch({ type: FactoryActionType.FactoryProcess })
     }, 5000)
 
-    appState.log(`factoryStartup (6): Starting new "inventory_spec" watch"`)
-    const mwatch = watchProcessorTriggerWithTimeStamp(cs, 'inventory_spec', factoryProcessor, { "status": 'Required' })
+    const watchCollection = 'inventory_spec', filter = { "status": 'Required' }
+    appState.log(`factoryStartup (6): Starting new ${watchCollection} watch"`)
+
+    let last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
+    
+    if (!last_incoming_processed.continuation) {
+
+        // No oplog continuation, so instead of starting the watch from the current position, read the collection from the sequence (or the start of the file)
+        // inventory_spec & order_spec, nether have 'sequence' fields, so order by '_ts' Timestamp
+        await cs.db.collection(watchCollection).createIndex({ '_ts': 1 })
+
+        // Need aggretate to allow for ordering!
+        const cursor = await cs.db.collection(watchCollection).aggregate([
+                { $match: { $and: [{ 'partition_key': cs.tenentKey}, filter] } },
+                { $sort: { '_ts': 1 } } 
+        ])
+    
+        while ( await cursor.hasNext()) {
+            const doc = await cursor.next()
+            await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime: doc._ts } })
+        }
+    }
+
+    // now look for continuation again (as the statements above will have updated the processor state!)
+    last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
+
+
+    console.log(`watchProcessorTriggerWithTimeStamp:  for [${factoryProcessor.name}]: Start watch "${watchCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
+    cs.db.collection(watchCollection).watch(
+        [
+            { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
+            // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
+            , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
+        ],
+        { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
+        // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
+    ).on('change', async change => {
+        // change._id == event document includes a resume token as the _id field
+        // change.clusterTime == 
+        // change.opertionType == "insert"
+        // change.ns.coll == "Collection"
+        // change.documentKey == A document that contains the _id of the document created or modified 
+
+        // Typescript error: https://jira.mongodb.org/browse/NODE-3621
+        const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
+
+        await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
+    })
+
 
     appState.log(`factoryStartup: FINISHED`, true)
-    return { factoryProcessor, factoryState }
+    return { submitFn, factoryState, processorState: factoryProcessor.stateManager }
 }
 
 
@@ -109,7 +145,7 @@ async function init() {
         process.exit()
     })
 
-    let { factoryState, factoryProcessor } = await factoryStartup(await esConnection.init(), appState)
+    let { submitFn, factoryState, processorState } = await factoryStartup(await esConnection.init(true), appState)
 
     // Http health + monitoring + API
     const web = new ServiceWebServer({ port: process.env.PORT || 9091, appState})
@@ -123,12 +159,12 @@ async function init() {
         req.on('end', async () => {
             //console.log(`http trigger got: ${body}`)
             try {
-                const po = await factoryProcessor.initiateWorkflow({ trigger: { doc: JSON.parse(body) } }, null)
+                const po = await submitFn({ trigger: { doc: JSON.parse(body) } }, null)
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     status: 'ack',
                     info: po,
-                    status_url: `/query/${po.id}`
+                    status_url: `/query/${po.added._id}`
                 }))
             } catch (err) {
                 res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -168,7 +204,7 @@ async function init() {
             state: factoryState.stateStore.serializeState
         }))
     })
-    factoryProcessor.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
+    processorState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
     factoryState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
 
 }

@@ -134,12 +134,19 @@ export class JSStateStore implements StateStore {
 
         //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
+        // Returns effective state for key, taking into account, that the 'statechanges' array may have already modified the state
+        function effectiveStateValue(key: string): any {
+            return newstate.hasOwnProperty(key) ? newstate[key] : state[key]
+        }
+
+
         for (let reducerKey of Object.keys(statechanges)) {
             returnInfo = {...returnInfo, [reducerKey]: {} }
             if (reducerKey === '_control') continue
+
             // get the relevent section of the state
             const stateKeyChanges: Array<StateUpdates> = statechanges[reducerKey] as Array<StateUpdates>
-            //let reducerKeyState = this._state[reducerKey]
+
 
             for (let update of stateKeyChanges) {
                 assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
@@ -172,10 +179,11 @@ export class JSStateStore implements StateStore {
                     case UpdatesMethod.Add:
                         
                         assert (valueType === StateStoreValueType.List, `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
+                        assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
                         //assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
                         //pathKeyState = [...pathKeyState, update.doc]
-                        const next_seq = this._state[`${reducerKey}:${update.path}:_next_sequence`]
-                        const all_keys = this._state[`${reducerKey}:${update.path}:_all_keys`]
+                        const next_seq = effectiveStateValue(`${reducerKey}:${update.path}:_next_sequence`)
+                        const all_keys = effectiveStateValue(`${reducerKey}:${update.path}:_all_keys`)
 
                         const added = {_id: next_seq, ...update.doc}
                         newstate[`${reducerKey}:${update.path}:${next_seq}`] = added
@@ -199,14 +207,15 @@ export class JSStateStore implements StateStore {
                         */
                         break
                     case UpdatesMethod.Update:
-                        assert (valueType === StateStoreValueType.List && !isNaN(update.filter._id), `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter': "${reducerKey}.${update.path}"`)
+                        assert ((valueType === StateStoreValueType.List && !isNaN(update.filter._id)) || (valueType === StateStoreValueType.Hash && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
                         assert (Object.keys(update.doc).reduce((a: number,i: string) => {
                                 return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
                             }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
 
-                        const existing_doc = this._state[`${reducerKey}:${update.path}:${update.filter._id}`]
+                        const value_key = valueType === StateStoreValueType.List ? `${reducerKey}:${update.path}:${update.filter._id}` : `${reducerKey}:${update.path}`
+                        const existing_doc = effectiveStateValue(value_key)
 
-                        assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (filter _id=${update.filter._id})`)
+                        assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (key=${value_key})`)
                         
                         // For each key in update doc, create new key, and set value
                             // if value is !null & its a Object -- If existing doc has the key, and its a Object, MERGE the 2 objects, Otherwise, just use the update doc value
@@ -227,18 +236,19 @@ export class JSStateStore implements StateStore {
 
                         //pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, new_doc)
                         returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], merged }}
-                        newstate[`${reducerKey}:${update.path}:${update.filter._id}`] = merged
+                        newstate[value_key] = merged
 
                         
                         break
                     case UpdatesMethod.Inc:
                         assert (valueType === StateStoreValueType.Counter, `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
                         
-                        const inc = this._state[`${reducerKey}:${update.path}`]++
+                        const inc = effectiveStateValue(`${reducerKey}:${update.path}`) + 1
 
                         returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], inc }}
                         newstate[`${reducerKey}:${update.path}`] = inc
 
+                        break
                     default:
                         assert(false, `applyToLocalState: Cannot apply update seq=${_control.head_sequence}, unknown method=${update.method}`)
                 }

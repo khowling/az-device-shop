@@ -60,7 +60,7 @@ function processorReducer(): Reducer<ProcessAction> {
                 type: StateStoreValueType.Hash,
                 values: {
                     sequence: 0,
-                    continuation: ""
+                    continuation: null
                 }
             }
         } as StateStoreDefinition,
@@ -242,12 +242,16 @@ export class Processor<T> extends EventEmitter {
         this._connection = connection
         this._middleware = []
         this._linkedStateManager = opts.linkedStateManager
-        this._context = { processor: this.name, linkedStateManager: this._linkedStateManager }
+        this._context = { processor: this.name, linkedStore: this._linkedStateManager.stateStore }
         this._stateManager = new ProcessorStateManager(name, connection, this._linkedStateManager)
     }
 
     get connection(): EventStoreConnection {
         return this._connection 
+    }
+
+    get stateManager(): StateManagerInterface {
+        return this._stateManager
     }
 
     get linkedStateManager(): StateManagerInterface {
