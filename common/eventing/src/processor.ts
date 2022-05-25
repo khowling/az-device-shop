@@ -169,7 +169,7 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
             }
         }
 
-        console.log (`Processor: i=${i} > context._init_function_idx=${context._init_function_idx}, context._retry_count=${context._retry_count} need_retry=${need_retry}`)
+        //console.log (`Processor: i=${i} > context._init_function_idx=${context._init_function_idx}, context._retry_count=${context._retry_count} need_retry=${need_retry}`)
         //To prevent duplicate dispatch when a process is restarted from sleep, or when initially started or worken up
         if (i > context._init_function_idx) {
 
@@ -314,7 +314,7 @@ export class Processor<T> extends EventEmitter {
             }
 
             if (restartP) {
-                console.log(`processor.restartProcessors _id=${restartP._id}, function_idx=${restartP.function_idx}, options=${JSON.stringify(restartP.options)}`)
+                //console.log(`processor.restartProcessors _id=${restartP._id}, function_idx=${restartP.function_idx}, options=${JSON.stringify(restartP.options)}`)
                 try {
                     this.handleRequest(restartP, this._fnMiddleware)
                 } catch (err) {
@@ -338,7 +338,7 @@ export class Processor<T> extends EventEmitter {
         if (!this.listenerCount('error')) this.on('error', (err) => console.error(err.toString()))
     
         const handleRequest = async (update_ctx, trigger): Promise<ReducerInfo> => {
-            console.log ("processor.listen.handleRequest, new process started")
+            //console.log ("processor.listen.handleRequest, new process started")
             // Add to processList
             const [{ processor }] = await this._stateManager.dispatch({
                 type: ProcessActionType.New,
@@ -358,7 +358,7 @@ export class Processor<T> extends EventEmitter {
         await this.connection.rollForwardState([this.stateStore, this.linkedStateManager.stateStore], async (applyInfo) => {
             const processorStateInfo = applyInfo[this.stateStore.name]
             const linkedStateInfo = applyInfo[this.linkedStateManager.stateStore.name]
-            if (linkedStateInfo) {
+            if (processorStateInfo && linkedStateInfo) {
                 // Store the linked state info in the processor state store! (capture any new id's that have been created)
                 // any processor re-hydration will need to use this info to rehydrate the linked state
                 const [addlinkedInfo, addlinkedInfoChanges] = await this._stateManager.rootReducer(null, {

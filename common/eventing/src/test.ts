@@ -69,9 +69,8 @@ async function test() {
     console.log(`Initilise EventStoreConnection with 'test_events' (MONGO_DB=${murl})`)
 
     const esConnection = new EventStoreConnection(murl, 'test_events')
-    await esConnection.init(true)
-
-    const testState = new TestStateManager('emeafactory_v0', esConnection)
+    
+    const testState = new TestStateManager('emeafactory_v0', await esConnection.init(false))
 
     // Create state machine
     // statePlugin, allows you to pass in actions into the processor next() function

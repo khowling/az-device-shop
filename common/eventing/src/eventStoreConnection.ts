@@ -80,7 +80,7 @@ export class EventStoreConnection extends EventEmitter {
         }, 10000)
 
         if (reset) {
-            this.db.collection(this.collection).deleteMany({ partition_key: this.tenentKey })
+            await this.db.collection(this.collection).deleteMany({ partition_key: this.tenentKey })
         }
         return this
     }

@@ -46,7 +46,7 @@ export enum FactoryActionType {
     StatusUpdate,
     FactoryProcess,
     CompleteInventry,
-    INventoryNew,
+    ReserveInvSeq,
     TidyUp
 }
 
@@ -96,7 +96,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryAction> {
 
                         return [[{ failed: false }, [
                             { method: UpdatesMethod.Update, path: 'items', filter: { _id }, doc: { "$set": {status: { failed: false, stage: WorkItemStage.InventoryAvailable }} } }
-                        ]], await inventoryReducer(/*connection, */ state, { type:  FactoryActionType.INventoryNew, _id, spec })]
+                        ]], await inventoryReducer(/*connection, */ state, { type:  FactoryActionType.ReserveInvSeq, _id, spec })]
                     } else {
                         return [[{ failed: true }, [
                             { method: UpdatesMethod.Add, path: 'items', doc: { _id, status: { stage: WorkItemStage.InventoryAvailable, failed: true, message: `workItem missing in store _id=${_id}` } } }
@@ -249,15 +249,8 @@ function inventryReducer(): Reducer<FactoryAction> {
 
             const { spec, _id, type } = action
             switch (type) {
-                case FactoryActionType.INventoryNew:
-                    /*
-                    const result = await connection.db.collection("inventory_complete").insertOne({
-                        sequence: state.inventry_sequence + 1,
-                        partition_key: connection.tenentKey,
-                        inventoryId: 'INV' + String(state.inventry_sequence).padStart(5, '0'),
-                        spec
-                    })
-                    */
+                case FactoryActionType.ReserveInvSeq:
+
 
                     //if (result && result.insertedId) {
                     return [{ failed: false }, [

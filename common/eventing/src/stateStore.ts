@@ -111,7 +111,7 @@ export class JSStateStore implements StateStore {
         }
     }
 
-    static imm_splice(array: Array<any>, index: number, val: any) { return [...array.slice(0, index), ...(val ? [val] : []), ...array.slice(index + 1)] }
+    static imm_splice(array: Array<any>, index: number, val?: any) { return [...array.slice(0, index), ...(val ? [val] : []), ...array.slice(index + 1)] }
 
     static apply_incset({ method, doc }, val) {
         return {
@@ -131,7 +131,7 @@ export class JSStateStore implements StateStore {
         let returnInfo = {}
         //assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
         let newstate = {} // { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
-
+        let delkeys = []
         //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
         // Returns effective state for key, taking into account, that the 'statechanges' array may have already modified the state
@@ -160,28 +160,13 @@ export class JSStateStore implements StateStore {
                         } else {
                             newstate[`${reducerKey}:${update.path}`] = update.doc
                         }
-                        
-                        /*
-                        if (update.filter) { // array
-                            assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                            const
-                                filter_key = Object.keys(update.filter)[0], filter_val = update.filter[filter_key],
-                                update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-                            assert(update_idx >= 0, `applyToLocalState: Panic applying a "UpdatesMethod.Inc|UpdatesMethod.Set" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                            pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, JSStateStore.apply_incset(update as any, pathKeyState[update_idx]))
-
-                        } else { // object
-                            pathKeyState = JSStateStore.apply_incset(update as any, pathKeyState)
-                        }
-                        */
-
+                       
                         break
                     case UpdatesMethod.Add:
                         
                         assert (valueType === StateStoreValueType.List, `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
                         assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
-                        //assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
-                        //pathKeyState = [...pathKeyState, update.doc]
+
                         const next_seq = effectiveStateValue(`${reducerKey}:${update.path}:_next_sequence`)
                         const all_keys = effectiveStateValue(`${reducerKey}:${update.path}:_all_keys`)
 
@@ -195,16 +180,18 @@ export class JSStateStore implements StateStore {
 
                         break
                     case UpdatesMethod.Rm:
-                        /*
-                        assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Rm" to non-Array on "${stateKey}"`)
-                        assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                        const
-                            filter_key = Object.keys(update.filter)[0],
-                            filter_val = update.filter[filter_key],
-                            update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-                        assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                        pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, null)
-                        */
+
+                        assert (valueType === StateStoreValueType.List, `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
+                        assert (!isNaN(update.filter._id), `applyToLocalState: "Rm" requires "filter._id", "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
+
+                        const all_keys1 = effectiveStateValue(`${reducerKey}:${update.path}:_all_keys`)
+                        const rm_key_idx = all_keys1.indexOf(update.filter._id)
+                        assert (rm_key_idx >= 0, `applyToLocalState: "Rm", cannot find existing value, "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
+
+                        newstate[`${reducerKey}:${update.path}:_all_keys`] = JSStateStore.imm_splice(all_keys1, rm_key_idx)
+                        delkeys.push(`${reducerKey}:${update.path}:${update.filter._id}`)
+
+
                         break
                     case UpdatesMethod.Update:
                         assert ((valueType === StateStoreValueType.List && !isNaN(update.filter._id)) || (valueType === StateStoreValueType.Hash && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
@@ -268,6 +255,7 @@ export class JSStateStore implements StateStore {
         }
         // swap into live
         this._state = { ...this._state, ...newstate }
+        // TODO - Remove the keys from "Rm"
         return returnInfo
     }
 }

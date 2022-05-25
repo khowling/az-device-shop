@@ -3,8 +3,6 @@ import { ObjectId } from 'bson'
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
 import { FactoryActionType, FactoryAction, FactoryStateManager, WorkItemStage, WorkItemObject } from './factoryState.js'
 
-export enum OperationLabel { NEWINV = "NEWINV" }
-
 async function validateRequest({ esConnection, trigger }, next: (action: FactoryAction, options: ProcessorOptions, event_label?: string) => any) {
 
     let spec = trigger && trigger.doc
@@ -32,15 +30,29 @@ async function waitforFactoryComplete(ctx, next) {
 }
 
 async function moveToWarehouse(ctx, next) {
-    return await next({ type: FactoryActionType.StatusUpdate, _id: ctx.wi_id, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: Date.now() + 1000 * 5 /* 5 secs */  } as ProcessorOptions)
+    return await next({ type: FactoryActionType.StatusUpdate, _id: ctx.wi_id, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: Date.now() + 1000 * 4 /* 4 secs */  } as ProcessorOptions)
 }
 
 
 async function publishInventory(ctx, next) {
-    return await next({ type: FactoryActionType.CompleteInventry, _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } }, OperationLabel.NEWINV)
+
+    return await next({ type: FactoryActionType.CompleteInventry, _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } })
 }
 
-async function tidyUp(ctx, next) {
+async function completeInventoryAndFinish(ctx, next) {
+    console.log (`publishInventory: ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes.inventory_complete.inc)}`)
+    const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inc)
+    const result = await ctx.esConnection.db.collection("inventory_complete").insertOne({
+        _id: completeInvSeq,
+        sequence: completeInvSeq,
+        partition_key: ctx.esConnection.tenentKey,
+        inventoryId: 'INV' + String(completeInvSeq).padStart(5, '0'),
+        spec: ctx.spec,
+        workItem_id: ctx.wi_id
+    })
+
+
+
     return await next({ type: FactoryActionType.TidyUp, _id: ctx.wi_id })
 }
 
@@ -64,7 +76,7 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     factoryProcessor.use(waitforFactoryComplete)
     factoryProcessor.use(moveToWarehouse)
     factoryProcessor.use(publishInventory)
-    factoryProcessor.use(tidyUp)
+    factoryProcessor.use(completeInventoryAndFinish)
 
     const submitFn = await factoryProcessor.listen()
 
