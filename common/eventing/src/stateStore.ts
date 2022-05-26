@@ -9,6 +9,7 @@ export interface StateUpdateControl {
 
 export interface StateStore {
     name: string;
+    stateDefinition: { [sliceKey: string]: StateStoreDefinition};
     getValue(reducerKey: string, path: string, idx?: number): any;
     debugState(): void;
     serializeState(): any;
@@ -68,11 +69,15 @@ export class JSStateStore implements StateStore {
         }
 
         console.log (`JSStateStore: name=${name}, state=${JSON.stringify(state)}`)
-        this._state = state
+        this.state = state
     }
 
     get name() {
         return this._name
+    }
+
+    get stateDefinition() {
+        return this._stateDefinition
     }
 
     private get state() {
@@ -80,7 +85,7 @@ export class JSStateStore implements StateStore {
     }
 
     private set state(newstate) {
-        this._state = newstate
+        this._state = {...newstate}
     }
 
     debugState() {
@@ -101,8 +106,20 @@ export class JSStateStore implements StateStore {
     }
 
 
-    get serializeState() {
-        return { ...this._state }
+    get serializeState(): any {
+
+        let serializeState = {}
+
+        for (let sliceKey of Object.keys(this._stateDefinition)) {
+
+            serializeState = {...serializeState, [sliceKey]: {}}
+            for (let key of Object.keys(this._stateDefinition[sliceKey])) {
+                
+                serializeState = {...serializeState, [sliceKey]: {...serializeState[sliceKey], [key]: this.getValue(sliceKey, key)}}
+            }
+        }
+
+        return serializeState
     }
 
     deserializeState(newstate) {
@@ -125,7 +142,7 @@ export class JSStateStore implements StateStore {
 
     apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo {
 
-        const state = this._state
+        
         const _control: StateUpdateControl = statechanges._control as StateUpdateControl
 
         let returnInfo = {}
@@ -135,8 +152,8 @@ export class JSStateStore implements StateStore {
         //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
         // Returns effective state for key, taking into account, that the 'statechanges' array may have already modified the state
-        function effectiveStateValue(key: string): any {
-            return newstate.hasOwnProperty(key) ? newstate[key] : state[key]
+        const effectiveStateValue = (key: string): any => {
+            return newstate.hasOwnProperty(key) ? newstate[key] : this.state[key]
         }
 
 
@@ -254,7 +271,7 @@ export class JSStateStore implements StateStore {
 */
         }
         // swap into live
-        this._state = { ...this._state, ...newstate }
+        this.state = { ...this.state, ...newstate }
         // TODO - Remove the keys from "Rm"
         return returnInfo
     }

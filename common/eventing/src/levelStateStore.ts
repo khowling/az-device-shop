@@ -99,6 +99,10 @@ export class LevelStateStore implements StateStore {
         return this._name
     }
 
+    get stateDefinition() {
+        return this._stateDefinition
+    }
+    
     getValue(reducerKey: string, path: string, idx?: number) {
 
     }

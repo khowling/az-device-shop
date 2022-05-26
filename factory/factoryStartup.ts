@@ -42,18 +42,20 @@ async function publishInventory(ctx, next) {
 async function completeInventoryAndFinish(ctx, next) {
     console.log (`publishInventory: ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes.inventory_complete.inc)}`)
     const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inc)
-    const result = await ctx.esConnection.db.collection("inventory_complete").insertOne({
-        _id: completeInvSeq,
-        sequence: completeInvSeq,
-        partition_key: ctx.esConnection.tenentKey,
-        inventoryId: 'INV' + String(completeInvSeq).padStart(5, '0'),
-        spec: ctx.spec,
-        workItem_id: ctx.wi_id
-    })
+    const result = await ctx.esConnection.db.collection("inventory_complete").updateOne(
+        {sequence: completeInvSeq}, { "$set": {
+            sequence: completeInvSeq,
+            partition_key: ctx.esConnection.tenentKey,
+            inventoryId: 'INV' + String(completeInvSeq).padStart(5, '0'),
+            spec: ctx.spec,
+            workItem_id: ctx.wi_id
+        }},
+        { upsert: true }
+    )
 
 
 
-    return await next({ type: FactoryActionType.TidyUp, _id: ctx.wi_id })
+    return await next(/*{ type: FactoryActionType.TidyUp, _id: ctx.wi_id }*/)
 }
 
 // ---------------------------------------------------------------------------------------
@@ -210,14 +212,17 @@ async function init() {
         ws.send(JSON.stringify({
             type: "snapshot",
             metadata: {
+                stateDefinition: factoryState.stateStore.stateDefinition,
                 factory_txt: ['Waiting', 'Building', 'Complete'],
                 stage_txt: ['Draft', 'New', 'FactoryReady', 'FactoryAccepted', 'FactoryComplete', 'MoveToWarehouse', 'InventoryAvailable']
             },
             state: factoryState.stateStore.serializeState
         }))
     })
-    processorState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
-    factoryState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
+    //processorState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
+    factoryState.on('changes', (events) => 
+        web.sendAllClients({ type: "events", state: events[factoryState.name] })
+    )
 
 }
 

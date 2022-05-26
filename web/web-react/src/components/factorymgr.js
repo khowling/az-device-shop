@@ -90,105 +90,106 @@ function apply_incset({ method, doc }, val) {
 
 function stateReducer({ state, metadata }, action) {
 
+    let newstate = {}
+
+    const effectiveStateValue = (reducerKey, path) => {
+        return newstate[reducerKey] && newstate[reducerKey].hasOwnProperty(path) ? newstate[reducerKey][path] : state[reducerKey][path]
+    }
+
     switch (action.type) {
         case 'snapshot':
             return { state: action.state, metadata: action.metadata }
         case 'events':
-            // array of changes:
-            // kind: string;
-            // metadata: {
-            //     sequence: number
-            //     type?: ChangeEventType;
-            //     doc_id: string;
-            // };
-            // status: OrderStatus | InventoryStatus
 
             const statechanges = action.state
-            const _control = statechanges._control
 
-            console.assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
-            let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
-
-            for (let stateKey of Object.keys(statechanges)) {
-                if (stateKey === '_control') continue
+            for (let reducerKey of Object.keys(statechanges)) {
+                if (reducerKey === '_control') continue
                 // get the relevent section of the state
-                let reducerKeyState = state[stateKey]
 
-                for (let i = 0; i < statechanges[stateKey].length; i++) {
-                    const update = statechanges[stateKey][i]
-                    let pathKeyState = update.path ? reducerKeyState[update.path] : reducerKeyState
+                newstate = {...newstate, [reducerKey]: state[reducerKey]}
+                for (let update of statechanges[reducerKey]) {
+                    console.assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
+                    const valueType = metadata.stateDefinition[reducerKey][update.path].type
 
                     switch (update.method) {
-                        case 'inc':
                         case 'set':
-                            if (update.filter) { // array
-                                console.assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                                const
-                                    filter_key = Object.keys(update.filter)[0], filter_val = update.filter[filter_key],
-                                    update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-                                console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "UpdatesMethod.Inc|UpdatesMethod.Set" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                                pathKeyState = imm_splice(pathKeyState, update_idx, apply_incset(update, pathKeyState[update_idx]))
-
-                            } else { // object
-                                pathKeyState = apply_incset(update, pathKeyState)
+                            console.assert (valueType === "hash" || (valueType === "list" && update.filter && !isNaN(update.filter._id)) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
+                            if (valueType === "list") {
+                                const idx = effectiveStateValue(reducerKey,update.path).findIndex(i => i._id === update.filter._id)
+                                console.assert (idx >= 0 , `applyToLocalState: Could not find item with id "${update.filter._id}" in list "${reducerKey}.${update.path}"`)
+                                newstate[reducerKey][update.path] = imm_splice(effectiveStateValue(reducerKey,update.path), idx, update.doc)
+                            } else {
+                                newstate[reducerKey][update.path] = update.doc
                             }
                             break
                         case 'add':
-                            console.assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
-                            pathKeyState = [...pathKeyState, update.doc]
+                            console.assert (valueType === "list", `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
+                            console.assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
+                            newstate[reducerKey][update.path] = effectiveStateValue(reducerKey,update.path).concat(update.doc)
+
                             break
                         case 'rm':
-                            console.assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Rm" to non-Array on "${stateKey}"`)
-                            console.assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                            const
-                                filter_key = Object.keys(update.filter)[0],
-                                filter_val = update.filter[filter_key],
-                                update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-                            console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                            pathKeyState = imm_splice(pathKeyState, update_idx, null)
+
+                            console.assert (valueType === "list", `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
+                            console.assert (update.filter && !isNaN(update.filter._id), `applyToLocalState: "Rm" requires "filter._id", "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
+
+                            const idx = effectiveStateValue(reducerKey,update.path).findIndex(i => i._id === update.filter._id)
+                            console.assert (idx >= 0 , `applyToLocalState: Could not find item with id "${update.filter._id}" in list "${reducerKey}.${update.path}"`)
+
+
+                            newstate[reducerKey][update.path] = imm_splice(effectiveStateValue(reducerKey,update.path), idx, null)
                             break
-                        case 'merge':
-                            if (update.filter) { // array
-                                console.assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                                const
-                                    filter_key = Object.keys(update.filter)[0],
-                                    filter_val = update.filter[filter_key],
-                                    update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
+                        case 'update':
 
-                                console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                                const new_doc_updates = Object.keys(update.doc).map(k => {
-                                    return {
-                                        [k]:
-                                            update.doc[k] && Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && pathKeyState[update_idx][k] && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ?
-                                                { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k]
-                                    }
-                                }).reduce((a, i) => { return { ...a, ...i } }, {})
+                            console.assert ((valueType === "list" && !isNaN(update.filter._id)) || (valueType === "hash" && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
+                            console.assert (Object.keys(update.doc).reduce((a,i) => {
+                                    return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
+                                }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
+    
+                            const existingkeyval = effectiveStateValue(reducerKey,update.path)
+                            const existing_doc = valueType === "list" ? existingkeyval.findIndex(i => i._id === update.filter._id) : existingkeyval
+    
+                            console.assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (filter=${update.filter})`)
+                            
 
-                                const new_doc = { ...pathKeyState[update_idx], ...new_doc_updates }
-                                pathKeyState = imm_splice(pathKeyState, update_idx, new_doc)
+                            const merge_keys = update.doc['$merge']
+                            const new_merge_updates = merge_keys ? Object.keys(merge_keys).filter(f => f !== '_id').map(k => {
+                                return {
+                                    [k]:
+                                        merge_keys[k] && Object.getPrototypeOf(merge_keys[k]).isPrototypeOf(Object) && existing_doc[k] && Object.getPrototypeOf(existing_doc[k]).isPrototypeOf(Object) ?
+                                                { ...existing_doc[k], ...merge_keys[k] } 
+                                            : 
+                                                merge_keys[k]
+                                }
+                            }).reduce((a, i) => { return { ...a, ...i } }, {}) : {}
+
+                            // Add the rest of the existing doc to the new doc
+                            const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
+
+                            if (valueType === "list") {
+                                newstate[reducerKey][update.path] = imm_splice(existingkeyval, existingkeyval.findIndex(i => i._id === update.filter._id), merged)
                             } else {
-                                console.assert(false, 'applyToLocalState, "UpdatesMethod.Update" requires a filter (its a array operator)')
+                                newstate[reducerKey][update.path] = merged
                             }
+
                             break
                         default:
                             console.assert(false, `applyToLocalState: Cannot apply update seq=${statechanges._apply.current_head}, unknown method=${update.method}`)
                     }
-
-                    if (update.path) {
-                        // if path, the keystate must be a object
-                        reducerKeyState = { ...reducerKeyState, [update.path]: pathKeyState }
-                    } else {
-                        // keystate could be a object or value or array
-                        reducerKeyState = pathKeyState
-                    }
                 }
-                newstate[stateKey] = reducerKeyState
             }
 
-            return { state: { ...state, ...newstate }, metadata }
+            return { 
+                state: { ...state, ...newstate }, 
+                metadata 
+            }
+
         case 'closed':
             // socket closed, reset state
             return { state: {}, metadata: {} }
+
+
         default:
             throw new Error(`unknown action type ${action.type}`);
     }
@@ -312,7 +313,7 @@ export function Inventory({ resource }) {
                         <Stack.Item key={idx} align="stretch" grow styles={{ root: { background: 'rgb(225, 228, 232)', padding: 5 } }}>
                             <h4>{desc}</h4>
                             {state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage)).map((o, i) =>
-                                <Stack tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { margin: '5px 0', backgroundColor: "white" } }}>
+                                <Stack key={i} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { margin: '5px 0', backgroundColor: "white" } }}>
 
                                     <Label variant="small">Workitem Number {o.status.workItemId || "<TBC>"}</Label>
                                     {
@@ -367,7 +368,7 @@ export function Inventory({ resource }) {
                         <Stack.Item key={idx} align="stretch" grow styles={{ root: { background: 'rgb(225, 228, 232)', padding: 5 } }}>
                             <h4>{desc}</h4>
                             {state.factory && state.factory.items.filter(i => stages.includes(i.stage)).map((o, i) =>
-                                <Stack tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
+                                <Stack key={i} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
 
                                     <Label variant="small">picking id {o.id || "<TBC>"}</Label>
                                     {

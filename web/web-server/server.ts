@@ -408,7 +408,7 @@ async function serve_static(ctx, next) {
 
 import {ApplicationState} from "@az-device-shop/eventing/webserver"
 
-import { order_state_startup } from './orderingFollower.js'
+//import { order_state_startup } from './orderingFollower.js'
 const app = new Koa();
 
 async function init() {
@@ -529,10 +529,12 @@ async function init() {
 
     // Init order status (dont await, incase no tenent! )
     appState.log(`init(): Init order status`)
+    /*
     order_state_startup({db: app.context.db, tenent: app.context.tenent }).then(val => {
         appState.log(`init(): Init order status complete`, true)
         app.context.orderState = val
     })
+    */
 
 }
 
