@@ -73,7 +73,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryAction> {
                     if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true)) {
 
                         return [[{ failed: false }, [
-                            { method: UpdatesMethod.Add, path: 'items', doc: { spec: action.spec, status: { failed: false, /*workItemId: 'WI' + String(state.workitem_sequence).padStart(5, '0'),*/ stage: WorkItemStage.New } } }
+                            { method: UpdatesMethod.Add, path: 'items', doc: { spec: action.spec, status: { failed: false,  stage: WorkItemStage.New } } }
                         ]]]
                         
                     } else {

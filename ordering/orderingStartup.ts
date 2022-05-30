@@ -1,47 +1,53 @@
 import mongodb from 'mongodb';
-const { ObjectId } = mongodb;
+import { ObjectId, Timestamp } from 'bson';
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
-import { OrderActionType, OrderStateManager, OrderStage } from './orderingState.js'
+import { OrderActionType, OrderStateManager, OrderStage, OrderObject } from './orderingState.js'
 
 
-async function validateOrder({ connection, trigger, flow_id }, next) {
+async function validateOrder({ esConnection, trigger }, next) {
 
     let spec = trigger && trigger.doc
     if (trigger && trigger.doc_id) {
-        const mongo_spec = await connection.db.collection("orders_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: connection.tenentKey })
+        const mongo_spec = await esConnection.db.collection("orders_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: esConnection.tenentKey })
         // translate the db document '*_id' ObjectId fields to '*Id' strings
         spec = { ...mongo_spec, ...(mongo_spec.items && { items: mongo_spec.items.map(i => { return { ...i, ...(i.product_id && { productId: i.product_id.toHexString() }) } }) }) }
     }
 
-    await next({ type: OrderActionType.OrdersNew, id: flow_id, spec }, { update_ctx: { spec } } as ProcessorOptions)
+    return await next({ type: OrderActionType.OrdersNew, spec }, { update_ctx: { spec } } as ProcessorOptions)
 }
 
 
-async function allocateInventry({ flow_id, spec }, next) {
+async function allocateInventry(ctx, next) {
+    const added  = ctx.lastLinkedRes.orders.added as OrderObject
     console.log(`allocateInventry`)
-    await next({ type: OrderActionType.OrdersProcessLineItems, id: flow_id, spec })
+    return await next({ type: OrderActionType.OrdersProcessLineItems, _id: added._id }, { update_ctx: { order_id: added._id }} as ProcessorOptions)
 }
 
-async function picking({ flow_id, spec }, next) {
-    console.log(`picking forward`)
-    await next({ type: OrderActionType.StatusUpdate, id: flow_id, spec, status: { stage: OrderStage.PickingReady } }, { sleep_until: { id: flow_id, stage: OrderStage.PickingComplete } } as ProcessorOptions)
+async function picking(ctx, next) {
+    console.log(`picking forward ctx.order_id=${ctx.order_id}`)
+    return await next({ type: OrderActionType.StatusUpdate, _id: ctx.order_id, status: { stage: OrderStage.PickingReady } })
 }
 
-async function shipping({ flow_id, spec }, next) {
+async function waitforPickingComplete(ctx, next) {
+    const currentVal : OrderObject = ctx.linkedStore.getValue('orders', 'items', ctx.order_id)
+    return await next(null, 
+        { retry_until: { isTrue: currentVal.status.stage === OrderStage.PickingComplete} } as ProcessorOptions
+    )
+}
+
+async function shipping(ctx, next) {
     console.log(`shipping forward`)
-    await next({ type: OrderActionType.StatusUpdate, id: flow_id, spec, status: { stage: OrderStage.Shipped } }, { sleep_until: { time: Date.now() + 1000 * 60 * 3 /* 3mins */ } } as ProcessorOptions)
+    return await next({ type: OrderActionType.StatusUpdate, _id: ctx.order_id, status: { stage: OrderStage.Shipped } }, { sleep_until: Date.now() + 1000 * 60 * 1 /* 1mins */ } as ProcessorOptions)
 }
 
-async function complete({ flow_id, spec }, next) {
+async function complete(ctx, next) {
     console.log(`complete forward`)
-    await next({ type: OrderActionType.StatusUpdate, id: flow_id, spec, status: { stage: OrderStage.Complete } })
+    return await next({ type: OrderActionType.StatusUpdate, id: ctx.order_id, status: { stage: OrderStage.Complete } })
 }
 
 // ---------------------------------------------------------------------------------------
 import {ApplicationState, default as ServiceWebServer} from "@az-device-shop/eventing/webserver"
 import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
-import { startCheckpointing, restoreState } from "@az-device-shop/eventing/state-restore"
-import { watchDispatchWithSequence, watchProcessorTriggerWithTimeStamp } from "@az-device-shop/eventing/processor-actions"
 
 async function orderingStartup(cs: EventStoreConnection, appState: ApplicationState) {
 
@@ -50,57 +56,121 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     const orderState = new OrderStateManager('emeaordering_v0', cs)
 
     appState.log(`orderingStartup (2):  create ordering processor "orderProcessor" & add workflow tasks`)
-    const orderProcessor = new Processor('emeaprocessor_v001', cs, { statePlugin: orderState })
+    const orderProcessor = new Processor('emeaprocessor_v001', cs, { linkedStateManager: orderState })
     // add connection to ctx, to allow middleware access, (maybe not required!)
     orderProcessor.context.connection = cs
     // add workflow actions
     orderProcessor.use(validateOrder)
     orderProcessor.use(allocateInventry)
     orderProcessor.use(picking)
+    orderProcessor.use(waitforPickingComplete)
     orderProcessor.use(shipping)
     orderProcessor.use(complete)
 
-    appState.log(`orderingStartup (3): Hydrate local stateStores "orderState" & "orderProcessor" from snapshots & event log`)
-    const chkdir = `${process.env.FILEPATH || '.'}/order_checkpoint`
-    let last_checkpoint = await restoreState(cs, chkdir, [
-        orderState.stateStore,
-        orderProcessor.stateStore
-    ])
-    appState.log(`orderingStartup (3): Complete Hydrate, restored "${cs.collection}" to sequence=${cs.sequence},  "orderState" restored state to head_sequence=${orderState.stateStore.state._control.head_sequence}  #orders=${orderState.stateStore.state.orders.items.length} #onhand=${orderState.stateStore.state.inventory.onhand.length}, "orderProcessor" restored to flow_sequence=${orderProcessor.processorState.flow_sequence}`)
+    const submitFn = await orderProcessor.listen()
 
-    appState.log(`orderingStartup (4): Re-start active "orderProcessor" workflows, #flows=${orderProcessor.processorState.proc_map.length}`)
-    const prInterval = orderProcessor.initProcessors(function ({ id, stage }) {
-        const oidx = orderState.stateStore.state.orders.items.findIndex(o => o.id === id)
-        if (oidx < 0) {
-            throw new Error(`orderingStartup: Got a processor state without the state: id=${id}`)
-        } else if (stage !== orderState.stateStore.state.orders.items[oidx].status.stage) {
-            return true
-        }
-        return false
-    })
-
-    if (false) {
-        const cpInterval = startCheckpointing(cs, chkdir, last_checkpoint, [
-            orderState.stateStore,
-            orderProcessor.stateStore
-        ])
-    }
-
-
-    appState.log(`orderingStartup (5): Starting Interval to run "PickingProcess" control loop (5 seconds)`)
+    appState.log(`orderingStartup (3): Starting Interval to run "PickingProcess" control loop (5 seconds)`)
     const pickInterval = setInterval(async function () {
         await orderState.dispatch({ type: OrderActionType.PickingProcess })
     }, 5000)
 
 
-    appState.log(`orderingStartup (6): Starting new "inventory_complete" watch"`)
-    const iwatch = watchDispatchWithSequence(cs, orderState, 'inventory', 'inventory_complete', 'inventoryId', 'spec', OrderActionType.InventryNew)
+    const invCompleteCollection = 'inventory_complete'
+    appState.log(`orderingStartup 4): reading and watching "${invCompleteCollection}"`)
+    
+    if (true) { // Check if no continuation, read watchCollection from seqenuce, or the start of the collection 
+        const { sequence, continuation } = orderState.stateStore.getValue('inventory', 'last_incoming_processed')
 
-    appState.log(`orderingStartup (7): Starting new "orders_spec" watch"`)
-    const mwatch = watchProcessorTriggerWithTimeStamp(cs, 'orders_spec', orderProcessor, { "status": 30 })
+        // No oplog continuation, so instead of starting the watch from the current position
+        if (!continuation) {
+            await cs.db.collection(invCompleteCollection).createIndex({ sequence: 1 })
+
+            const cursor = await cs.db.collection(invCompleteCollection).aggregate(
+                [
+                    { $match: { $and: [{ 'partition_key': cs.tenentKey }].concat(sequence ? { sequence: { $gt: sequence } } as any : []) } },
+                ].concat({ $sort: { sequence: 1 } } as any)
+            )
+        
+            while (cursor.hasNext()) {
+                const doc = await cursor.next()
+                await orderState.dispatch({ type: OrderActionType.InventryNew, /* inventoryId: doc.inventoryId,*/ spec: doc.spec, trigger: { sequence: doc.sequence } })
+            }
+
+        }
+    }
+
+    //assert(!(last_inventory_trigger && last_inventory_trigger.factory_events_sequence), `orderingProcessor (10):  start watch "collection" for NEWINV. resume cannot be a sequence`)
+    const { sequence, continuation } = orderState.stateStore.getValue('inventory', 'last_incoming_processed')
+
+    cs.db.collection(invCompleteCollection).watch([
+        { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(sequence ? { 'fullDocument.sequence': { $gt: sequence } } as any : []) } },
+        { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
+    ],
+        { fullDocument: "updateLookup", ...(continuation && { ...continuation }) }
+    ).on('change', async change => {
+        const { sequence } = change.fullDocument
+        console.log(`watchDispatchWithSequence collection="${invCompleteCollection}": change _id=${JSON.stringify(change._id)} (sequence=${sequence})`)
+        await orderState.dispatch({ type:  OrderActionType.InventryNew, spec: change.fullDocument.spec, trigger: { sequence, continuation: { /* startAfter */ resumeAfter: change._id } } })
+    })
+
+
+
+ 
+    const orderSpecCollection = 'orders_spec', filter = { "status": 30 }
+    appState.log(`orderingStartup 5): reading and watching "${orderSpecCollection}"`)
+
+    let last_incoming_processed = orderProcessor.getProcessorState('last_incoming_processed')
+    
+    if (!last_incoming_processed.continuation) {
+
+        // No oplog continuation, so instead of starting the watch from the current position, read the collection from the sequence (or the start of the file)
+        // inventory_spec & order_spec, nether have 'sequence' fields, so order by '_ts' Timestamp
+        await cs.db.collection(orderSpecCollection).createIndex({ '_ts': 1 })
+
+        // Need aggretate to allow for ordering!
+        const cursor = await cs.db.collection(orderSpecCollection).aggregate([
+                { $match: { $and: [{ 'partition_key': cs.tenentKey}, filter] } },
+                { $sort: { '_ts': 1 } } 
+        ])
+    
+        while ( await cursor.hasNext()) {
+            const doc = await cursor.next()
+            await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime: doc._ts } })
+        }
+    }
+
+    // now look for continuation again (as the statements above will have updated the processor state!)
+    last_incoming_processed = orderProcessor.getProcessorState('last_incoming_processed')
+    const lastTimestamp = last_incoming_processed?.continuation?.startAtOperationTime as Timestamp
+
+    console.log(`factoryStartup (6):  for [${orderProcessor.name}]: Start watch "${orderSpecCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
+    cs.db.collection(orderSpecCollection).watch(
+        [
+            { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
+            // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
+            , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument._ts': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
+        ],
+        { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
+        // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
+    ).on('change', async change => {
+        // change._id == event document includes a resume token as the _id field
+        // change.clusterTime == 
+        // change.opertionType == "insert"
+        // change.ns.coll == "Collection"
+        // change.documentKey == A document that contains the _id of the document created or modified 
+
+        // Typescript error: https://jira.mongodb.org/browse/NODE-3621
+        const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
+         
+        if (lastTimestamp && lastTimestamp.comp(change.fullDocument._ts) === 0 ) {
+            console.log (`skipping, already processed ${lastTimestamp}`)
+        } else {
+            await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
+        }
+    })
 
     appState.log(`orderingStartup: FINISHED`, true)
-    return { orderProcessor, orderState }
+    return { submitFn, orderState, processorState: orderProcessor.stateManager }
 }
 
 
@@ -119,7 +189,7 @@ async function init() {
         process.exit()
     })
 
-    let { orderState, orderProcessor } = await orderingStartup(await connection.init(), appState)
+    let { submitFn, orderState, processorState } = await orderingStartup(await connection.init(true), appState)
 
     // Http health + monitoring + API
     const web = new ServiceWebServer({ port: process.env.PORT || 9090, appState })
@@ -133,12 +203,12 @@ async function init() {
         req.on('end', async () => {
             //console.log(`http trigger got: ${body}`)
             try {
-                const po = await orderProcessor.initiateWorkflow({ trigger: { doc: JSON.parse(body) } }, null)
+                const po = await submitFn({ trigger: { doc: JSON.parse(body) } }, null)
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     status: 'ack',
                     info: po,
-                    status_url: `/query/${po.id}`
+                    status_url: `/query/${po.added._id}`
                 }))
             } catch (err) {
                 res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -155,14 +225,7 @@ async function init() {
             status: 'tbc',
         }))
     })
-    /* ** defined on the ServiceWebServer constructor
-    web.addRoute('GET', '/healthz', (req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            status: 'All Good'
-        }))
-    })
-    */
+
     web.createServer()
 
 
@@ -172,6 +235,7 @@ async function init() {
         ws.send(JSON.stringify({
             type: "snapshot",
             metadata: {
+                stateDefinition: orderState.stateStore.stateDefinition,
                 factory_txt: ['Waiting', 'Picking', 'Complete'],
                 stage_txt: ['Draft',
                     'New',
@@ -185,8 +249,12 @@ async function init() {
             state: orderState.stateStore.serializeState
         }))
     })
-    orderProcessor.on('changes', (events) => web.sendAllClients({ type: "events", state: events[orderState.name] }))
-    orderState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[orderState.name] }))
+    processorState.on('changes', (events) => 
+        events[orderState.name] && web.sendAllClients({ type: "events", state: events[orderState.name] })
+    )
+    orderState.on('changes', (events) => 
+        web.sendAllClients({ type: "events", state: events[orderState.name] })
+    )
 
 }
 

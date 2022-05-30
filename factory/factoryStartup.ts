@@ -83,14 +83,14 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     const submitFn = await factoryProcessor.listen()
 
 
-    appState.log(`factoryStartup (5): Starting Interval to run "FactoryProcess" control loop (5 seconds)`)
+    appState.log(`factoryStartup (3): Starting Interval to run "FactoryProcess" control loop (5 seconds)`)
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
         await factoryState.dispatch({ type: FactoryActionType.FactoryProcess })
     }, 5000)
 
     const watchCollection = 'inventory_spec', filter = { "status": 'Required' }
-    appState.log(`factoryStartup (6): Starting new ${watchCollection} watch"`)
+    appState.log(`factoryStartup (4): Starting new ${watchCollection} watch"`)
 
     let last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
     
@@ -116,7 +116,7 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
     const lastTimestamp = last_incoming_processed?.continuation?.startAtOperationTime as Timestamp
 
-    console.log(`watchProcessorTriggerWithTimeStamp:  for [${factoryProcessor.name}]: Start watch "${watchCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
+    console.log(`factoryStartup (6):  for [${factoryProcessor.name}]: Start watch "${watchCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
     cs.db.collection(watchCollection).watch(
         [
             { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
@@ -163,7 +163,7 @@ async function init() {
         process.exit()
     })
 
-    let { submitFn, factoryState, processorState } = await factoryStartup(await esConnection.init(true), appState)
+    let { submitFn, factoryState, processorState } = await factoryStartup(await esConnection.init(false), appState)
 
     // Http health + monitoring + API
     const web = new ServiceWebServer({ port: process.env.PORT || 9091, appState})
@@ -199,14 +199,7 @@ async function init() {
             status: 'tbc',
         }))
     })
-    /* ** defined on the ServiceWebServer constructor
-    web.addRoute('GET', '/healthz', (req, res) => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            status: 'All Good'
-        }))
-    })
-    */
+
     web.createServer()
 
 
