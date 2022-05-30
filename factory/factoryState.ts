@@ -61,7 +61,8 @@ function workItemsReducer(): ReducerWithPassin<FactoryAction> {
         passInSlice: 'inventory_complete',
         initState: {
             "items" : {
-                type: StateStoreValueType.List
+                type: StateStoreValueType.List,
+                identifierFormat: {prefix: 'WI', zeroPadding: 5}
             }
         } as StateStoreDefinition,
         fn: async function (/*connection,*/ state, action, passInSlice?) {
@@ -132,7 +133,8 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
         passInSlice: 'workItems',
         initState: {
             "items" : {
-                type: StateStoreValueType.List
+                type: StateStoreValueType.List,
+                identifierFormat: {prefix: 'FO', zeroPadding: 5} 
             },
             "factoryStatus": {
                 type: StateStoreValueType.Hash,

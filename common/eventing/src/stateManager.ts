@@ -36,14 +36,18 @@ export interface ReducerWithPassin<A> {
 }
 
 export enum StateStoreValueType {
-    Hash,
-    List,
-    Counter
+    Hash = "hash",
+    List = "list",
+    Counter = "counter"
 }
 
 export interface StateStoreDefinition {
     [key:string] : {
         type: StateStoreValueType
+        identifierFormat?: {
+            prefix?: string,
+            zeroPadding?: number,
+        }
         values?: {
             [key: string] : string | number | ((o: any) => any)
         }

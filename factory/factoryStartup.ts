@@ -1,5 +1,5 @@
 import mongodb from 'mongodb';
-import { ObjectId } from 'bson'
+import { ObjectId, Timestamp } from 'bson'
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
 import { FactoryActionType, FactoryAction, FactoryStateManager, WorkItemStage, WorkItemObject } from './factoryState.js'
 
@@ -114,14 +114,14 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
 
     // now look for continuation again (as the statements above will have updated the processor state!)
     last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
-
+    const lastTimestamp = last_incoming_processed?.continuation?.startAtOperationTime as Timestamp
 
     console.log(`watchProcessorTriggerWithTimeStamp:  for [${factoryProcessor.name}]: Start watch "${watchCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
     cs.db.collection(watchCollection).watch(
         [
             { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
             // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
-            , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
+            , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument._ts': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
         { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
@@ -134,8 +134,12 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
 
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
-
-        await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
+         
+        if (lastTimestamp && lastTimestamp.comp(change.fullDocument._ts) === 0 ) {
+            console.log (`skipping, already processed ${lastTimestamp}`)
+        } else {
+            await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
+        }
     })
 
 
@@ -219,7 +223,11 @@ async function init() {
             state: factoryState.stateStore.serializeState
         }))
     })
-    //processorState.on('changes', (events) => web.sendAllClients({ type: "events", state: events[factoryState.name] }))
+    // Need this to capture processor Linked State changes
+    processorState.on('changes', (events) => 
+        events[factoryState.name] && web.sendAllClients({ type: "events", state: events[factoryState.name] })
+    )
+    // Need thos to capture direct factory state changes
     factoryState.on('changes', (events) => 
         web.sendAllClients({ type: "events", state: events[factoryState.name] })
     )

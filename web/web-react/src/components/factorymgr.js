@@ -77,7 +77,7 @@ function WorkItem({ resource, dismissPanel, refstores }) {
 }
 
 // Replace array entry at index 'index' with 'val'
-function imm_splice(array, index, val) { return [...(val ? [val] : []), ...array.slice(0, index), ...array.slice(index + 1)] }
+function imm_splice(array, index, val) { return [...array.slice(0, index), ...(val ? [val] : []), ...array.slice(index + 1)] }
 function apply_incset({ method, doc }, val) {
     return {
         ...val, ...Object.keys(doc).map(k => {
@@ -93,8 +93,12 @@ function stateReducer({ state, metadata }, action) {
     let newstate = {}
 
     const effectiveStateValue = (reducerKey, path) => {
+        //console.log(`effectiveStateValue reducerKey:${reducerKey} path:${path}`)
         return newstate[reducerKey] && newstate[reducerKey].hasOwnProperty(path) ? newstate[reducerKey][path] : state[reducerKey][path]
     }
+
+    console.log (state)
+    console.log(action)
 
     switch (action.type) {
         case 'snapshot':
@@ -102,20 +106,17 @@ function stateReducer({ state, metadata }, action) {
         case 'events':
 
             const statechanges = action.state
-
             for (let reducerKey of Object.keys(statechanges)) {
-                if (reducerKey === '_control') continue
-                // get the relevent section of the state
 
                 newstate = {...newstate, [reducerKey]: state[reducerKey]}
                 for (let update of statechanges[reducerKey]) {
                     console.assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
-                    const valueType = metadata.stateDefinition[reducerKey][update.path].type
+                    const {type, identifierFormat} = metadata.stateDefinition[reducerKey][update.path]
 
                     switch (update.method) {
                         case 'set':
-                            console.assert (valueType === "hash" || (valueType === "list" && update.filter && !isNaN(update.filter._id)) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
-                            if (valueType === "list") {
+                            console.assert (type === "hash" || (type === "list" && update.filter && !isNaN(update.filter._id)) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
+                            if (type === "list") {
                                 const idx = effectiveStateValue(reducerKey,update.path).findIndex(i => i._id === update.filter._id)
                                 console.assert (idx >= 0 , `applyToLocalState: Could not find item with id "${update.filter._id}" in list "${reducerKey}.${update.path}"`)
                                 newstate[reducerKey][update.path] = imm_splice(effectiveStateValue(reducerKey,update.path), idx, update.doc)
@@ -124,14 +125,19 @@ function stateReducer({ state, metadata }, action) {
                             }
                             break
                         case 'add':
-                            console.assert (valueType === "list", `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
+                            console.assert (type === "list", `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
                             console.assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
-                            newstate[reducerKey][update.path] = effectiveStateValue(reducerKey,update.path).concat(update.doc)
+                            
+                            const next_seq = effectiveStateValue(reducerKey, `${update.path}:_next_sequence`)
+                            const added = {_id: next_seq, ...(identifierFormat && { identifier: `${identifierFormat.prefix || ''}${identifierFormat.zeroPadding ?  String(next_seq).padStart(identifierFormat.zeroPadding, '0') : next_seq}`}),  ...update.doc}
 
+                            newstate[reducerKey][update.path] = effectiveStateValue(reducerKey,update.path).concat(added)
+                            newstate[reducerKey][`${update.path}:_next_sequence`] = next_seq + 1
                             break
+
                         case 'rm':
 
-                            console.assert (valueType === "list", `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
+                            console.assert (type === "list", `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
                             console.assert (update.filter && !isNaN(update.filter._id), `applyToLocalState: "Rm" requires "filter._id", "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
 
                             const idx = effectiveStateValue(reducerKey,update.path).findIndex(i => i._id === update.filter._id)
@@ -142,13 +148,14 @@ function stateReducer({ state, metadata }, action) {
                             break
                         case 'update':
 
-                            console.assert ((valueType === "list" && !isNaN(update.filter._id)) || (valueType === "hash" && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
+                            console.assert ((type === "list" && !isNaN(update.filter._id)) || (type === "hash" && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
                             console.assert (Object.keys(update.doc).reduce((a,i) => {
                                     return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
                                 }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
     
                             const existingkeyval = effectiveStateValue(reducerKey,update.path)
-                            const existing_doc = valueType === "list" ? existingkeyval.findIndex(i => i._id === update.filter._id) : existingkeyval
+                            const existing_idx = type === "list" ? existingkeyval.findIndex(i => i._id === update.filter._id) : -1
+                            const existing_doc = type === "list" ? (existing_idx >=0 ? existingkeyval[existing_idx]: undefined) : existingkeyval
     
                             console.assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (filter=${update.filter})`)
                             
@@ -167,18 +174,28 @@ function stateReducer({ state, metadata }, action) {
                             // Add the rest of the existing doc to the new doc
                             const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
 
-                            if (valueType === "list") {
+                            if (type === "list") {
                                 newstate[reducerKey][update.path] = imm_splice(existingkeyval, existingkeyval.findIndex(i => i._id === update.filter._id), merged)
                             } else {
                                 newstate[reducerKey][update.path] = merged
                             }
 
                             break
+                        case 'inc':
+                            console.assert (type === "counter", `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
+                            
+                            const inc = effectiveStateValue(reducerKey, update.path) + 1
+    
+                            newstate[reducerKey][update.path] = inc
+    
+                            break
                         default:
                             console.assert(false, `applyToLocalState: Cannot apply update seq=${statechanges._apply.current_head}, unknown method=${update.method}`)
                     }
                 }
             }
+
+            console.log(newstate)
 
             return { 
                 state: { ...state, ...newstate }, 
@@ -296,7 +313,7 @@ export function Inventory({ resource }) {
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Capacity</h4>
-                        <Text variant="superLarge" >{state.factory && state.factory.capacity_allocated}</Text>
+                        <Text variant="superLarge" >{state.factory && state.factory.factoryStatus.capacity_allocated}</Text>
                         <Text >available 5</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
@@ -315,7 +332,7 @@ export function Inventory({ resource }) {
                             {state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage)).map((o, i) =>
                                 <Stack key={i} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { margin: '5px 0', backgroundColor: "white" } }}>
 
-                                    <Label variant="small">Workitem Number {o.status.workItemId || "<TBC>"}</Label>
+                                    <Label variant="small">Workitem Number {o.identifier || "<TBC>"}</Label>
                                     {
                                         o.status.failed &&
                                         <MessageBar messageBarType={MessageBarType.severeWarning}>
@@ -326,7 +343,7 @@ export function Inventory({ resource }) {
                                     <Stack horizontal tokens={{ childrenGap: 3 }}>
                                         <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "40%", backgroundColor: "rgb(255, 244, 206)" } }}>
                                             <Text variant="xSmall">Id: {o.id}</Text>
-                                            <Text variant="xSmall">Spec: <Link route="/o" urlid={o.spec.doc_id}><Text variant="xSmall">open</Text></Link></Text>
+                                            <Text variant="xSmall">Spec: <Link route="/o" urlid={'1'}><Text variant="xSmall">open</Text></Link></Text>
                                         </Stack>
                                         <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >
                                             <Text variant="xSmall">Stage: {metadata.stage_txt[o.status.stage]}</Text>
@@ -351,8 +368,8 @@ export function Inventory({ resource }) {
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Capacity</h4>
-                        <Text variant="superLarge" >{state.factory && state.factory.capacity_allocated}</Text>
-                        <Text >used {state.factory && state.factory.capacity_allocated} / available 5</Text>
+                        <Text variant="superLarge" >{5 - (state.factory && state.factory.factoryStatus.capacity_allocated || 0)}</Text>
+                        <Text >Allocated {state.factory && state.factory.factoryStatus.capacity_allocated} </Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Throughput</h4>
@@ -370,7 +387,7 @@ export function Inventory({ resource }) {
                             {state.factory && state.factory.items.filter(i => stages.includes(i.stage)).map((o, i) =>
                                 <Stack key={i} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
 
-                                    <Label variant="small">picking id {o.id || "<TBC>"}</Label>
+                                    <Label variant="small">picking id {o.identifier || "<TBC>"}</Label>
                                     {
                                         o.failed &&
                                         <MessageBar messageBarType={MessageBarType.severeWarning}>

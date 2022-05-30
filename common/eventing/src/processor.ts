@@ -410,7 +410,7 @@ export class Processor<T> extends EventEmitter {
         return fnMiddleware(ctx, p.options).then((r) => {
             this._active.delete(ctx._id)
             // NEED to return await next in workflow step to get "r"
-            console.log(`handleResponse r=${JSON.stringify(r)}`)
+            // console.log(`handleResponse r=${JSON.stringify(r)}`)
         }).catch((err) => {
             console.error(err)
         })
