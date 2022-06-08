@@ -95,7 +95,7 @@ export function OrderMgr({ resource }) {
 
                 <Stack horizontal tokens={{ childrenGap: 5, padding: 0 }}>
 
-                    {[[[0, 1, 2], "Pre-Processing"], [[3, 4, 5], "Picking"], [[6], "Shipping"], [[7], "Complete"]].map(([stages, desc], idx) =>
+                    {[[[0, 1, 2], "Pre-Processing"], [[3, 4, 5], "Picking"], [[6], "Shipping"], [[7], "Complete"], [[8], "Failed"]].map(([stages, desc], idx) =>
                         <Stack.Item key={idx} align="stretch" grow styles={{ root: { background: 'rgb(225, 228, 232)', padding: 5 } }}>
                             <h4>{desc}</h4>
                             {state.orders && state.orders.items.filter(i => stages.includes(i.status.stage)).map((o, i) =>

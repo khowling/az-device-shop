@@ -1,7 +1,7 @@
 import { Atomic, AtomicInterface } from './atomic.js'
 import { StateStore } from './stateStore.js'
 
-import mongodb from 'mongodb'
+import mongodb, { ChangeStream } from 'mongodb'
 const { MongoClient } = mongodb
 
 import { ObjectId } from 'bson'
@@ -90,6 +90,8 @@ export class EventStoreConnection extends EventEmitter {
         return await this.initFromDB(client.db(), null, reset)
     }
 
+    // rollForwardState
+    // This function will hydrate the state of the passed in stateStores from the event store
     async rollForwardState(stateStores: StateStore[], additionalFn?: (changedataResults) => Promise<void>): Promise<number> {
 
         let processed_seq = this.sequence
@@ -121,5 +123,30 @@ export class EventStoreConnection extends EventEmitter {
         }
         return this.sequence
     
+    }
+
+    // stateFollower
+    // ONLY use this function to provide an upto-date ReadOnly Cache of the passed in state store
+    stateFollower(stateStores: StateStore[]) : ChangeStream {
+        const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
+        
+        return this.db.collection(this.collection).watch([
+            { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { "fullDocument.partition_key": this.tenentKey }, { "fullDocument.sequence": { $gt: this.sequence } }] } },
+            { $project: { '_id': 1, 'fullDocument': 1, 'ns': 1, 'documentKey': 1 } }
+        ],
+        { fullDocument: 'updateLookup' }
+        ).on('change', async change => {
+            //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
+            const eventCompleteDoc = change.fullDocument
+            const { _id, partition_key, sequence, ...changedata } = eventCompleteDoc
+            
+            for (let key of Object.keys(changedata)) {
+    
+                if (stateStoreByName.hasOwnProperty(key)) {
+                    await stateStoreByName[key].apply(changedata[key])
+                }
+            }
+
+        })
     }
 }

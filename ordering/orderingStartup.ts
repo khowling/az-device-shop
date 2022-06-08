@@ -24,8 +24,10 @@ async function allocateInventry(ctx, next) {
 }
 
 async function picking(ctx, next) {
+    // check result of allocateInventry action
+    const { failed, message } = ctx.lastLinkedRes.orders.merged.status
     console.log(`picking forward ctx.order_id=${ctx.order_id}`)
-    return await next({ type: OrderActionType.StatusUpdate, _id: ctx.order_id, status: { stage: OrderStage.PickingReady } })
+    return await next(!failed ? { type: OrderActionType.StatusUpdate, _id: ctx.order_id, status: { stage: OrderStage.PickingReady } } : null, failed && {complete: true} as ProcessorOptions)
 }
 
 async function waitforPickingComplete(ctx, next) {
@@ -42,7 +44,7 @@ async function shipping(ctx, next) {
 
 async function complete(ctx, next) {
     console.log(`complete forward`)
-    return await next({ type: OrderActionType.StatusUpdate, id: ctx.order_id, status: { stage: OrderStage.Complete } })
+    return await next({ type: OrderActionType.StatusUpdate, _id: ctx.order_id, status: { stage: OrderStage.Complete } })
 }
 
 // ---------------------------------------------------------------------------------------
@@ -58,7 +60,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     appState.log(`orderingStartup (2):  create ordering processor "orderProcessor" & add workflow tasks`)
     const orderProcessor = new Processor('emeaprocessor_v001', cs, { linkedStateManager: orderState })
     // add connection to ctx, to allow middleware access, (maybe not required!)
-    orderProcessor.context.connection = cs
+    orderProcessor.context.esConnection = cs
     // add workflow actions
     orderProcessor.use(validateOrder)
     orderProcessor.use(allocateInventry)
@@ -75,7 +77,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     }, 5000)
 
 
-    const invCompleteCollection = 'inventory_complete'
+    const invCompleteCollection = 'inventory_complete' // has sequence
     appState.log(`orderingStartup 4): reading and watching "${invCompleteCollection}"`)
     
     if (true) { // Check if no continuation, read watchCollection from seqenuce, or the start of the collection 
@@ -83,6 +85,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
 
         // No oplog continuation, so instead of starting the watch from the current position
         if (!continuation) {
+            appState.log(`orderingStartup 4): reading and watching "${invCompleteCollection}, starting from sequence ${sequence}`)
             await cs.db.collection(invCompleteCollection).createIndex({ sequence: 1 })
 
             const cursor = await cs.db.collection(invCompleteCollection).aggregate(
@@ -91,9 +94,9 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
                 ].concat({ $sort: { sequence: 1 } } as any)
             )
         
-            while (cursor.hasNext()) {
-                const doc = await cursor.next()
-                await orderState.dispatch({ type: OrderActionType.InventryNew, /* inventoryId: doc.inventoryId,*/ spec: doc.spec, trigger: { sequence: doc.sequence } })
+            while (await cursor.hasNext()) {
+                const invCompleteDoc = await cursor.next()
+                await orderState.dispatch({ type: OrderActionType.InventryNew, /* inventoryId: doc.inventoryId,*/ invCompleteDoc, trigger: { sequence: invCompleteDoc.sequence } })
             }
 
         }
@@ -102,21 +105,23 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     //assert(!(last_inventory_trigger && last_inventory_trigger.factory_events_sequence), `orderingProcessor (10):  start watch "collection" for NEWINV. resume cannot be a sequence`)
     const { sequence, continuation } = orderState.stateStore.getValue('inventory', 'last_incoming_processed')
 
+    appState.log(`orderingStartup 4): reading and watching "${invCompleteCollection}, starting watch sequence sequence=${sequence}, continuation=${continuation}`)
     cs.db.collection(invCompleteCollection).watch([
         { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(sequence ? { 'fullDocument.sequence': { $gt: sequence } } as any : []) } },
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
     ],
         { fullDocument: "updateLookup", ...(continuation && { ...continuation }) }
     ).on('change', async change => {
-        const { sequence } = change.fullDocument
-        console.log(`watchDispatchWithSequence collection="${invCompleteCollection}": change _id=${JSON.stringify(change._id)} (sequence=${sequence})`)
-        await orderState.dispatch({ type:  OrderActionType.InventryNew, spec: change.fullDocument.spec, trigger: { sequence, continuation: { /* startAfter */ resumeAfter: change._id } } })
+        const invCompleteDoc = change.fullDocument
+        console.log(`watchDispatchWithSequence collection="${invCompleteCollection}": change _id=${JSON.stringify(change._id)} (invCompleteDoc.sequence=${invCompleteDoc.sequence})`)
+        await orderState.dispatch({ type:  OrderActionType.InventryNew, invCompleteDoc, trigger: { sequence: invCompleteDoc.sequence, continuation: { /* startAfter */ resumeAfter: change._id } } })
     })
 
 
-
- 
-    const orderSpecCollection = 'orders_spec', filter = { "status": 30 }
+    // /////////////////////////////////////////////////////////////////////////////
+    // If no continuation, read any checked out documents from "orders_spec" using , then start a watch!
+    // When checkout, web sets status=30 && $currentDate: { "_checkoutTimeStamp": { $type: "timestamp" } }, can use this for continuation
+    const orderSpecCollection = 'orders_spec', filter = { "status": 30, "_checkoutTimeStamp": {$ne:null}}
     appState.log(`orderingStartup 5): reading and watching "${orderSpecCollection}"`)
 
     let last_incoming_processed = orderProcessor.getProcessorState('last_incoming_processed')
@@ -125,17 +130,17 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
 
         // No oplog continuation, so instead of starting the watch from the current position, read the collection from the sequence (or the start of the file)
         // inventory_spec & order_spec, nether have 'sequence' fields, so order by '_ts' Timestamp
-        await cs.db.collection(orderSpecCollection).createIndex({ '_ts': 1 })
+        await cs.db.collection(orderSpecCollection).createIndex({ '_checkoutTimeStamp': 1, "status": 1})
 
         // Need aggretate to allow for ordering!
         const cursor = await cs.db.collection(orderSpecCollection).aggregate([
                 { $match: { $and: [{ 'partition_key': cs.tenentKey}, filter] } },
-                { $sort: { '_ts': 1 } } 
+                { $sort: { '_checkoutTimeStamp': 1 } } 
         ])
     
-        while ( await cursor.hasNext()) {
+        while (await cursor.hasNext()) {
             const doc = await cursor.next()
-            await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime: doc._ts } })
+            await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime: doc._checkoutTimeStamp } })
         }
     }
 
@@ -146,9 +151,9 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     console.log(`factoryStartup (6):  for [${orderProcessor.name}]: Start watch "${orderSpecCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
     cs.db.collection(orderSpecCollection).watch(
         [
-            { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
+            { $match: { $and: [{ 'operationType': { $in: ['insert','update', 'replace'] } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
             // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
-            , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument._ts': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
+            , { $project: { 'ns': 1, 'documentKey': 1,  "operationType": 1 , 'fullDocument._checkoutTimeStamp': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
         { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
@@ -162,7 +167,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
          
-        if (lastTimestamp && lastTimestamp.comp(change.fullDocument._ts) === 0 ) {
+        if (lastTimestamp && lastTimestamp.comp(change.fullDocument._checkoutTimeStamp) === 0 ) {
             console.log (`skipping, already processed ${lastTimestamp}`)
         } else {
             await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
@@ -244,7 +249,8 @@ async function init() {
                     'PickingAccepted',
                     'PickingComplete',
                     'Shipped',
-                    'Complete']
+                    'Complete',
+                    'Failed']
             },
             state: orderState.stateStore.serializeState
         }))

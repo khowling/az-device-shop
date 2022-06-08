@@ -45,8 +45,8 @@ async function completeInventoryAndFinish(ctx, next) {
     const result = await ctx.esConnection.db.collection("inventory_complete").updateOne(
         {sequence: completeInvSeq}, { "$set": {
             sequence: completeInvSeq,
+            identifier: 'INV' + String(completeInvSeq).padStart(5, '0'),
             partition_key: ctx.esConnection.tenentKey,
-            inventoryId: 'INV' + String(completeInvSeq).padStart(5, '0'),
             spec: ctx.spec,
             workItem_id: ctx.wi_id
         }},
