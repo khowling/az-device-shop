@@ -194,7 +194,7 @@ async function init() {
         process.exit()
     })
 
-    let { submitFn, orderState, processorState } = await orderingStartup(await connection.init(true), appState)
+    let { submitFn, orderState, processorState } = await orderingStartup(await connection.init(false), appState)
 
     // Http health + monitoring + API
     const web = new ServiceWebServer({ port: process.env.PORT || 9090, appState })
