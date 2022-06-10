@@ -27,7 +27,7 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 
 
 // Mongo require
-import mongodb from 'mongodb'
+import mongodb, {ChangeStream, ChangeStreamDocument, ChangeStreamUpdateDocument} from 'mongodb'
 const { MongoClient, Timestamp } = mongodb
 import { ObjectId } from 'bson'
 
@@ -507,7 +507,7 @@ async function init() {
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1, ...(!USE_COSMOS && {"operationType": 1 } ) }}
     ],
         { fullDocument: "updateLookup" }
-    ).on('change', async change => {
+    ).on('change', async (change: ChangeStreamUpdateDocument): Promise<void>  => {
 
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
@@ -517,7 +517,7 @@ async function init() {
             console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
             process.exit()
         }
-    })
+    }) as ChangeStream
 
 
     // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud

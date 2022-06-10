@@ -7,7 +7,11 @@
         "**/out"
     ],
     "compilerOptions": {
+        "lib": [
+            "es2021"
+        ],
         "module": "nodenext",
+        "target": "es2021",
         "sourceMap": true,
         "declaration": true,
         "paths": {

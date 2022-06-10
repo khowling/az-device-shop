@@ -1,7 +1,7 @@
 import { Atomic, AtomicInterface } from './atomic.js'
 import { StateStore } from './stateStore.js'
 
-import mongodb, { ChangeStream } from 'mongodb'
+import mongodb, { ChangeStream, ChangeStreamInsertDocument } from 'mongodb'
 const { MongoClient } = mongodb
 
 import { ObjectId } from 'bson'
@@ -135,7 +135,7 @@ export class EventStoreConnection extends EventEmitter {
             { $project: { '_id': 1, 'fullDocument': 1, 'ns': 1, 'documentKey': 1 } }
         ],
         { fullDocument: 'updateLookup' }
-        ).on('change', async change => {
+        ).on('change', async (change: ChangeStreamInsertDocument): Promise<void> => {
             //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
             const eventCompleteDoc = change.fullDocument
             const { _id, partition_key, sequence, ...changedata } = eventCompleteDoc
@@ -147,6 +147,6 @@ export class EventStoreConnection extends EventEmitter {
                 }
             }
 
-        })
+        }) as ChangeStream
     }
 }

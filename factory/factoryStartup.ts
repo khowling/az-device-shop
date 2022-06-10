@@ -1,4 +1,4 @@
-import mongodb from 'mongodb';
+import mongodb, { ChangeStream, ChangeStreamInsertDocument} from 'mongodb';
 import { ObjectId, Timestamp } from 'bson'
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
 import { FactoryActionType, FactoryAction, FactoryStateManager, WorkItemStage, WorkItemObject } from './factoryState.js'
@@ -125,7 +125,7 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
         ],
         { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
-    ).on('change', async change => {
+    ).on('change', async (change: ChangeStreamInsertDocument): Promise<void> => {
         // change._id == event document includes a resume token as the _id field
         // change.clusterTime == 
         // change.opertionType == "insert"
@@ -140,7 +140,7 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
         } else {
             await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
         }
-    })
+    }) as ChangeStream
 
 
     appState.log(`factoryStartup: FINISHED`, true)

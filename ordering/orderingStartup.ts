@@ -1,4 +1,4 @@
-import mongodb from 'mongodb';
+import mongodb, {ChangeStream, ChangeStreamInsertDocument } from 'mongodb';
 import { ObjectId, Timestamp } from 'bson';
 import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
 import { OrderActionType, OrderStateManager, OrderStage, OrderObject } from './orderingState.js'
@@ -111,11 +111,11 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1 } }
     ],
         { fullDocument: "updateLookup", ...(continuation && { ...continuation }) }
-    ).on('change', async change => {
+    ).on('change', async (change: ChangeStreamInsertDocument): Promise<void> => {
         const invCompleteDoc = change.fullDocument
         console.log(`watchDispatchWithSequence collection="${invCompleteCollection}": change _id=${JSON.stringify(change._id)} (invCompleteDoc.sequence=${invCompleteDoc.sequence})`)
         await orderState.dispatch({ type:  OrderActionType.InventryNew, invCompleteDoc, trigger: { sequence: invCompleteDoc.sequence, continuation: { /* startAfter */ resumeAfter: change._id } } })
-    })
+    }) as ChangeStream
 
 
     // /////////////////////////////////////////////////////////////////////////////
@@ -157,7 +157,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
         ],
         { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
-    ).on('change', async change => {
+    ).on('change', async (change) : Promise<void> => {
         // change._id == event document includes a resume token as the _id field
         // change.clusterTime == 
         // change.opertionType == "insert"
@@ -172,7 +172,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
         } else {
             await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
         }
-    })
+    }) as ChangeStream<any>
 
     appState.log(`orderingStartup: FINISHED`, true)
     return { submitFn, orderState, processorState: orderProcessor.stateManager }
