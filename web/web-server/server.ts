@@ -560,6 +560,7 @@ async function init() {
 
     await connection.rollForwardState([orderState.stateStore])
     const changeStream = connection.stateFollower([orderState.stateStore])
+    appState.log(`init(): Init order status complete`, true)
     app.context.orderStateStore = orderState.stateStore
 }
 
