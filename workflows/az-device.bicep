@@ -51,9 +51,10 @@ resource fnstoreContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
   name: 'az-shop-images'
 }
 
+@description('Create Serverless Mongo DB database')
+param cosmosServerless bool = true
 
-
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2022-02-15-preview' = {
   name: '${name}-${uniqueSuffix}'
   kind: 'MongoDB'
   location: location
@@ -70,13 +71,17 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
     ]
     databaseAccountOfferType: 'Standard'
     apiProperties: {
-      serverVersion: '4.0'
+      serverVersion: '4.2'
     }
-    capabilities: [
+    capabilities: concat([
       {
         name: 'DisableRateLimitingResponses'
       }
-    ]
+    ], cosmosServerless ? [
+      {
+        name: 'EnableServerless'
+      }
+    ] : [])
   }
 }
 
@@ -86,14 +91,14 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2021-06-15' = {
 param throughput int = 400
 param dbname string = 'az-shop'
 
-resource mongoDB 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2021-06-15' = {
+resource mongoDB 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2022-02-15-preview' = {
   parent: cosmosAccount
   name: dbname
   properties: {
     resource: {
       id: dbname
     }
-    options: {
+    options: cosmosServerless ? json('null') :  {
       throughput: throughput
     }
   }
@@ -110,7 +115,7 @@ var azShopCollections = [
   'order_events'
 ]
 
-resource mongoColl 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2021-06-15' = [for collName in azShopCollections: {
+resource mongoColl 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2022-02-15-preview' = [for collName in azShopCollections: {
   parent: mongoDB
   name: collName
   properties: {
