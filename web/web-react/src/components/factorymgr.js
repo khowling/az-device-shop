@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Link } from './router.js'
 
 import { _fetchit, _suspenseFetch, _suspenseWrap } from '../utils/fetch.js'
-import { /*DetailsListLayoutMode, SelectionMode, DetailsList,*/ ProgressIndicator, Label, PrimaryButton, DefaultButton, Separator, MessageBar, MessageBarType, Panel, PanelType, Slider, Dropdown, Stack, Text } from '@fluentui/react'
+import {  ProgressIndicator, Label, PrimaryButton, DefaultButton, Separator, MessageBar, MessageBarType, Panel, PanelType, Slider, Dropdown, Stack, Text } from '@fluentui/react'
+import { stateReducer } from '../utils/stateStore.js'
 
 function WorkItem({ resource, dismissPanel, refstores }) {
     const { status, result } = resource.read()
@@ -75,125 +76,6 @@ function WorkItem({ resource, dismissPanel, refstores }) {
         </Stack>
     )
 }
-
-// Replace array entry at index 'index' with 'val'
-function imm_splice(array, index, val) { return [...(val ? [val] : []), ...array.slice(0, index), ...array.slice(index + 1)] }
-function apply_incset({ method, doc }, val) {
-    return {
-        ...val, ...Object.keys(doc).map(k => {
-            return {
-                [k]: method === 'inc' ? doc[k] + val[k] : doc[k]
-            }
-        }).reduce((a, i) => { return { ...a, ...i } }, {})
-    }
-}
-
-function stateReducer({ state, metadata }, action) {
-
-    switch (action.type) {
-        case 'snapshot':
-            return { state: action.state, metadata: action.metadata }
-        case 'events':
-            // array of changes:
-            // kind: string;
-            // metadata: {
-            //     sequence: number
-            //     type?: ChangeEventType;
-            //     doc_id: string;
-            // };
-            // status: OrderStatus | InventoryStatus
-
-            const statechanges = action.state
-            const _control = statechanges._control
-
-            console.assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
-            let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
-
-            for (let stateKey of Object.keys(statechanges)) {
-                if (stateKey === '_control') continue
-                // get the relevent section of the state
-                let reducerKeyState = state[stateKey]
-
-                for (let i = 0; i < statechanges[stateKey].length; i++) {
-                    const update = statechanges[stateKey][i]
-                    let pathKeyState = update.path ? reducerKeyState[update.path] : reducerKeyState
-
-                    switch (update.method) {
-                        case 'inc':
-                        case 'set':
-                            if (update.filter) { // array
-                                console.assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                                const
-                                    filter_key = Object.keys(update.filter)[0], filter_val = update.filter[filter_key],
-                                    update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-                                console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "UpdatesMethod.Inc|UpdatesMethod.Set" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                                pathKeyState = imm_splice(pathKeyState, update_idx, apply_incset(update, pathKeyState[update_idx]))
-
-                            } else { // object
-                                pathKeyState = apply_incset(update, pathKeyState)
-                            }
-                            break
-                        case 'add':
-                            console.assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
-                            pathKeyState = [...pathKeyState, update.doc]
-                            break
-                        case 'rm':
-                            console.assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Rm" to non-Array on "${stateKey}"`)
-                            console.assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                            const
-                                filter_key = Object.keys(update.filter)[0],
-                                filter_val = update.filter[filter_key],
-                                update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-                            console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                            pathKeyState = imm_splice(pathKeyState, update_idx, null)
-                            break
-                        case 'merge':
-                            if (update.filter) { // array
-                                console.assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
-                                const
-                                    filter_key = Object.keys(update.filter)[0],
-                                    filter_val = update.filter[filter_key],
-                                    update_idx = pathKeyState.findIndex(i => i[filter_key] === filter_val)
-
-                                console.assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
-                                const new_doc_updates = Object.keys(update.doc).map(k => {
-                                    return {
-                                        [k]:
-                                            update.doc[k] && Object.getPrototypeOf(update.doc[k]).isPrototypeOf(Object) && pathKeyState[update_idx][k] && Object.getPrototypeOf(pathKeyState[update_idx][k]).isPrototypeOf(Object) ?
-                                                { ...pathKeyState[update_idx][k], ...update.doc[k] } : update.doc[k]
-                                    }
-                                }).reduce((a, i) => { return { ...a, ...i } }, {})
-
-                                const new_doc = { ...pathKeyState[update_idx], ...new_doc_updates }
-                                pathKeyState = imm_splice(pathKeyState, update_idx, new_doc)
-                            } else {
-                                console.assert(false, 'applyToLocalState, "UpdatesMethod.Update" requires a filter (its a array operator)')
-                            }
-                            break
-                        default:
-                            console.assert(false, `applyToLocalState: Cannot apply update seq=${statechanges._apply.current_head}, unknown method=${update.method}`)
-                    }
-
-                    if (update.path) {
-                        // if path, the keystate must be a object
-                        reducerKeyState = { ...reducerKeyState, [update.path]: pathKeyState }
-                    } else {
-                        // keystate could be a object or value or array
-                        reducerKeyState = pathKeyState
-                    }
-                }
-                newstate[stateKey] = reducerKeyState
-            }
-
-            return { state: { ...state, ...newstate }, metadata }
-        case 'closed':
-            // socket closed, reset state
-            return { state: {}, metadata: {} }
-        default:
-            throw new Error(`unknown action type ${action.type}`);
-    }
-}
-
 
 
 export function Inventory({ resource }) {
@@ -295,7 +177,7 @@ export function Inventory({ resource }) {
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Capacity</h4>
-                        <Text variant="superLarge" >{state.factory && state.factory.capacity_allocated}</Text>
+                        <Text variant="superLarge" >{state.factory && state.factory.factoryStatus.capacity_allocated}</Text>
                         <Text >available 5</Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
@@ -312,9 +194,9 @@ export function Inventory({ resource }) {
                         <Stack.Item key={idx} align="stretch" grow styles={{ root: { background: 'rgb(225, 228, 232)', padding: 5 } }}>
                             <h4>{desc}</h4>
                             {state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage)).map((o, i) =>
-                                <Stack tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { margin: '5px 0', backgroundColor: "white" } }}>
+                                <Stack key={i} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { margin: '5px 0', backgroundColor: "white" } }}>
 
-                                    <Label variant="small">Workitem Number {o.status.workItemId || "<TBC>"}</Label>
+                                    <Label variant="small">Workitem Number {o.identifier || "<TBC>"}</Label>
                                     {
                                         o.status.failed &&
                                         <MessageBar messageBarType={MessageBarType.severeWarning}>
@@ -325,7 +207,7 @@ export function Inventory({ resource }) {
                                     <Stack horizontal tokens={{ childrenGap: 3 }}>
                                         <Stack tokens={{ childrenGap: 1, padding: 2 }} styles={{ root: { minWidth: "40%", backgroundColor: "rgb(255, 244, 206)" } }}>
                                             <Text variant="xSmall">Id: {o.id}</Text>
-                                            <Text variant="xSmall">Spec: <Link route="/o" urlid={o.spec.doc_id}><Text variant="xSmall">open</Text></Link></Text>
+                                            <Text variant="xSmall">Spec: <Link route="/o" urlid={'1'}><Text variant="xSmall">open</Text></Link></Text>
                                         </Stack>
                                         <Stack tokens={{ minWidth: "50%", childrenGap: 0, padding: 2 }} styles={{ root: { minWidth: "59%", backgroundColor: "rgb(255, 244, 206)" } }} >
                                             <Text variant="xSmall">Stage: {metadata.stage_txt[o.status.stage]}</Text>
@@ -350,8 +232,8 @@ export function Inventory({ resource }) {
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Capacity</h4>
-                        <Text variant="superLarge" >{state.factory && state.factory.capacity_allocated}</Text>
-                        <Text >used {state.factory && state.factory.capacity_allocated} / available 5</Text>
+                        <Text variant="superLarge" >{5 - (state.factory && state.factory.factoryStatus.capacity_allocated || 0)}</Text>
+                        <Text >Allocated {state.factory && state.factory.factoryStatus.capacity_allocated} </Text>
                     </Stack>
                     <Stack styles={{ root: { width: '100%' } }}>
                         <h4>Factory Throughput</h4>
@@ -367,9 +249,9 @@ export function Inventory({ resource }) {
                         <Stack.Item key={idx} align="stretch" grow styles={{ root: { background: 'rgb(225, 228, 232)', padding: 5 } }}>
                             <h4>{desc}</h4>
                             {state.factory && state.factory.items.filter(i => stages.includes(i.stage)).map((o, i) =>
-                                <Stack tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
+                                <Stack key={i} tokens={{ minWidth: "100%", childrenGap: 0, childrenMargin: 3 }} styles={{ root: { backgroundColor: "white" } }}>
 
-                                    <Label variant="small">picking id {o.id || "<TBC>"}</Label>
+                                    <Label variant="small">picking id {o.identifier || "<TBC>"}</Label>
                                     {
                                         o.failed &&
                                         <MessageBar messageBarType={MessageBarType.severeWarning}>

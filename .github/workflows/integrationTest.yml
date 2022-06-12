@@ -19,7 +19,7 @@ jobs:
     - name: Start MongoDB
       uses: supercharge/mongodb-github-action@1.7.0
       with:
-        mongodb-version: '4.0'
+        mongodb-version: '4.2'
         mongodb-replica-set: rs0
     
     - name: Microservices build
@@ -43,11 +43,12 @@ jobs:
         npx pm2 start ./pm2.config.js --only blob
         # Wait for azurite to launch, then create container
         sleep 2
-        AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
+        az storage container create  --connection-string "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;" -n az-shop-images
 
         # Start everything
         npx pm2 start ./pm2.config.js
 
+        sleep 5
         # Print logs
         npx pm2 logs --nostream
 
@@ -55,5 +56,11 @@ jobs:
 
       run: |
         npx playwright test
-    
+
+    - name: Archive Playwright
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playright-results
+        path: test-results
  

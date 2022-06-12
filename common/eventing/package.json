@@ -12,10 +12,6 @@
       "types": "./lib/processor.d.ts",
       "import": "./lib/processor.js"
     },
-    "./processor-actions": {
-      "types": "./lib/processorActions.d.ts",
-      "import": "./lib/processorActions.js"
-    },
     "./state": {
       "types": "./lib/stateManager.d.ts",
       "import": "./lib/stateManager.js"

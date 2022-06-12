@@ -34,7 +34,7 @@ nodejs >= 16
 
 ### MongoDB
 
-Install and run mongo using a replicaset.  A _replica set_ in MongoDB is a group of mongod processes that maintain a syncronised copy of the same data set to provide redundancy and high availability  Replicasets are required to allow the programmer to use the _Change Streams_ feature.
+Install and run mongo, (minimum version 4.2) using a replicaset.  A _replica set_ in MongoDB is a group of mongod processes that maintain a syncronised copy of the same data set to provide redundancy and high availability  Replicasets are required to allow the programmer to use the _Change Streams_ feature.
 
 One member is deemed the _primary node_, receiving all write operations, while the other nodes are deemed secondary nodes.  The secondaries replicate the primary’s oplog and apply the operations to their data sets such that the secondaries’ data sets reflect the primary’s data set.  When a primary does not communicate with the other members for 10seconds, an eligible secondary calls for an election to nominate itself as the new primary
 
@@ -70,30 +70,30 @@ sh ./workflows/dev.1.build.sh
 Create a local environment file `./env_local` and populate with the required environment variables to run the microservices services locally:
 
 
-  ```
-  #  Variables for the local azurite blob storage service
-  STORAGE_ACCOUNT="devstoreaccount1"
-  STORAGE_CONTAINER="az-shop-images"
-  STORAGE_MASTER_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-  #  Variables for the local mongodb
-  MONGO_DB="mongodb://localhost:27017/dbdev?replicaSet=rs0"
-  USE_COSMOS="false"
-  ```
+```
+#  Variables for the local azurite blob storage service
+STORAGE_ACCOUNT="devstoreaccount1"
+STORAGE_CONTAINER="az-shop-images"
+STORAGE_MASTER_KEY="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+#  Variables for the local mongodb
+MONGO_DB="mongodb://localhost:27017/dbdev?replicaSet=rs0"
+USE_COSMOS="false"
+```
 
 Now launch the microservices using the node process manager `pm2`
 
 
 NOTE: First time only, run to create the storage container:
 
-    ```
-    # Mkdir for `azurite` storage local emulator
-    mkdir ./__blobstorage__
-    # Start azurity only
-    npx pm2 start ./pm2.config.js --only blob
-    # Wait for azurite to launch, then create container
-    sleep 2
-    AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" az storage container create -n az-shop-images
-    ```
+```
+# Mkdir for `azurite` storage local emulator
+mkdir ./__blobstorage__
+# Start azurity only
+npx -y pm2 start ./pm2.config.js --only blob
+# Wait for azurite to launch, then create container
+sleep 2
+az storage container create --connection-string "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;" -n az-shop-images
+```
 
 All other times:
 

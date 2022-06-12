@@ -27,24 +27,24 @@ export function MyImage({ image, ...rest }) {
     if (image) {
         if (image.url) {
             return (
-                <img src={image.url} alt="" {...rest} />
+                <img loading="lazy" src={image.url} alt="" {...rest} />
             )
         } else if (image.pathname) 
             return (
                 <TenentContext.Consumer>
                     {tenent => { return (
-                        <img src={`/api/file/${image.pathname}`} alt="" {...rest} />
+                        <img loading="lazy" src={`/api/file/${image.pathname}`} alt="" {...rest} />
                     )}}
                 </TenentContext.Consumer>
             )
         else {
             return (
-                <img src={"http://placehold.it/50x50"} alt="" {...rest} />
+                <img loading="lazy" src={"http://placehold.it/50x50"} alt="" {...rest} />
             )
         }
     } else {
         return (
-            <img src={"http://placehold.it/50x50"} alt="" {...rest} />
+            <img loading="lazy" src={"http://placehold.it/50x50"} alt="" {...rest} />
         )
     }
 }
@@ -240,7 +240,7 @@ export function EditImage({ result_image, root = false, onChange }) {
                 </a>
             }
 
-            <TextField key="image_text" required prefix="must be https" errorMessage={!validImage && 'https url required'} name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />
+            <TextField key="image_text" prefix="must be https" errorMessage={!validImage && 'https url required'} name="imageUrl" value={imageUrl} onBlur={_onImageUrlChange} onChange={(e, val) => setImageUrl(val)} required={imageTypeUrl} styles={{ root: { display: imageTypeUrl ? "block" : "none" } }} />
             <DefaultButton key="image_butt" iconProps={{ iconName: 'upload' }} styles={{ root: { display: imageTypeUrl ? "none" : "block" } }} onClick={_clickFile} >Upload file</DefaultButton>
         </Stack>
     )

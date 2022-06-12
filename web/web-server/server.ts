@@ -14,6 +14,10 @@ import Joi from 'joi'
 import jwkToPem from 'jwk-to-pem'
 import jws from 'jws'
 
+import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
+import { OrderStateManager } from "@az-device-shop/ordering"
+
+
 const app_host_url = process.env.APP_HOST_URL
 const client_id = process.env.B2C_CLIENT_ID
 const b2c_tenant = process.env.B2C_TENANT
@@ -23,8 +27,7 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 
 
 // Mongo require
-import mongodb from 'mongodb'
-const { MongoClient, Timestamp } = mongodb
+import {MongoClient, Timestamp, ChangeStream, ChangeStreamUpdateDocument} from 'mongodb'
 import { ObjectId } from 'bson'
 
 const MongoURL = process.env.MONGO_DB
@@ -183,6 +186,18 @@ interface DbObject {
     value?: any;
 }
 
+function webToDBValidate(storedef, webdoc, create_id_ifmissing = false) {
+    const { _id, ...body } = webdoc
+    const { value, error } = storedef.schema.validate(body, { allowUnknown: false })
+    return { 
+        ...(_id ? { _id: new ObjectId(_id)} : create_id_ifmissing && { _id: new ObjectId() }),
+        value: !error && Object.keys(value).reduce((a,c) => {
+            return c.endsWith('_ref') ? {...a,  [`${c.slice(0, -4)}_id`] : new ObjectId(value[c]._id)} : {...a, [c]: value[c]}
+        }, {}), 
+        error 
+    }
+}
+
 function webToDb (webdoc: any, store: string, userId: string) : DbObject {
 
     
@@ -191,25 +206,25 @@ function webToDb (webdoc: any, store: string, userId: string) : DbObject {
     const storedef = StoreDef[store]
     if (!storedef) return {error: `unknown store: ${store}`}
 
-    const { _id, ...body } = webdoc
-    const { value, error } = storedef.schema.validate(body, { allowUnknown: false })
+    const { _id, value, error } = webToDBValidate(storedef, webdoc)
     if (error) return {error: `document not valid: ${error}`}
 
     return {
         collection: storedef.collection, 
-        ...(_id && { _id: new ObjectId(_id)}),
+        ...(_id && { _id }),
         value: { 
             ...(!_id && {
                 _id: new ObjectId(), 
                 _ts: new Timestamp(0,0), 
                 _createdBy: userId, 
                 owner: { _id: userId}
-            }), 
-            _lastModified: new Timestamp(0,0), 
+            }),
+            // Timestamp(0,0) *only* works on Inserts, for updates, it is taken literally 
+            /*
+            _lastModified: new Timestamp(), 
             _lastModifiedBy:  userId,
-            ...Object.keys(value).reduce((a,c) => {
-                return c.endsWith('_ref') ? {...a,  [`${c.slice(0, -4)}_id`] : new ObjectId(value[c]._id)} : {...a, [c]: value[c]}
-            }, {})
+            */
+            ...value
         }
     }
 
@@ -237,7 +252,7 @@ const FetchOperation = {
         const orders = await ctx.db.collection(StoreDef["orders"].collection).find({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: { $gte: 30 }, partition_key: ctx.tenentKey }, { projection: StoreProjections["orders"] }).toArray()
 
         return orders.map(o => {
-            const orderState = ctx.orderState ? ctx.orderState.stateStore.state.orders.items.find(os => o._id.equals(os.spec._id)) : { status: { error: `orderState not initialied` } }
+            const orderState = ctx.orderStateStore ? ctx.orderStateStore.getValue('orders', 'items').find(os => o._id.equals(os.spec._id)) : { status: { error: `orderState not initialied` } }
             return orderState ? { ...o, orderState: orderState.status } : o
         })
 
@@ -311,8 +326,8 @@ const FetchOperation = {
                 let fetch_promises: Array<Promise<any>> = []
                 for (let refstore of componentFetch.refstores) {
                     if (refstore.orderState) {
-                        if (ctx.orderState) {
-                            fetch_promises.push(Promise.resolve(ctx.orderState.stateStore.state[refstore.store]))
+                        if (false) {
+                            fetch_promises.push(Promise.resolve(ctx.orderStateStore.stateStore.state[refstore.store]))
                         } else {
                             console.error(`Got "refstore.orderState" request for compoent, but "ctx.orderState" not initialised`)
                         }
@@ -408,7 +423,7 @@ async function serve_static(ctx, next) {
 
 import {ApplicationState} from "@az-device-shop/eventing/webserver"
 
-import { order_state_startup } from './orderingFollower.js'
+//import { order_state_startup } from './orderingFollower.js'
 const app = new Koa();
 
 async function init() {
@@ -491,7 +506,7 @@ async function init() {
         { $project: { "_id": 1, "fullDocument": 1, "ns": 1, "documentKey": 1, ...(!USE_COSMOS && {"operationType": 1 } ) }}
     ],
         { fullDocument: "updateLookup" }
-    ).on('change', async change => {
+    ).on('change', async (change: ChangeStreamUpdateDocument): Promise<void>  => {
 
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
@@ -501,7 +516,7 @@ async function init() {
             console.error(`TENENT RESET - Server needs to be restarted.  Ending process`)
             process.exit()
         }
-    })
+    }) as ChangeStream
 
 
     // DEVELOPMENT ONLY, only for running react frontend locally on developer workstation and server in cloud
@@ -529,11 +544,23 @@ async function init() {
 
     // Init order status (dont await, incase no tenent! )
     appState.log(`init(): Init order status`)
+
+
+    /*
     order_state_startup({db: app.context.db, tenent: app.context.tenent }).then(val => {
         appState.log(`init(): Init order status complete`, true)
         app.context.orderState = val
     })
+    */
+    appState.log(`Initilise EventStoreConnection with 'order_events'`)
+    const connection = await new EventStoreConnection(null, 'order_events').initFromDB(db, app.context.tenent)
+    appState.log(`Initilise orderingStartup`)
+    const orderState = new OrderStateManager('emeaordering_v0', connection)
 
+    await connection.rollForwardState([orderState.stateStore])
+    const changeStream = connection.stateFollower([orderState.stateStore])
+    appState.log(`init(): Init order status complete`, true)
+    app.context.orderStateStore = orderState.stateStore
 }
 
 // TODO - I want to re-implement this so goes into client state cookie??
@@ -906,13 +933,13 @@ const api = new Router({ prefix: '/api' })
     })
     .post('/cartadd', async function (ctx, next) {
         console.log(`add product to cart ${ctx.session && JSON.stringify(ctx.session)}`)
-        const {_id, value, error, collection} = webToDb (ctx.request.body, "order_line", ctx.session.auth ? ctx.session.auth.sub : ctx.session._id )
+        const { _id, value, error } = webToDBValidate ( StoreDef["order_line"], ctx.request.body, true ) as { _id?: any, value: any, error: any }
         if (error) throw new Error(error)
         const partition_key = ctx.tenentKey
 
         if (!error) {
-            const ref_product = await ctx.db.collection(StoreDef["products"].collection).findOne({_id: value.product_id}, { projection: { "price": 1, "active": 1 } })
-            ctx.assert(ref_product, 400, "Cannot find product")
+            const ref_product = value.product_id && await ctx.db.collection(StoreDef["products"].collection).findOne({_id: value.product_id}, { projection: { "price": 1, "active": 1 } })
+            ctx.assert(ref_product, 400, `Cannot find product ${value.product_id}`)
             ctx.assert(ref_product.price === value.recorded_item_price, 400, "Incorrect Price, please refresh your page")
             const line_total = ref_product.price * 1
             const res = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate(
@@ -920,12 +947,17 @@ const api = new Router({ prefix: '/api' })
                     partition_key, 
                     owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, 
                     owner_type: ctx.session.auth ? "user" : "session", 
-                    status: StoreDef["orders"].status.ActiveCart },
+                    status: StoreDef["orders"].status.ActiveCart 
+                },
                 { 
                     $inc: { items_count: 1 }, 
-                    $push: {  items: {...value, line_total} } 
+                    $push: {  items: {_id, ...value, line_total} } 
                 },
-                { upsert: true, returnOriginal: false, returnNewDocument: true })
+                { 
+                    upsert: true, 
+                    returnOriginal: false,
+                    returnNewDocument: true 
+                })
 
             ctx.assert(res.ok === 1, 500, `error`)
             ctx.body = { items_count: res.value && res.value.items_count || 1 }
@@ -937,7 +969,9 @@ const api = new Router({ prefix: '/api' })
     })
     .put('/cartdelete/:itemid', async function (ctx, next) {
         try {
-            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $inc: { items_count: -1 }, $pull: { 'items': { _id: new ObjectId(ctx.params.itemid) } } })
+            ctx.body = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate(
+                { owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, 
+                { $inc: { items_count: -1 }, $pull: { 'items': { _id: new ObjectId(ctx.params.itemid) } } })
             ctx.status = 201;
             await next()
         } catch (e) {
@@ -952,7 +986,17 @@ const api = new Router({ prefix: '/api' })
             try {
                 const { value, error } = Joi.object({ 'shipping': Joi.string().valid('A', 'B').required() }).validate(ctx.request.body, { allowUnknown: true })
 
-                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate({ owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, { $set: { _ts: new Timestamp(0,0), status: StoreDef["orders"].status.NewOrder, checkout_date: Date.now(), shipping: value } })
+                // Timestamp(0,0) *only* works on Inserts, for updates, it is taken literally
+                const order = await ctx.db.collection(StoreDef["orders"].collection).findOneAndUpdate(
+                    { owner: { _id: ctx.session.auth ? ctx.session.auth.sub : ctx.session._id }, status: StoreDef["orders"].status.ActiveCart, partition_key: ctx.tenentKey }, 
+                    [{ 
+                        $set: { 
+                            _checkoutTimeStamp: "$$CLUSTER_TIME",
+                            status: StoreDef["orders"].status.NewOrder, 
+                            checkout_date: "$$NOW", 
+                            shipping: value 
+                        } 
+                    }])
                 ctx.body = { _id: order.value._id }
                 await next()
             } catch (e) {
@@ -1012,8 +1056,8 @@ const api = new Router({ prefix: '/api' })
         }
     })
     .get('/onhand/:sku', async function (ctx, next) {
-        if (ctx.orderState) {
-            ctx.body = ctx.orderState.stateStore.state.inventory.onhand.find(i => i.productId === ctx.params.sku) || { qty: 0 }
+        if (ctx.orderStateStore) {
+            ctx.body = ctx.orderStateStore.getValue('inventory', 'onhand').find(i => i.productId === ctx.params.sku) || { qty: 0 }
         } else {
             ctx.throw(400, `/onhand : "orderState"  not initialised`)
         }

@@ -20,6 +20,7 @@ const config: PlaywrightTestConfig = {
 
   use: {
     // Configure browser and context here
+    screenshot: 'only-on-failure'
   },
 };
 export default config;
