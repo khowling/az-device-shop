@@ -114,7 +114,7 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     ).on('change', async (change: ChangeStreamInsertDocument): Promise<void> => {
         const invCompleteDoc = change.fullDocument
         console.log(`watchDispatchWithSequence collection="${invCompleteCollection}": change _id=${JSON.stringify(change._id)} (invCompleteDoc.sequence=${invCompleteDoc.sequence})`)
-        await orderState.dispatch({ type:  OrderActionType.InventryNew, invCompleteDoc, trigger: { sequence: invCompleteDoc.sequence, continuation: { /* startAfter */ resumeAfter: change._id } } })
+        await orderState.dispatch({ type:  OrderActionType.InventryNew, invCompleteDoc, trigger: { sequence: invCompleteDoc.sequence, continuation: { startAfter: change._id } } })
     }) as ChangeStream
 
 
@@ -125,7 +125,6 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     appState.log(`orderingStartup 5): reading and watching "${orderSpecCollection}"`)
 
     let last_incoming_processed = orderProcessor.getProcessorState('last_incoming_processed')
-    let startAtOperationTime : Timestamp
     
     if (!last_incoming_processed.continuation) {
 
@@ -139,10 +138,15 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
                 { $sort: { '_checkoutTimeStamp': 1 } } 
         ])
     
+        let startAtOperationTime : Timestamp
         while (await cursor.hasNext()) {
             const doc = await cursor.next()
             startAtOperationTime = doc._checkoutTimeStamp
             await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime } })
+        }
+
+        if (startAtOperationTime) {
+            last_incoming_processed = { continuation: { startAtOperationTime } }
         }
     }
 
@@ -150,14 +154,14 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
     //last_incoming_processed = orderProcessor.getProcessorState('last_incoming_processed')
     //const lastTimestamp = last_incoming_processed?.continuation?.startAtOperationTime as Timestamp
 
-    console.log(`factoryStartup (6):  for [${orderProcessor.name}]: Start watch "${orderSpecCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from startAtOperationTime=${startAtOperationTime})`)
+    console.log(`factoryStartup (6):  for [${orderProcessor.name}]: Start watch "${orderSpecCollection}"  continuation=${JSON.stringify(last_incoming_processed.continuation)}`)
     cs.db.collection(orderSpecCollection).watch(
         [
             { $match: { $and: [{ 'operationType': { $in: ['insert','update', 'replace'] } }, { 'fullDocument.partition_key': cs.tenentKey }].concat(filter ? Object.keys(filter).reduce((acc, i) => { return { ...acc, ...{ [`fullDocument.${i}`]: filter[i] } } }, {}) as any : []) } }
             // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
             , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument._checkoutTimeStamp': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
-        { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation ? last_incoming_processed.continuation : startAtOperationTime && {startAtOperationTime} ) }
+        { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
     ).on('change', async (change) : Promise<void> => {
         // change._id == event document includes a resume token as the _id field
@@ -169,10 +173,10 @@ async function orderingStartup(cs: EventStoreConnection, appState: ApplicationSt
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
          
-        if (startAtOperationTime && startAtOperationTime.comp(change.fullDocument._checkoutTimeStamp) === 0 ) {
-            console.log (`skipping, already processed ${startAtOperationTime}`)
+        if (last_incoming_processed?.continuation?.startAtOperationTime && last_incoming_processed.continuation.startAtOperationTime.gte(change.fullDocument._checkoutTimeStamp)) {
+            console.log (`skipping, already processed ${last_incoming_processed.continuation.startAtOperationTime}`)
         } else {
-            await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
+            await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { startAfter: change._id } })
         }
     }) as ChangeStream<any>
 

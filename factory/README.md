@@ -27,7 +27,7 @@ factoryStartup
 
     - triggered from 'inventory_spec' requests
         - mongoWatchProcessorTrigger ()
-        - processor.initiateWorkflow({ trigger: doc._id}, { continuation: { resumeAfter: doc._id } })
+        - processor.initiateWorkflow({ trigger: doc._id}, { continuation: { startAfter: doc._id } })
 
 
     - workflow for factory orders
@@ -60,7 +60,7 @@ common
 
    -  initiateWorkflow(new_ctx, trigger)
       - new_ctx = the context to set for the workflow stages { trigger: { doc_id:xx}}
-      - trigger =  what triggered the worklow (allows re-starting) : { continuation: { resumeAfter: doc._id } }
+      - trigger =  what triggered the worklow (allows re-starting) : { continuation: { startAfter: doc._id } }
       - ProcessorStateManager.dispatch({type: ProcessActionType.New, options: {new_ctx}, trigger})
          - flux.ts/StateManager/dispatch
             - reduce {action} to [changes] on current state

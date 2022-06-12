@@ -27,8 +27,7 @@ const client_secret = encodeURIComponent(process.env.B2C_CLIENT_SECRET as string
 
 
 // Mongo require
-import mongodb, {ChangeStream, ChangeStreamDocument, ChangeStreamUpdateDocument} from 'mongodb'
-const { MongoClient, Timestamp } = mongodb
+import {MongoClient, Timestamp, ChangeStream, ChangeStreamUpdateDocument} from 'mongodb'
 import { ObjectId } from 'bson'
 
 const MongoURL = process.env.MONGO_DB
