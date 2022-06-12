@@ -93,7 +93,8 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     appState.log(`factoryStartup (4): Starting new ${watchCollection} watch"`)
 
     let last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
-    
+    let startAtOperationTime : Timestamp
+
     if (!last_incoming_processed.continuation) {
 
         // No oplog continuation, so instead of starting the watch from the current position, read the collection from the sequence (or the start of the file)
@@ -108,13 +109,14 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
     
         while ( await cursor.hasNext()) {
             const doc = await cursor.next()
-            await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime: doc._ts } })
+            startAtOperationTime = doc._ts
+            await submitFn({ trigger: { doc_id: doc._id.toHexString() } }, { continuation: { startAtOperationTime } })
         }
     }
 
     // now look for continuation again (as the statements above will have updated the processor state!)
-    last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
-    const lastTimestamp = last_incoming_processed?.continuation?.startAtOperationTime as Timestamp
+    //last_incoming_processed = factoryProcessor.getProcessorState('last_incoming_processed')
+    //const lastTimestamp = last_incoming_processed?.continuation?.startAtOperationTime as Timestamp
 
     console.log(`factoryStartup (6):  for [${factoryProcessor.name}]: Start watch "${watchCollection}"  continuation=${last_incoming_processed.continuation} (if continuation undefined, start watch from now)`)
     cs.db.collection(watchCollection).watch(
@@ -123,7 +125,7 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
             // https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb/change-streams?tabs=javascript#current-limitations
             , { $project: { 'ns': 1, 'documentKey': 1,  ...(!process.env.USE_COSMOS && {"operationType": 1 } ), 'fullDocument._ts': 1, 'fullDocument.status': 1, 'fullDocument.partition_key': 1 } }
         ],
-        { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation && last_incoming_processed.continuation) }
+        { fullDocument: 'updateLookup', ...(last_incoming_processed.continuation ? last_incoming_processed.continuation : startAtOperationTime && {startAtOperationTime} ) }
         // By default, watch() returns the delta of those fields modified by an update operation, Set the fullDocument option to "updateLookup" to direct the change stream cursor to lookup the most current majority-committed version of the document associated to an update change stream event.
     ).on('change', async (change: ChangeStreamInsertDocument): Promise<void> => {
         // change._id == event document includes a resume token as the _id field
@@ -135,8 +137,8 @@ async function factoryStartup(cs: EventStoreConnection, appState: ApplicationSta
         // Typescript error: https://jira.mongodb.org/browse/NODE-3621
         const documentKey  = change.documentKey  as unknown as { _id: ObjectId }
          
-        if (lastTimestamp && lastTimestamp.comp(change.fullDocument._ts) === 0 ) {
-            console.log (`skipping, already processed ${lastTimestamp}`)
+        if (startAtOperationTime && startAtOperationTime.comp(change.fullDocument._ts) === 0 ) {
+            console.log (`skipping, already processed ${startAtOperationTime}`)
         } else {
             await submitFn({ trigger: { doc_id: documentKey._id.toHexString() } }, { continuation: { /* startAfter */ resumeAfter: change._id } })
         }

@@ -7,7 +7,7 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch web (Full client build)",
+            "name": "Web - Full Build (local dependencies)",
             "program": "${workspaceFolder}/web-server/server.ts",
             "preLaunchTask": "build_all",
             "envFile": "${workspaceFolder}/../.env_local",
@@ -19,10 +19,22 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch web",
+            "name": "Web (local dependencies)",
             "program": "${workspaceFolder}/web-server/server.ts",
             "preLaunchTask": "npm: build - web-server",
             "envFile": "${workspaceFolder}/../.env_local",
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/web-server/lib/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+            ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Web (azure dependencies)",
+            "program": "${workspaceFolder}/web-server/server.ts",
+            "preLaunchTask": "npm: build - web-server",
+            "envFile": "${workspaceFolder}/../.env_azure",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/web-server/lib/*.js",
                 "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"

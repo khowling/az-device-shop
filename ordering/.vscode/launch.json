@@ -7,10 +7,22 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Ordering",
+            "name": "Ordering (local dependencies)",
             "program": "${workspaceFolder}/orderingStartup.ts",
             "preLaunchTask": "npm: build",
             "envFile": "${workspaceFolder}/../.env_local",
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/lib/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+            ],
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Ordering (azure dependencies)",
+            "program": "${workspaceFolder}/orderingStartup.ts",
+            "preLaunchTask": "npm: build",
+            "envFile": "${workspaceFolder}/../.env_azure",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/lib/*.js",
                 "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
