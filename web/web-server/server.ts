@@ -746,6 +746,11 @@ const authroutes = new Router({ prefix: "/connect/microsoft" })
 
 
 import { SASProtocol, BlobSASPermissions, generateBlobSASQueryParameters, ContainerClient, BlobServiceClient, BlockBlobClient, StorageSharedKeyCredential } from "@azure/storage-blob"
+import { AbortController } from "@azure/abort-controller";
+
+// https://docs.microsoft.com/en-us/javascript/api/@azure/abort-controller/?view=azure-node-latest
+const abortSignal = AbortController.timeout(5 * 1000);
+
 // https://github.com/Azure/azure-sdk-for-js/tree/@azure/storage-blob_12.8.0/sdk/storage/storage-blob/#import-the-package
 
 function getFileClient(containerClient : ContainerClient, store : string, filename: string) : BlockBlobClient {
@@ -1110,15 +1115,21 @@ const api = new Router({ prefix: '/api' })
     .get('/file/:folder/:id', async function (ctx, next) {
         const containerClient: ContainerClient = ctx.containerClient
         const pathname = ctx.params.folder + '/' + ctx.params.id
-        const downloadBlockBlobResponse = await containerClient.getBlockBlobClient(pathname).download()
+        // https://docs.microsoft.com/en-us/javascript/api/@azure/storage-blob/blockblobclient?view=azure-node-latest#@azure-storage-blob-blockblobclient-download
+        const downloadBlockBlobResponse = await containerClient.getBlockBlobClient(pathname).download(0,undefined/*, {abortSignal}*/)
         ctx.status = 200;
         ctx.response.set("content-type", downloadBlockBlobResponse.contentType);
 
         await new Promise((resolve, rej) => {
-            downloadBlockBlobResponse.readableStreamBody.pipe(ctx.res).on('finish', () => {
+            downloadBlockBlobResponse.readableStreamBody.pipe(ctx.res)
+            .on('finish', () => {
                 ctx.res.end()
                 resolve('done')
                 })
+            .on('abort', (e) => {
+                ctx.throw(400, `Aborted: ${JSON.stringify(e)}`)
+                resolve('done')
+            })
         })
         await next()
 /*
