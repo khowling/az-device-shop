@@ -6,11 +6,11 @@
 
 This repo is intended to showcase a complex web application example with reliable & scallable design patterns, that can be used to bootstap modern, complex, multi-service web application projects with multiple cross-functional squads. The Principles of the project (to consider if PR'ing) :
 
- :heavy_check_mark:  Mono-repo, any tech stack as long as the remaining principles not broken
- :heavy_check_mark:  Full offline (dockerless) innerloop development (easily running the whole app on a sinlge laptop)
- :heavy_check_mark:  Independent and mostly loosly coupled services
- :heavy_check_mark:  Performance, Scale-out and Reliability are top considerations for all components
- :heavy_check_mark:  Automated testing for PR confidence & independent environment deployment with blue-green workflows.
+ :heavy_check_mark:  Mono-repo, any tech stack as long as the remaining principles not broken  
+ :heavy_check_mark:  Full offline (dockerless) innerloop development (easily running the whole app on a sinlge laptop)  
+ :heavy_check_mark:  Independent and mostly loosly coupled services  
+ :heavy_check_mark:  Performance, Scale-out and Reliability are top considerations for all components  
+ :heavy_check_mark:  Automated testing for PR confidence & independent environment deployment with blue-green workflows  
 
 The example is sufficiently complex to address many real-world challanges that large-scale development projects will face.  The project is divided into independtly deployable and loosly coupled services that can be worked on my mulitple squads. Services can be fully developed locally using freely available open emulators & dependencies, and deployed to managed cloud services
 
