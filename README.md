@@ -1,25 +1,31 @@
 
 
-# Complex Web App Solution Design Sample 
+# Complex Web App Solution Sample 
 
  _Work in progress_
 
-This example web application is intended to higlight reliable, scallable development and design patterns, that can be used to bootstap modern complex solution designs. 
+This repo is intended to showcase a complex web application example with reliable & scallable design patterns, that can be used to bootstap modern, complex, multi-service web application projects with multiple cross-functional squads. The Principles of the project (to consider if PR'ing) :
 
-The example is sufficiently complex to address many real-world challanges that large-scale development projects will face.  The project is divided into independtly deployable services that can be worked on my mulitple squads. Services can be fully developed locally using freely available open emulators & dependencies, and deployed to managed cloud services
+ :heavy_check_mark:  Mono-repo, any tech stack as long as the remaining principles not broken  
+ :heavy_check_mark:  Full offline (dockerless) innerloop development (easily running the whole app on a sinlge laptop)  
+ :heavy_check_mark:  Independent and mostly loosly coupled services  
+ :heavy_check_mark:  Performance, Scale-out and Reliability are top considerations for all components  
+ :heavy_check_mark:  Automated testing for PR confidence & independent environment deployment with blue-green workflows  
 
-The example is a eCommerce app, in this mono-repo, there is a Web Frontend `./web` an Inventory `./factory` and Ording `./ordering` services.  
+The example is sufficiently complex to address many real-world challanges that large-scale development projects will face.  The project is divided into independtly deployable and loosly coupled services that can be worked on my mulitple squads. Services can be fully developed locally using freely available open emulators & dependencies, and deployed to managed cloud services
+
+The example is a eCommerce app, there is a Web Frontend `./web` service that services all UI interactions, a Factory `./factory` service that produces Stock to sell,  and a Ording `./ordering` service that processes the order workflow from inventory allocation, to delivery.  
 
 This example is opinionated, and has been created to hight the following architectural patterns
 
  :heavy_check_mark:  Cloud agnostic, open-source, open-protocols  
  :heavy_check_mark:  Streaming Server Side Rendering with React18 for site performance and SEO  
- :heavy_check_mark:  Mixture of CRUD and Event Sourcing patterns where needed
- :heavy_check_mark:  Deployable with SLA backed Messaging, Persistance, and Identity dependencies  
+ :heavy_check_mark:  Mixture of CRUD and Event Sourcing patterns
+ :heavy_check_mark:  Deployable to SLA backed Messaging, Persistance, and Identity services  
  :heavy_check_mark:  Complete with devops toolchain, real-time Monitoring and analytics  
   
 
-To keep the example Cloud Agnostic, continers is the deployment model, rarther than using cloud specific service abstractions (however, would like to move to server-side WebAssembly). Open APIs will be used for app dependencies where possible (Mongo APIs, OIDC), the exception will be the Blob storage API, but with a freely available local emulator [Azurite](https://github.com/azure/azurite)
+To keep the example Cloud Agnostic, continers is the deployment model, rarther than using cloud specific service abstractions (however, I would like to move to server-side WebAssembly in the future). Open APIs will be used for app dependencies where possible (Mongo APIs, OIDC), the exception will be the Blob storage API, but with a freely available local emulator [Azurite](https://github.com/azure/azurite)
 
 
 ![frontpage](docs/frontpage.png)

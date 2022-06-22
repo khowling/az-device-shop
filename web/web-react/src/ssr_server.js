@@ -85,9 +85,14 @@ export async function ssrRender(ctx, startURL, renderDataPromise) {
     return new Promise(async resolve => {
         let didError = false;
         console.log(`ssr_server.ts: ssrRender startURL=${startURL} with renderDataPromise`);
-        // <App 'hydrate_data'> is required for the hydration process, unfortunatly it requires an await, will not be required when move to server components
+        
+        // <App hydrate_data={serverInitialData} > is required for the hydration process, unfortunatly it requires an await, will not be required when move to server components
         // https://github.com/reactwg/react-18/discussions/37#discussioncomment-837686
-
+        // In a real app, you would instead use a data fetching library or Server Components for this.
+        // In a real implementation the data would be streamed with the HTML
+        
+        // Just Wait for the React built-in implementation to be ready
+        // https://github.com/reactwg/react-18/discussions/114
 
         stylesheet.reset();
         resetIds();
