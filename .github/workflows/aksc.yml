@@ -27,6 +27,6 @@ jobs:
       azureKeyvaultSecretsProvider: true
       createKV: true
     secrets:
-      AZURE_CLIENT_ID: {{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: {{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: {{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_CLIENT_ID: f1beb0ec-f9d6-4a33-aa4a-0999e7f4572f
+      AZURE_TENANT_ID: 72f988bf-86f1-41af-91ab-2d7cd011db47
+      AZURE_SUBSCRIPTION_ID: 95efa97a-9b5d-4f74-9f75-a3396e23344d
