@@ -11,8 +11,8 @@ jobs:
   reusable_workflow_job:
     uses: Azure/AKS-Construction/.github/workflows/reusable.yml@kh-postdeploy
     with:
-      rg: az-k8s-4soj-rg
-      resourceName: az-k8s-4soj
+      rg: az-k8s-bbkr-rg
+      resourceName: az-k8s-bbkr
       agentCount: 2
       upgradeChannel: stable
       JustUseSystemPool: true
@@ -26,7 +26,12 @@ jobs:
       dnsZoneId: /subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
       azureKeyvaultSecretsProvider: true
       createKV: true
+      ingress: contour
+      certEmail: kforce1234@gmail.com
+      monitor: oss
+      enableMonitorIngress: true
     secrets:
-      AZURE_CLIENT_ID: f1beb0ec-f9d6-4a33-aa4a-0999e7f4572f
+      AZURE_CLIENT_ID: cdc856c7-d7e9-478a-97e0-b52f408bd841
       AZURE_TENANT_ID: 72f988bf-86f1-41af-91ab-2d7cd011db47
       AZURE_SUBSCRIPTION_ID: 95efa97a-9b5d-4f74-9f75-a3396e23344d
+      USER_OBJECT_ID: bed2e035-578b-45d6-8a0b-b812c279195f
