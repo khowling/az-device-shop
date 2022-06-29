@@ -2,36 +2,35 @@ name: Deploy AKS-Construction
 
 on:
   workflow_dispatch:
-    inputs:
-      username:
-        required: false
-        type: string
 
 jobs:
   reusable_workflow_job:
-    uses: Azure/AKS-Construction/.github/workflows/reusable.yml@kh-postdeploy
+    uses: Azure/AKS-Construction/.github/workflows/reusable.yml@main
     with:
-      rg: az-k8s-bbkr-rg
-      resourceName: az-k8s-bbkr
-      agentCount: 2
+      rg: az-k8s-ha0x-rg
+      resourceName: az-k8s-ha0x
       upgradeChannel: stable
-      JustUseSystemPool: true
+      agentCountMax: 20
       custom_vnet: true
-      CreateNetworkSecurityGroups: true
       enable_aad: true
       AksDisableLocalAccounts: true
       enableAzureRBAC: true
-      registries_sku: Basic
+      registries_sku: Premium
+      omsagent: true
+      retentionInDays: 30
+      networkPolicy: azure
       azurepolicy: audit
-      dnsZoneId: /subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
+      authorizedIPRanges: "[\"5.67.72.204/32\"]"
+      ingressApplicationGateway: true
+      appGWcount: 0
+      appGWsku: WAF_v2
+      appGWmaxCount: 10
+      appgwKVIntegration: true
       azureKeyvaultSecretsProvider: true
       createKV: true
-      ingress: contour
-      certEmail: kforce1234@gmail.com
-      monitor: oss
-      enableMonitorIngress: true
+
     secrets:
-      AZURE_CLIENT_ID: cdc856c7-d7e9-478a-97e0-b52f408bd841
-      AZURE_TENANT_ID: 72f988bf-86f1-41af-91ab-2d7cd011db47
-      AZURE_SUBSCRIPTION_ID: 95efa97a-9b5d-4f74-9f75-a3396e23344d
-      USER_OBJECT_ID: bed2e035-578b-45d6-8a0b-b812c279195f
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      USER_OBJECT_ID: ${{ secrets.USER_OBJECT_ID }}
