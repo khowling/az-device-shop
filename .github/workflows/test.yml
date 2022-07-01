@@ -1,3 +1,5 @@
+name: reusable
+
 
 on:
   workflow_call:
@@ -10,7 +12,6 @@ on:
       rg:
         description: 'ResourceGroup name'
         required: true
-        default: 'az-k8s-aocq-rg'
         type: string
       resourceName:
         description: 'Unique name all your resources are based on'
@@ -166,7 +167,6 @@ on:
       dnsZoneId:
         description: 'dnsZoneId'
         required: false
-        default: '/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz'
         type: string
       ingressApplicationGateway:
         description: 'ingressApplicationGateway'
@@ -211,6 +211,15 @@ on:
         description: 'enableMonitorIngress'
         required: false
         type: boolean
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      USER_OBJECT_ID:
+        required: false
 
 
 jobs:
