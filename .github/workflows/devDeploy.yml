@@ -7,9 +7,9 @@ on:
         required: true
         default: 'true'
 
-  push:
+#  push:
 ## Post-PR approval, Deploy Helper to production
-    branches: [main]
+#    branches: [main]
 
 env:
   APP_NAME: "device-dev"
