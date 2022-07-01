@@ -1,5 +1,6 @@
+
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       templateVersion:
         description: 'Template Version'
