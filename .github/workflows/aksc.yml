@@ -1,4 +1,3 @@
-
 name: Deploy AKS-Construction
 
 on:
@@ -6,27 +5,13 @@ on:
 
 jobs:
   reusable_workflow_job:
-    uses: ./.github/workflows/test.yml
+    uses: Azure/AKS-Construction/.github/workflows/reusable.yml@kh-postdeploy
     with:
       rg: az-k8s-798c-rg
       resourceName: az-k8s-798c
-      agentCount: 2
-      upgradeChannel: stable
-      JustUseSystemPool: true
-      custom_vnet: true
-      CreateNetworkSecurityGroups: true
-      enable_aad: true
-      AksDisableLocalAccounts: true
-      enableAzureRBAC: true
-      registries_sku: Basic
-      azurepolicy: audit
-      dnsZoneId: /subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz
-      azureKeyvaultSecretsProvider: true
-      createKV: true
-      ingress: contour
-      certEmail: kforce1234@gmail.com
-      monitor: oss
-      enableMonitorIngress: true
+      templateParams: "resourceName=az-k8s-798c agentCount=2 upgradeChannel=stable JustUseSystemPool=true custom_vnet=true CreateNetworkSecurityGroups=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true registries_sku=Basic azurepolicy=audit dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz azureKeyvaultSecretsProvider=true createKV=true"
+      postScriptInvokeCommand: false
+      postScriptParams: "ingress=contour,certEmail=kforce1234@gmail.com,monitor=oss,enableMonitorIngress=true"
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
