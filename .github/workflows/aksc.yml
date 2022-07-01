@@ -9,11 +9,10 @@ jobs:
     with:
       rg: az-k8s-798c-rg
       resourceName: az-k8s-798c
-      templateParams: "resourceName=az-k8s-798c agentCount=2 upgradeChannel=stable JustUseSystemPool=true custom_vnet=true CreateNetworkSecurityGroups=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true registries_sku=Basic azurepolicy=audit dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz azureKeyvaultSecretsProvider=true createKV=true"
+      templateParams: "resourceName=az-k8s-798c agentCount=2 upgradeChannel=stable JustUseSystemPool=true custom_vnet=true CreateNetworkSecurityGroups=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true adminPrincipalId=${{ secrets.USER_OBJECT_ID }} registries_sku=Basic acrPushRolePrincipalId=${{ secrets.USER_OBJECT_ID }} azurepolicy=audit dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz azureKeyvaultSecretsProvider=true createKV=true kvOfficerRolePrincipalId=${{ secrets.USER_OBJECT_ID }}"
       postScriptInvokeCommand: false
       postScriptParams: "ingress=contour,certEmail=kforce1234@gmail.com,monitor=oss,enableMonitorIngress=true"
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      USER_OBJECT_ID: ${{ secrets.USER_OBJECT_ID }}
