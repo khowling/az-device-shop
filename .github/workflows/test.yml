@@ -15,6 +15,7 @@ jobs:
 
     steps:
       - name: Echo
+        env:
+          inputs_json: "${{ toJSON(inputs) }}"
         run: |
-        
-          echo "${{ toJSON(inputs) }}"
+          echo "$inputs_json"
