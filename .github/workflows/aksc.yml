@@ -6,10 +6,10 @@ on:
 
 jobs:
   reusable_workflow_job:
-    uses: Azure/AKS-Construction/.github/workflows/reusable.yml@kh-postdeploy
+    uses: Azure/AKS-Construction/.github/workflows/reusable.yml@main
     with:
-      rg: az-k8s-jv0k-rg
-      resourceName: az-k8s-jv0k
+      rg: az-k8s-798c-rg
+      resourceName: az-k8s-798c
       agentCount: 2
       upgradeChannel: stable
       JustUseSystemPool: true
