@@ -230,3 +230,6 @@ jobs:
       - name: Echo
         run: |
           echo "${{ toJSON(inputs) }}"
+      - name: Echo2
+        run: |
+          echo "${{ toJSON(inputs.*) }}"
