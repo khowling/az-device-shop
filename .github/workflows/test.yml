@@ -18,4 +18,4 @@ jobs:
         env:
           inputs_json: "${{ toJSON(inputs) }}"
         run: |
-          echo "$inputs_json"
+          echo "${{ toJSON(inputs) }}"
