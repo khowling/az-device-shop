@@ -1,20 +1,12 @@
 {
-  "name": "@az-device-shop/eventing",
+  "name": "@az-device-shop/workflow",
   "type": "module",
   "version": "1.0.0",
   "private": true,
   "exports": {
-    "./store-connection": {
-      "types": "./lib/eventStoreConnection.d.ts",
-      "import": "./lib/eventStoreConnection.js"
-    },
-    "./state": {
-      "types": "./lib/stateManager.d.ts",
-      "import": "./lib/stateManager.js"
-    },
-    "./webserver": {
-      "types": "./lib/ServiceWebServer.d.ts",
-      "import": "./lib/ServiceWebServer.js"
+    ".": {
+      "types": "./lib/processor.d.ts",
+      "import": "./lib/processor.js"
     }
   },
   "directories": {
@@ -45,6 +37,5 @@
     "mongodb": "^4.3.0",
     "subleveldown": "^6.0.1",
     "ws": "^8.4.0"
-  },
-  "main": "index.js"
+  }
 }

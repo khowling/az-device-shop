@@ -17,6 +17,11 @@ cd common/eventing
 #npm i
 npm run build
 
+echo "Build Workflow.."
+cd ../../common/workflow
+#npm i
+npm run build
+
 echo "Build Factory.."
 cd ../../factory 
 #npm i

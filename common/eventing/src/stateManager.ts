@@ -5,7 +5,7 @@ const { Timestamp } = mongodb
 
 import { StateStore, StateUpdates, UpdatesMethod, StateUpdateControl, JSStateStore } from './stateStore.js'
 import { LevelStateStore } from './levelStateStore.js'
-export { StateUpdates, UpdatesMethod }
+export { StateUpdates, UpdatesMethod, StateStore }
 
 export interface ReducerInfo {
     failed: boolean;

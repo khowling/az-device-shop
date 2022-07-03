@@ -7,6 +7,9 @@ RUN npm -g install npm@latest
 WORKDIR /usr/src/common/eventing
 COPY common/eventing/package*.json ./
 
+WORKDIR /usr/src/common/workflow
+COPY common/workflow/package*.json ./
+
 WORKDIR /usr/src/ordering
 COPY ordering/package*.json ./
 
@@ -27,6 +30,10 @@ WORKDIR /usr/src/common/eventing
 COPY common/eventing/ ./
 RUN npm run build
 
+WORKDIR /usr/src/common/workflow
+COPY common/workflow/ ./
+RUN npm run build
+
 WORKDIR /usr/src/ordering
 COPY ordering/ ./
 RUN npm run build
@@ -43,6 +50,9 @@ WORKDIR /usr/src/common/eventing
 COPY --from=build /usr/src/common/eventing/package*.json ./
 COPY --from=build /usr/src/common/eventing/lib/ ./lib
 
+WORKDIR /usr/src/common/workflow
+COPY --from=build /usr/src/common/workflow/package*.json ./
+COPY --from=build /usr/src/common/workflow/lib/ ./lib
 
 WORKDIR /usr/src/ordering
 COPY --from=build /usr/src/ordering/package*.json ./

@@ -1,6 +1,6 @@
 import mongodb, {ChangeStream, ChangeStreamInsertDocument } from 'mongodb';
 import { ObjectId, Timestamp } from 'bson';
-import { Processor, ProcessorOptions } from "@az-device-shop/eventing/processor"
+import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
 import { OrderActionType, OrderStateManager, OrderStage, OrderObject } from './orderingState.js'
 
 

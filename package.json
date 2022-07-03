@@ -2,6 +2,7 @@
   "name": "az-device-shop",
   "workspaces": [
     "common/eventing",
+    "common/workflow",
     "ordering",
     "factory",
     "web/web-react",

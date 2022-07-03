@@ -15,9 +15,8 @@ export interface ProcessorOptions {
     }
 }
 
-import { EventStoreConnection } from './eventStoreConnection.js'
-import { StateManager, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType } from './stateManager.js'
-import { StateStore, StateUpdates, UpdatesMethod } from './stateStore.js'
+import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
+import { StateManager, StateStore, StateUpdates, UpdatesMethod, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType } from '@az-device-shop/eventing/state'
 import { EventEmitter } from 'events'
 
 interface ProcessAction {

@@ -1,8 +1,8 @@
 
 
 import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor.js"
-import { EventStoreConnection } from './eventStoreConnection.js'
-import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod } from './stateManager.js'
+import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
+import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod } from '@az-device-shop/eventing/state'
 
 
 
