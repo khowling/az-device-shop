@@ -5,7 +5,7 @@ on:
 
 jobs:
   reusable_workflow_job:
-    uses: Azure/AKS-Construction/.github/workflows/reusable.yml@kh-postdeploy
+    uses: Azure/AKS-Construction/.github/workflows/AKSC_Deploy.yml@kh-postdeploy
     with:
       rg: az-k8s-798c-rg
       resourceName: az-k8s-798c
