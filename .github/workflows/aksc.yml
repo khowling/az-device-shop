@@ -5,13 +5,12 @@ on:
 
 jobs:
   reusable_workflow_job:
-    uses: Azure/AKS-Construction/.github/workflows/AKSC_Deploy.yml@kh-postdeploy
+    uses: Azure/AKS-Construction/.github/workflows/AKSC_Deploy.yml@gb-privatefqdn
     with:
-      rg: az-k8s-798c-rg
-      resourceName: az-k8s-798c
-      templateParams: "resourceName=az-k8s-798c agentCount=2 upgradeChannel=stable JustUseSystemPool=true custom_vnet=true CreateNetworkSecurityGroups=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true adminPrincipalId=_USER_OBJECT_ID_ registries_sku=Basic acrPushRolePrincipalId=_USER_OBJECT_ID_ azurepolicy=audit dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz azureKeyvaultSecretsProvider=true createKV=true kvOfficerRolePrincipalId=_USER_OBJECT_ID_"
+      rg: az-k8s-9bi0-rg
+      resourceName: az-k8s-9bi0
+      templateParams: "resourceName=az-k8s-9bi0 agentCount=2 upgradeChannel=stable JustUseSystemPool=true custom_vnet=true CreateNetworkSecurityGroups=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true adminPrincipalId=_USER_OBJECT_ID_ registries_sku=Basic acrPushRolePrincipalId=_USER_OBJECT_ID_ azurepolicy=audit dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz azureKeyvaultSecretsProvider=true createKV=true kvOfficerRolePrincipalId=_USER_OBJECT_ID_"
       postScriptParams: "ingress=contour,dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz,certEmail=kforce1234@gmail.com,monitor=oss,enableMonitorIngress=true"
-      postScriptInvokeCommand: true
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
