@@ -8,11 +8,9 @@ jobs:
     uses: Azure/AKS-Construction/.github/workflows/AKSC_Deploy.yml@main
     with:
       templateVersion: 0.8.8
-      rg: az-k8s-d6u3-rg
-      resourceName: az-k8s-d6u3
-      templateParams: resourceName=az-k8s-d6u3 agentCount=2 upgradeChannel=stable JustUseSystemPool=true custom_vnet=true CreateNetworkSecurityGroups=true bastion=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true adminPrincipalId=_USER_OBJECT_ID_ registries_sku=Premium acrPushRolePrincipalId=_USER_OBJECT_ID_ imageNames=["k8s.gcr.io/external-dns/external-dns:v0.11.0"] azureFirewalls=true certManagerFW=true privateLinks=true keyVaultIPAllowlist=["5.67.72.204/32"] networkPolicy=azure azurepolicy=deny enablePrivateCluster=true dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz ingressApplicationGateway=true appGWcount=0 appGWsku=WAF_v2 appGWmaxCount=10 keyVaultAksCSI=true keyVaultCreate=true keyVaultOfficerRolePrincipalId=_USER_OBJECT_ID_ acrPrivatePool=true
-      postScriptInvokeCommand: true
-      postScriptParams: "dnsZoneId=/subscriptions/95efa97a-9b5d-4f74-9f75-a3396e23344d/resourceGroups/kh-common/providers/Microsoft.Network/dnszones/labhome.biz,ingress=appgw,certEmail=kforce1234@gmail.com,monitor=oss,enableMonitorIngress=true"
+      rg: az-k8s-47by-rg
+      resourceName: az-k8s-47by
+      templateParams: resourceName=az-k8s-47by upgradeChannel=stable agentCountMax=20 custom_vnet=true enable_aad=true AksDisableLocalAccounts=true enableAzureRBAC=true adminPrincipalId=_USER_OBJECT_ID_ registries_sku=Premium acrPushRolePrincipalId=_USER_OBJECT_ID_ omsagent=true retentionInDays=30 networkPolicy=azure azurepolicy=audit authorizedIPRanges=["167.220.197.51/32"] ingressApplicationGateway=true appGWcount=0 appGWsku=WAF_v2 appGWmaxCount=10 appgwKVIntegration=true keyVaultAksCSI=true keyVaultCreate=true keyVaultOfficerRolePrincipalId=_USER_OBJECT_ID_
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
