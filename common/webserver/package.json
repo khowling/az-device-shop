@@ -1,12 +1,12 @@
 {
-  "name": "@az-device-shop/workflow",
+  "name": "@az-device-shop/webserver",
   "type": "module",
   "version": "1.0.0",
   "private": true,
   "exports": {
     ".": {
-      "types": "./lib/processor.d.ts",
-      "import": "./lib/processor.js"
+      "types": "./lib/webserver.d.ts",
+      "import": "./lib/webserver.js"
     }
   },
   "directories": {
@@ -28,9 +28,10 @@
   "homepage": "https://github.com/khowling/az-device-shop#readme",
   "description": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html",
   "devDependencies": {
+    "@types/ws": "^8.2.0",
     "typescript": "^4.8.3"
   },
   "dependencies": {
-    "mongodb": "^4.3.0"
+    "ws": "^8.4.0"
   }
 }

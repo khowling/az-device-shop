@@ -13,8 +13,8 @@ export interface ReducerInfo {
     message?: string;
 }
 
-export type ReducerReturn = [ReducerInfo, Array<StateUpdates>];
-export type ReducerReturnWithSlice = [ReducerInfo, Array<StateUpdates>][];
+export type ReducerReturn = [ReducerInfo, Array<StateUpdates>] | null;
+export type ReducerReturnWithSlice = Array<([ReducerInfo, Array<StateUpdates>] | null)>;
 
 export type ReducerFunction<A> = (state: StateStore, action: A) => Promise<ReducerReturn>;
 export type ReducerFunctionWithSlide<A> = (state: StateStore, action: A, passInSlice?: (state: StateStore, action?: A) => Promise<ReducerReturn> | Promise<ReducerReturnWithSlice>) => Promise<ReducerReturnWithSlice>;
@@ -67,13 +67,12 @@ interface ControlReducer {
 }
 */
 
-export interface StateManagerInterface {
+export interface StateManagerInterface extends EventEmitter {
     name: string;
     stateStore: StateStore;
     rootReducer: (state, action) => Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]>;
     dispatch(action, linkedStateAction?): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: ReducerInfo }]>
     stateStoreApply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
-    on(event: string, listener: Function): this;
 }
 
 import { EventEmitter } from 'events'

@@ -2,11 +2,31 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "npm: build",
+			"dependsOn": [
+				"npm: build - server",
+				"npm: build - ui"
+			]
+		},
+		{
 			"type": "npm",
 			"script": "build",
+			"options": {
+				"cwd": "${workspaceFolder}/ui"
+			},
 			"group": "build",
-			"problemMatcher": [ "$tsc" ],
-			"label": "npm: build",
+			"label": "npm: build - ui",
+		},
+		{
+			"type": "npm",
+			"script": "build",
+			"path": "server",
+			"group": "build",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"label": "npm: build - server",
+			"detail": "npx tsc"
 		}
 	]
 }

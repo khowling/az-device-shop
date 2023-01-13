@@ -48,7 +48,7 @@ async function complete(ctx, next) {
 }
 
 // ---------------------------------------------------------------------------------------
-import {ApplicationState, default as ServiceWebServer} from "@az-device-shop/eventing/webserver"
+import {ApplicationState, default as ServiceWebServer} from "@az-device-shop/webserver"
 import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
 
 async function orderingStartup(cs: EventStoreConnection, appState: ApplicationState) {

@@ -8,12 +8,14 @@
             "type": "node",
             "request": "launch",
             "name": "Factory (local dependencies)",
-            "program": "${workspaceFolder}/factoryStartup.ts",
+            "program": "${workspaceFolder}/server/factoryStartup.ts",
             "preLaunchTask": "npm: build",
             "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
-                "${workspaceFolder}/lib/*.js",
-                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+                "${workspaceFolder}/server/lib/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**",
+                "/home/kehowli/projects/az-device-shop/common/webserver/lib/**",
+                "/home/kehowli/projects/az-device-shop/common/workflow/lib/**"
             ],
         },
         {

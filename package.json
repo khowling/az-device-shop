@@ -4,9 +4,10 @@
     "common/eventing",
     "common/workflow",
     "ordering",
-    "factory",
-    "web/web-react",
-    "web/web-server"
+    "factory/server",
+    "factory/ui",
+    "shop/ui",
+    "shop/server"
   ],
   "devDependencies": {
     "@playwright/test": "^1.19.1",

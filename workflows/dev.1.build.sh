@@ -1,43 +1,47 @@
 #!/bin/bash
 set -e
 
-echo "Clean up.."
-rm -fr ./node_modules
-find . -name node_modules -type d -prune -exec rm -fr {} \;
+baseDir="${1:-$(pwd)}"
 
-find . -name lib -type d -prune -exec rm -fr {} \;
-find . -name out -type d -prune -exec rm -fr {} \;
 
-echo "Install Dependencies.."
+echo "Clean up [${baseDir}].."
+rm -fr $baseDir/node_modules
+find $baseDir -name node_modules -type d -prune -exec rm -fr {} \;
+
+find $baseDir -name lib -type d -prune -exec rm -fr {} \;
+find $baseDir -name out -type d -prune -exec rm -fr {} \;
+
+cd $baseDir
+echo "Install Dependencies [$(pwd)].."
 # legacy-peer-deps required for @fluentui to work with react18 :(
 npm i --legacy-peer-deps
 
 echo "Build Eventing.."
-cd common/eventing
-#npm i
-npm run build
+npm run build --workspace=common/eventing
 
 echo "Build Workflow.."
-cd ../../common/workflow
-#npm i
-npm run build
+npm run build --workspace=common/workflow
+
+#echo "Build Webserver.."
+#npm run build --workspace=common/webserver
 
 echo "Build Factory.."
-cd ../../factory 
-#npm i
+cd $baseDir/factory/ui
+npm run build
+cd $baseDir/factory/server
 npm run build
 
 echo "Build Ordering.."
-cd ../ordering
+cd $baseDir/ordering
 #npm i
 npm run build
 
-echo "Build Web.."
-cd ../web/web-react
+echo "Build Shop.."
+cd $baseDir/shop/ui
 #npm i --legacy-peer-deps
 npm run-script build_lib
 npm run-script build_assets_dev
 
-cd ../web-server
+cd $baseDir/shop/server
 #npm i 
 npm run build

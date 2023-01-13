@@ -1,0 +1,56 @@
+{
+  "name": "@az-device-shop/shop-ui",
+  "exports": {
+    ".": {
+      "types": "./src/ssr_server.d.ts",
+      "import": "./lib/ssr_server.js"
+    }
+  },
+  "main": "./lib/ssr_server.js",
+  "types": "./src/ssr_server.d.ts",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "PORT=8000 REACT_APP_ORDERING_PORT=9090 REACT_APP_SERVER_URL=http://localhost:3000 react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "build_assets_dev": "REACT_APP_ORDERING_PORT=9090 NODE_ENV=development node scripts/webpack-hydate-js.js",
+    "build_assets_prod": "NODE_ENV=production node scripts/webpack-hydate-js.js",
+    "build_lib": "rm -r ./lib; npx babel --config-file ./babel.config.json --out-dir lib ./src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/khowling/az-device-shop.git"
+  },
+  "eslintConfig": {
+    "extends": "react-app"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.15.7",
+    "@babel/core": "^7.16.0",
+    "@babel/preset-env": "^7.16.4",
+    "@babel/preset-react": "^7.16.0",
+    "babel-loader": "^8.2.3",
+    "rimraf": "^3.0.2",
+    "webpack": "^5.64.1"
+  },
+  "dependencies": {
+    "@fluentui/merge-styles": "^8.2.0",
+    "@fluentui/react": "^8.37.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "proxy": "http://localhost:3000"
+}

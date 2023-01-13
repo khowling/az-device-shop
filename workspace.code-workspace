@@ -1,32 +1,40 @@
 {
 	"folders": [
 		{
-			"name": "Common Eventing",
+			"name": "_eventing",
 			"path": "common/eventing"
 		},
 		{
-			"name": "Common Workflow",
+			"name": "_workflow",
 			"path": "common/workflow"
 		},
 		{
-			"name": "Ordering",
+			"name": "_webserver",
+			"path": "common/webserver"
+		},
+		{
+			"name": "ordering",
 			"path": "ordering"
 		},
 		{
-			"name": "Factory",
+			"name": "factory v2",
+			"path": "factoryv2"
+		},
+		{
+			"name": "factory",
 			"path": "factory"
 		},
 		{
-			"name": "Web",
-			"path": "web"
+			"name": "shop",
+			"path": "shop"
 		},
 		{
-			"name": "Root",
+			"name": "__full_project",
 			"path": "./"
 		}
 	],
 	"settings": {
 		"npm.packageManager": "npm",
-		"typescript.tsdk": "Root/node_modules/typescript/lib"
+		"typescript.tsdk": "factory v2/node_modules/typescript/lib"
 	}
 }
