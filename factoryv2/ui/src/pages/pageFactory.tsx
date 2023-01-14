@@ -3,10 +3,11 @@ import React, { useEffect, useState } from 'react';
 import { trpc } from '../utils/trpc';
 
 import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
-import type { AppRouter, ZodError, OrderState } from '../../../server/trcpRouter';
+import type { AppRouter, OrderState, FactoryMetaData } from '../../../server/index';
 import {SlideOut, DialogInterface} from '../components/slideout'
 import { Observable, observable } from '@trpc/server/observable';
 import OrderForm from './pageFactoryOrder';
+import { IAction, stateReducer } from '../utils/stateStore'
 
 // --------------------------------------------------------------- FACTORY
 interface ConnectedInfo {
@@ -24,6 +25,8 @@ interface ConnectedInfo {
   
   export function PageFactory() {
   
+    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: {}, metadata: {} } as { state: {[key: string]: OrderState}, metadata: FactoryMetaData})
+
     /* Ugly code to get rid of the trpc Observability wrapper */
     //type Output = RouterOutput['orderstate']['onAdd'];
     //type ObservableOutput = Extract<Output, Observable<any, any>>;
@@ -37,21 +40,18 @@ interface ConnectedInfo {
   
       
     // this returns a useEffect
-    trpc.orderstate.onAdd.useSubscription(undefined, {
+    trpc.factoryEvents.onAdd.useSubscription(undefined, {
       onStarted() {
         setConnected({status: ConnectedStatus.Connected})
       },
       onData(data) {
-        setRealtimeItems((p) => {
-          console.log (data)
-          return p.concat(data)
-        })
+        dispatchWorkitems(data as any )
       },
       onError(err) {
         setConnected({status: ConnectedStatus.Error, message: err.message})
         console.error('Subscription error:', err);
         // we might have missed a message - invalidate cache
-      },
+      }
     });
   
     useEffect(() => {
@@ -110,14 +110,14 @@ interface ConnectedInfo {
   
   
         <div className="mt-7 grid grid-cols-5 gap-1">
-          { ["keith", "wrgerg", "234234", "erwer","fwrerg"].map ((t,i) => 
+          { [[[0, 1, 2], "Processing"], [[3, 4], "In Factory"], [[5], metadata.stage_txt && metadata.stage_txt[5]], [[6], metadata.stage_txt && metadata.stage_txt[6]]].map (([stages, desc],idx) => 
           
-          <div key={i} className="basis-1/5">
-            <p className="text-center font-sans text-l uppercase font-bold bg-green-400 rounded-full mx-2 py-1">{t}</p>
+          <div key={idx} className="basis-1/5">
+            <p className="text-center font-sans text-l uppercase font-bold bg-green-400 rounded-full mx-2 py-1">{desc}</p>
             
             <div className="flex flex-col rounded-md bg-slate-50 gap-2 p-2">
   
-            { i === 0 &&
+            { idx === 0 &&
               <button onClick={() => setDialog({open: true})} className="hover:border-blue-500 hover:border-solid hover:bg-white hover:text-blue-500 group w-full flex flex-col items-center justify-center rounded-md border-2 border-dashed border-slate-300 text-sm leading-6 text-slate-900 font-medium py-3">
                 <svg className="group-hover:text-blue-500 mb-1 text-slate-400" width="20" height="20" fill="currentColor" aria-hidden="true">
                   <path d="M10 5a1 1 0 0 1 1 1v3h3a1 1 0 1 1 0 2h-3v3a1 1 0 1 1-2 0v-3H6a1 1 0 1 1 0-2h3V6a1 1 0 0 1 1-1Z" />
@@ -126,12 +126,12 @@ interface ConnectedInfo {
               </button>
               }
               
-              { ["item1", "item2", "item1", "item2"].map ((t,i2) => 
+              { state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage)).map((o, i) => 
                 
-                <button key={i2} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
+                <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                   <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
                     <div className="group-hover:text-white font-semibold text-slate-900">
-                        {t}
+                      {o.identifier || "<TBC>"} {o.id}
                     </div>
                     <dl className="mt-2 flex flex-wrap text-sm leading-6 font-medium text-slate-500">
                       <div>

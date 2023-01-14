@@ -20,6 +20,10 @@ import { ObjectId } from 'bson'
 
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { observable } from '@trpc/server/observable';
+import { ReducerInfo, StateStoreDefinition } from '@az-device-shop/eventing/state';
+
+//--------------------------------------
+export type ZodError = z.ZodError
 
 //------------------------------------
 
@@ -31,7 +35,7 @@ const esConnection = new EventStoreConnection(murl, 'factory_events')
 const factoryState = new FactoryStateManager('emeafactory_v0', esConnection)
 const factoryProcessor = new Processor('emeaprocessor_v001', esConnection, { linkedStateManager: factoryState })
 
-
+var submitFn : (update_ctx: any, trigger: any) => Promise<ReducerInfo> = async (update_ctx, trigger) => { throw new Error("submitFm not initialized") }
 
 
 //-----------------------------------
@@ -91,7 +95,7 @@ async function completeInventoryAndFinish(ctx: any, next: any) {
   return await next(/*{ type: FactoryActionType.TidyUp, _id: ctx.wi_id }*/)
 }
 
-
+factoryProcessor.context.esConnection = esConnection
 factoryProcessor.use(validateRequest)
 factoryProcessor.use(sendToFactory)
 factoryProcessor.use(waitforFactoryComplete)
@@ -133,9 +137,9 @@ function modelCRUDRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
          */
 
         const limit = input.limit ?? 50;
-        const projection = {name: 1,type: 1, tags:1 }
+        //const projection = {name: 1,type: 1, tags:1 }
 
-        const items = (await client.db().collection(coll).find({}, { limit, projection }).toArray()).map((d) => idTransform<ZType>(d))
+        const items = (await client.db().collection(coll).find({}, { limit /*, projection*/ }).toArray()).map((d) => idTransform<ZType>(d))
         return items
 
       }),
@@ -172,6 +176,14 @@ function modelCRUDRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
 export type OrderState = z.infer<typeof factoryOrderModel>
 
+export type FactoryMetaData = {
+  stateDefinition: {
+      [sliceKey: string]: StateStoreDefinition;
+  },
+  factory_txt: string[],
+  order_txt: string[]
+}
+
 function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
   type ZType = z.infer<typeof schema>
@@ -189,6 +201,16 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
           console.log (data)
           emit.next(data);
         };
+
+        emit.next({
+          type: "snapshot",
+          metadata: {
+              stateDefinition: factoryState.stateStore.stateDefinition,
+              factory_txt: ['Waiting', 'Building', 'Complete'],
+              stage_txt: ['Draft', 'New', 'FactoryReady', 'FactoryAccepted', 'FactoryComplete', 'MoveToWarehouse', 'InventoryAvailable']
+          },
+          state: factoryState.stateStore.serializeState
+        });
 
         // Need this to capture processor Linked State changes
         factoryProcessor.stateManager.on('changes', (events) => 
@@ -215,9 +237,18 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
   })
 }
 
+type FactoryOrder = z.infer<typeof factoryOrderModel>
+
 const appRouter = t.router({
     item: modelCRUDRoutes(itemSKUModel, 'item'),
-    order: modelCRUDRoutes(factoryOrderModel, 'order'),
+    order: t.router({
+      add: t.procedure
+      .input(factoryOrderModel)
+      .mutation(async ({input} : {input: FactoryOrder}) => {
+        await submitFn({ trigger: { doc: input } }, null)
+      })
+
+    }),
     factoryEvents: modelSubRoutes(factoryOrderModel, 'factory_events'),
 })
 
@@ -244,7 +275,7 @@ async function init() {
 
     //let { submitFn, factoryState, processorState } = await factoryStartup(await esConnection.initFromDB(client.db(), null ,false)/*, appState*/)
     
-    const submitFn = await factoryProcessor.listen()
+    submitFn = await factoryProcessor.listen()
 
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
@@ -313,21 +344,6 @@ async function init() {
       },
     });
 
-    wss.on('connection', (ws) => {
-      console.log(`++ Connection (${wss.clients.size})`);
-      ws.send(JSON.stringify({
-        type: "snapshot",
-        metadata: {
-            stateDefinition: factoryState.stateStore.stateDefinition,
-            factory_txt: ['Waiting', 'Building', 'Complete'],
-            stage_txt: ['Draft', 'New', 'FactoryReady', 'FactoryAccepted', 'FactoryComplete', 'MoveToWarehouse', 'InventoryAvailable']
-        },
-        state: factoryState.stateStore.serializeState
-      }))
-        ws.once('close', () => {
-            console.log(`-- Connection (${wss.clients.size})`);
-        });
-      });
     console.log(`WebSocket Server listening on ws://<host>>:${port}`);
 
     process.on('SIGTERM', () => {

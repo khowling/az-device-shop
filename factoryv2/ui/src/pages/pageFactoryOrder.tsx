@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { trpc } from '../utils/trpc';
 import { inferProcedureInput } from '@trpc/server';
-import type { AppRouter, ZodError } from '../../../server/trcpRouter';
+import type { AppRouter, ZodError } from '../../../server/index';
 import { factoryOrderModel } from '@full-stack-typesafe-ts/server';
 
 // ------------------------------------------------ Form
@@ -32,11 +32,6 @@ export default function OrderForm({Close, recordId}: DemoFormInterface) {
   const [form, setForm] = useState({  data: {}, errors: validate({})} as FormState<OrderFormData>) 
   
   const utils = trpc.useContext();
-  const { isLoading, isError, data, error } = trpc.order.byId.useQuery({ id: recordId || "dummy" }, {enabled: typeof recordId !== 'undefined', onSuccess: (serverdata) => {
-    const data = {...serverdata}
-    console.log ('onSuccess', data)
-    setForm({ data, errors: validate(data) });
-  }})
 
   function inputUpdate (key: string, value: any) {
     console.log ('inputUpdate', key, value)
@@ -61,7 +56,6 @@ export default function OrderForm({Close, recordId}: DemoFormInterface) {
   const mutation  = trpc.order.add.useMutation({
     async onSuccess() {
       // refetches posts after a post is added
-      await utils.order.list.invalidate();
       Close()
     },
   });

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { trpc } from '../utils/trpc';
 import { inferProcedureInput } from '@trpc/server';
-import type { AppRouter, ZodError } from '@full-stack-typesafe-ts/server/trcpRouter';
+import type { AppRouter, ZodError } from '@full-stack-typesafe-ts/server/index';
 import { itemSKUModel } from '@full-stack-typesafe-ts/server';
 
 // ------------------------------------------------ Form

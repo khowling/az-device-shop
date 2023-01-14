@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "FactoryV2 (local dependencies)",
+            "program": "${workspaceFolder}/server/index.ts",
+            "preLaunchTask": "npm: build",
+            "envFile": "${workspaceFolder}/../.env_local",
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/server/dist/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**",
+                "/home/kehowli/projects/az-device-shop/common/webserver/lib/**",
+                "/home/kehowli/projects/az-device-shop/common/workflow/lib/**"
+            ],
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "FactoryV2 (azure dependencies)",
+            "program": "${workspaceFolder}/index.ts",
+            "preLaunchTask": "npm: build",
+            "envFile": "${workspaceFolder}/../.env_azure",
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/dist/*.js",
+                "/home/kehowli/projects/az-device-shop/common/eventing/lib/**"
+            ],
+        }
+    ]
+}
