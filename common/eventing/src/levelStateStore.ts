@@ -3,7 +3,7 @@ import assert from 'assert'
 import level from 'level'
 import sub from 'subleveldown'
 
-import { StateStore, StateUpdates, StateUpdateControl, ApplyReturnInfo } from './stateStore.js'
+import type { StateStore, StateUpdates, StateUpdateControl, ApplyReturnInfo } from './stateStore.js'
 import { StateStoreDefinition, StateStoreValueType } from './stateManager.js'
 
 export class LevelStateStore implements StateStore {
@@ -81,11 +81,11 @@ export class LevelStateStore implements StateStore {
         for (let sliceKey of Object.keys(stateDefinition)) {
             for (let key of Object.keys(stateDefinition[sliceKey])) {
                 const {type, values} = stateDefinition[sliceKey][key]
-                if (type === StateStoreValueType.Hash) {
+                if (type === 'HASH') {
                     for (let hkey of Object.keys(values)) {
                         db.put (`${sliceKey}:${key}!${hkey}`, values[hkey])
                     }
-                } else if (type === StateStoreValueType.List) {
+                } else if (type === 'LIST') {
                     db.put (`${sliceKey}:${key}:_next_sequence`, 0)
                     if (values) for (let hkey of Object.keys(values)) {
                         db.put (`${sliceKey}:${key}!${hkey}`, 0)
@@ -163,8 +163,8 @@ export class LevelStateStore implements StateStore {
                 let pathKeyState = update.path ? reducerKeyState[update.path] : reducerKeyState
 
                 switch (update.method) {
-                    case 'inc':
-                    case 'set':
+                    case 'INC':
+                    case 'SET':
                         if (update.filter) { // array
                             assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
                             const
@@ -177,11 +177,11 @@ export class LevelStateStore implements StateStore {
                             pathKeyState = LevelStateStore.apply_incset(update as any, pathKeyState)
                         }
                         break
-                    case 'add':
+                    case 'ADD':
                         assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Add" to non-Array on "${stateKey}"`)
                         pathKeyState = [...pathKeyState, update.doc]
                         break
-                    case 'rm':
+                    case 'RM':
                         assert(Array.isArray(pathKeyState), `applyToLocalState: Cannot apply "UpdatesMethod.Rm" to non-Array on "${stateKey}"`)
                         assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
                         const
@@ -191,7 +191,7 @@ export class LevelStateStore implements StateStore {
                         assert(update_idx >= 0, `applyToLocalState: Panic applying a "update" on "${stateKey}" to a non-existant document (filter ${filter_key}=${filter_val})`)
                         pathKeyState = LevelStateStore.imm_splice(pathKeyState, update_idx, null)
                         break
-                    case 'update':
+                    case 'UPDATE':
                         if (update.filter) { // array
                             assert(Object.keys(update.filter).length === 1, `applyToLocalState, filter provided requires exactly 1 key`)
                             const

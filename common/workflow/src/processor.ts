@@ -53,10 +53,10 @@ function processorReducer(): Reducer<ProcessAction> {
         sliceKey: 'processor',
         initState: { 
             "processList": {
-                type: StateStoreValueType.List,
+                type: 'LIST',
             },
             "last_incoming_processed": {
-                type: StateStoreValueType.Hash,
+                type: 'HASH',
                 values: {
                     sequence: 0,
                     continuation: null
@@ -71,7 +71,7 @@ function processorReducer(): Reducer<ProcessAction> {
             switch (type) {
                 case ProcessActionType.New:
                     let updates: Array<StateUpdates> = [{
-                        method: UpdatesMethod.Add, path: "processList", doc: {
+                        method: 'ADD', path: "processList", doc: {
                             function_idx: 0,
                             complete: false,
                             ...(Object.keys(options).length > 0 && { options }),
@@ -80,7 +80,7 @@ function processorReducer(): Reducer<ProcessAction> {
                     }]
 
                     if (trigger) {
-                        updates.push({ method: UpdatesMethod.Set, path: 'last_incoming_processed', doc: trigger })
+                        updates.push({ method: 'SET', path: 'last_incoming_processed', doc: trigger })
                     }
                     return [{ failed: false }, updates]
 
@@ -88,7 +88,7 @@ function processorReducer(): Reducer<ProcessAction> {
 
                     return [{ failed: false }, [
                         {
-                            method: UpdatesMethod.Update, path: 'processList', filter: { _id }, doc: {
+                            method: 'UPDATE', path: 'processList', filter: { _id }, doc: {
                                 "$set": {
                                     function_idx,
                                     complete,
@@ -102,7 +102,7 @@ function processorReducer(): Reducer<ProcessAction> {
 
                     return [{ failed: false }, [
                         {
-                            method: UpdatesMethod.Update, path: 'processList', filter: { _id }, doc : {["$set"]: { lastLinkedRes }}
+                            method: 'UPDATE', path: 'processList', filter: { _id }, doc : {["$set"]: { lastLinkedRes }}
                         }]]
                 default:
                     assert.fail('Cannot apply processor actions, unknown ActionType')

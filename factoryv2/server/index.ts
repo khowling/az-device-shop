@@ -20,9 +20,11 @@ import { ObjectId } from 'bson'
 
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { observable } from '@trpc/server/observable';
-import { ReducerInfo, StateStoreDefinition } from '@az-device-shop/eventing/state';
+import type { ReducerInfo, StateStoreDefinition, StateUpdateControl, StateUpdates } from '@az-device-shop/eventing/state';
+export type { StateUpdateControl, UpdatesMethod } from '@az-device-shop/eventing/state';
 
 //--------------------------------------
+export type {  WorkItemObject } from './factoryState.js'
 export type ZodError = z.ZodError
 
 //------------------------------------
@@ -49,31 +51,31 @@ async function validateRequest({ esConnection, trigger }: {esConnection: any, tr
       spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
   }
 
-  return await next({ type: FactoryActionType.New, spec }, { update_ctx: { spec } } as ProcessorOptions)
+  return await next({ type: 'NEW', spec }, { update_ctx: { spec } } as ProcessorOptions)
 }
 
 async function sendToFactory(ctx: any, next: any) {
   const added : WorkItemObject  = ctx.lastLinkedRes.workItems.added as WorkItemObject
   return await next(
-      { type: FactoryActionType.StatusUpdate, _id: added._id, status: { stage: WorkItemStage.FactoryReady } }, { update_ctx: { wi_id: added._id } } as ProcessorOptions
+      { type: 'STATUS_UPDATE', _id: added._id, status: { stage: 'FACTORY_READY' } }, { update_ctx: { wi_id: added._id } } as ProcessorOptions
   )
 }
 
 async function waitforFactoryComplete(ctx : any, next: any) {
   const currentVal : WorkItemObject = ctx.linkedStore.getValue('workItems', 'items', ctx.wi_id)
   return await next(null, 
-      { retry_until: { isTrue: currentVal.status.stage === WorkItemStage.FactoryComplete} } as ProcessorOptions
+      { retry_until: { isTrue: currentVal.status.stage === 'FACTORY_COMPLETE'} } as ProcessorOptions
   )
 }
 
 async function moveToWarehouse(ctx: any, next: any) {
-  return await next({ type: FactoryActionType.StatusUpdate, _id: ctx.wi_id, spec: ctx.spec, status: { stage: WorkItemStage.MoveToWarehouse } }, { sleep_until: Date.now() + 1000 * 4 /* 4 secs */  } as ProcessorOptions)
+  return await next({ type: 'STATUS_UPDATE', _id: ctx.wi_id, spec: ctx.spec, status: { stage: 'MOVE_TO_WAREHOUSE' } }, { sleep_until: Date.now() + 1000 * 4 /* 4 secs */  } as ProcessorOptions)
 }
 
 
 async function publishInventory(ctx: any, next: any) {
 
-  return await next({ type: FactoryActionType.CompleteInventry, _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } })
+  return await next({ type: 'COMPLETE_INVENTORY', _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } })
 }
 
 async function completeInventoryAndFinish(ctx: any, next: any) {
@@ -181,8 +183,27 @@ export type FactoryMetaData = {
       [sliceKey: string]: StateStoreDefinition;
   },
   factory_txt: string[],
-  order_txt: string[]
+  stage_txt: string[]
 }
+
+// replae enum with const type
+const ACTION_TYPE = {
+  SNAPSHOT: "snapshot",
+  EVENTS: "events",
+  CLOSED: "closed"
+}
+export type ActionType = keyof typeof ACTION_TYPE
+
+
+export interface WsMessage {
+  type: ActionType,
+  metadata?: FactoryMetaData,
+  state?: any; //{
+  //  _control: StateUpdateControl,
+ //   [key: string]: StateUpdateControl | Array<StateUpdates> 
+ // }
+}
+
 
 function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
@@ -203,14 +224,14 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
         };
 
         emit.next({
-          type: "snapshot",
+          type: 'SNAPSHOT',
           metadata: {
               stateDefinition: factoryState.stateStore.stateDefinition,
               factory_txt: ['Waiting', 'Building', 'Complete'],
               stage_txt: ['Draft', 'New', 'FactoryReady', 'FactoryAccepted', 'FactoryComplete', 'MoveToWarehouse', 'InventoryAvailable']
           },
           state: factoryState.stateStore.serializeState
-        });
+        } as WsMessage)
 
         // Need this to capture processor Linked State changes
         factoryProcessor.stateManager.on('changes', (events) => 
@@ -279,7 +300,7 @@ async function init() {
 
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
-        await factoryState.dispatch({ type: FactoryActionType.FactoryProcess })
+        await factoryState.dispatch({ type: 'FACTORY_PROCESS' })
     }, 5000)
 
     const port = process.env.PORT || 5000

@@ -3,9 +3,10 @@ import mongodb  from 'mongodb'
 const { Timestamp } = mongodb
 
 
-import { StateStore, StateUpdates, UpdatesMethod, StateUpdateControl, JSStateStore } from './stateStore.js'
+import type { StateStore, StateUpdates, StateUpdateControl } from './stateStore.js'
+import { JSStateStore } from './stateStore.js'
 import { LevelStateStore } from './levelStateStore.js'
-export { StateUpdates, UpdatesMethod, StateStore }
+export type { StateUpdates, UpdatesMethod, StateStore, StateUpdateControl } from './stateStore.js'
 
 export interface ReducerInfo {
     failed: boolean;
@@ -35,11 +36,13 @@ export interface ReducerWithPassin<A> {
     fn: ReducerFunctionWithSlide<A>
 }
 
-export enum StateStoreValueType {
-    Hash = "hash",
-    List = "list",
-    Counter = "counter"
+// replae enum with const type
+const VALUE_TYPES = {
+    HASH: "hash",
+    LIST: "list",
+    COUNTER: "counter"
 }
+export type StateStoreValueType = keyof typeof VALUE_TYPES
 
 export interface StateStoreDefinition {
     [key:string] : {
@@ -127,11 +130,11 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
             sliceKey: '_control',
             initState: { 
                 "head_sequence": {
-                    type: StateStoreValueType.Counter
+                    type: 'COUNTER'
                 }
             } as StateStoreDefinition,
             fn: async function () {
-                return [{ failed: false }, [{ method: UpdatesMethod.Inc, path: 'head_sequence' }]]
+                return [{ failed: false }, [{ method: 'INC', path: 'head_sequence' }]]
             }
         }
     }

@@ -30,7 +30,7 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
         sliceKey: 'simple',
         initState : {
             "simpleitems": { 
-                type: StateStoreValueType.List, 
+                type: 'LIST', 
             }
         },
         fn: async function (/*connection,*/ state, action): Promise<ReducerReturn> {
@@ -38,11 +38,11 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
             switch (type) {
                 case SimpleActionType.New:
                     return [{ failed: !(action.doc && action.doc.hasOwnProperty('_id') === false) }, [
-                        { method: UpdatesMethod.Add, path: 'simpleitems', doc: doc }
+                        { method: 'ADD', path: 'simpleitems', doc: doc }
                     ]]
                 case SimpleActionType.Update:
                     return [{ failed: false }, [
-                        { method: UpdatesMethod.Update, path: 'simpleitems', filter: {_id}, doc: { "$set" : doc} }
+                        { method: 'UPDATE', path: 'simpleitems', filter: {_id}, doc: { "$set" : doc} }
                     ]]
                 default: 
                     return [null, null]

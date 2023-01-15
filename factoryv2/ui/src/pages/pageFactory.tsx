@@ -3,11 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { trpc } from '../utils/trpc';
 
 import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
-import type { AppRouter, OrderState, FactoryMetaData } from '../../../server/index';
+import type { AppRouter, OrderState, FactoryMetaData, WorkItemObject, StateUpdateControl } from '../../../server/index';
 import {SlideOut, DialogInterface} from '../components/slideout'
-import { Observable, observable } from '@trpc/server/observable';
 import OrderForm from './pageFactoryOrder';
-import { IAction, stateReducer } from '../utils/stateStore'
+import { stateReducer } from '../utils/stateStore'
 
 // --------------------------------------------------------------- FACTORY
 interface ConnectedInfo {
@@ -21,12 +20,25 @@ interface ConnectedInfo {
     Error
   }
 
+  interface FactoryState  {
+    _control: StateUpdateControl,
+    workItems: {
+      items : Array<WorkItemObject>
+    },
+    factory: {
+      items: Array<OrderState>
+      factoryStatus: {
+        capacity_allocated: number
+      }
+    }
+  }
+
   type RouterOutput = inferRouterOutputs<AppRouter>;
   
   export function PageFactory() {
   
-    const [{ state, metadata }, dispatchWorkitems] = React.useReducer(stateReducer, { state: {}, metadata: {} } as { state: {[key: string]: OrderState}, metadata: FactoryMetaData})
-
+    const [stateresults, dispatchWorkitems] = React.useReducer(stateReducer, { state: {}, metadata: {} } )
+    const { state, metadata } : { state: FactoryState, metadata: FactoryMetaData}  = stateresults 
     /* Ugly code to get rid of the trpc Observability wrapper */
     //type Output = RouterOutput['orderstate']['onAdd'];
     //type ObservableOutput = Extract<Output, Observable<any, any>>;
@@ -110,7 +122,7 @@ interface ConnectedInfo {
   
   
         <div className="mt-7 grid grid-cols-5 gap-1">
-          { [[[0, 1, 2], "Processing"], [[3, 4], "In Factory"], [[5], metadata.stage_txt && metadata.stage_txt[5]], [[6], metadata.stage_txt && metadata.stage_txt[6]]].map (([stages, desc],idx) => 
+          { [[['DRAFT', 'NEW', 'FACTORY_READY'], "Processing"], [['FACTORY_ACCEPTED', 'FACTORY_COMPLETE'], "In Factory"], [['MOVE_TO_WAREHOUSE'], metadata.stage_txt && metadata.stage_txt[5]], [['INVENTORY_AVAILABLE'], metadata.stage_txt && metadata.stage_txt[6]]].map (([stages, desc],idx) => 
           
           <div key={idx} className="basis-1/5">
             <p className="text-center font-sans text-l uppercase font-bold bg-green-400 rounded-full mx-2 py-1">{desc}</p>
@@ -126,12 +138,12 @@ interface ConnectedInfo {
               </button>
               }
               
-              { state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage)).map((o, i) => 
+              { state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage as string)).map((o, i) => 
                 
                 <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                   <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
                     <div className="group-hover:text-white font-semibold text-slate-900">
-                      {o.identifier || "<TBC>"} {o.id}
+                      {o.identifier || "<TBC>"} {o._id}
                     </div>
                     <dl className="mt-2 flex flex-wrap text-sm leading-6 font-medium text-slate-500">
                       <div>
@@ -163,7 +175,7 @@ interface ConnectedInfo {
                     </dl>
                     <div>
                       <dt className="sr-only">Category</dt>
-                      <dd className="group-hover:text-blue-200">{t}</dd>
+                      <dd className="group-hover:text-blue-200">{"cat"}</dd>
                     </div>
                    
                   </dl>

@@ -2,7 +2,7 @@ import assert from 'assert'
 import { StateStoreDefinition, StateStoreValueType } from './stateManager.js'
 
 
-export interface StateUpdateControl {
+export type StateUpdateControl = {
     head_sequence: number;
     lastupdated: number;
 }
@@ -26,13 +26,18 @@ export interface StateUpdates {
     }; // fiilter object
     doc?: any;
 }
-export enum UpdatesMethod {
-    Inc = 'inc',
-    Set = 'set',
-    Rm = 'rm',
-    Add = 'add',
-    Update = 'update',
-}
+
+// replae enum with const type
+const UPDATES_METHOD = {
+    INC: 'inc',
+    SET: 'set',
+    RM: 'rm',
+    ADD: 'add',
+    UPDATE: 'update'
+} as const
+
+export type UpdatesMethod = keyof typeof UPDATES_METHOD
+
 
 export interface ApplyReturnInfo {
     [reducerKey: string]: {}
@@ -55,13 +60,13 @@ export class JSStateStore implements StateStore {
         for (let sliceKey of Object.keys(stateDefinition)) {
             for (let key of Object.keys(stateDefinition[sliceKey])) {
                 const {type, values} = stateDefinition[sliceKey][key]
-                if (type === StateStoreValueType.Hash) {
+                if (type === 'HASH') {
                     state = {...state, [`${sliceKey}:${key}`]: values}
 
-                } else if (type == StateStoreValueType.Counter) {
+                } else if (type == 'COUNTER') {
                     state = {...state, [`${sliceKey}:${key}`]: 0}
 
-                }else if (type === StateStoreValueType.List) {
+                }else if (type === 'LIST') {
                     state = {...state, [`${sliceKey}:${key}:_all_keys`]: []}
                     state = {...state, [`${sliceKey}:${key}:_next_sequence`]: 0}
                 }
@@ -93,7 +98,7 @@ export class JSStateStore implements StateStore {
     }
 
     getValue(reducerKey: string, path: string, idx?: number) {
-        if (this._stateDefinition[reducerKey][path].type == StateStoreValueType.List) {
+        if (this._stateDefinition[reducerKey][path].type == 'LIST') {
             if (isNaN(idx)) {
                 // return all values in array
                 return this.state[`${reducerKey}:${path}:_all_keys`].map(key => this.state[`${reducerKey}:${path}:${key}`])
@@ -120,7 +125,7 @@ export class JSStateStore implements StateStore {
                     [sliceKey]: {
                         ...serializeState[sliceKey], 
                         [key]: this.getValue(sliceKey, key),
-                        ...(this._stateDefinition[sliceKey][key].type == StateStoreValueType.List ? {[`${key}:_next_sequence`]: this.state[`${sliceKey}:${key}:_next_sequence`]} : {})
+                        ...(this._stateDefinition[sliceKey][key].type == 'LIST' ? {[`${key}:_next_sequence`]: this.state[`${sliceKey}:${key}:_next_sequence`]} : {})
                     }
                 }
             }
@@ -176,18 +181,18 @@ export class JSStateStore implements StateStore {
                 const {type, identifierFormat} = this._stateDefinition[reducerKey][update.path]
 
                 switch (update.method) {
-                    case UpdatesMethod.Set:
-                        assert (type === StateStoreValueType.Hash || (type === StateStoreValueType.List && update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
-                        if (type === StateStoreValueType.List) {
+                    case 'SET':
+                        assert (type === 'HASH' || (type === 'LIST' && update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
+                        if (type === 'LIST') {
                             newstate[`${reducerKey}:${update.path}:${update.filter._id}`] = update.doc
                         } else {
                             newstate[`${reducerKey}:${update.path}`] = update.doc
                         }
                        
                         break
-                    case UpdatesMethod.Add:
+                    case 'ADD':
                         
-                        assert (type === StateStoreValueType.List, `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
+                        assert (type === 'LIST', `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
                         assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
 
                         const next_seq = effectiveStateValue(`${reducerKey}:${update.path}:_next_sequence`)
@@ -202,9 +207,9 @@ export class JSStateStore implements StateStore {
                         newstate[`${reducerKey}:${update.path}:_next_sequence`] = next_seq + 1
 
                         break
-                    case UpdatesMethod.Rm:
+                    case 'RM':
 
-                        assert (type === StateStoreValueType.List, `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
+                        assert (type === 'LIST', `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
                         assert (!isNaN(update.filter._id), `applyToLocalState: "Rm" requires "filter._id", "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
 
                         const all_keys1 = effectiveStateValue(`${reducerKey}:${update.path}:_all_keys`)
@@ -216,13 +221,13 @@ export class JSStateStore implements StateStore {
 
 
                         break
-                    case UpdatesMethod.Update:
-                        assert ((type === StateStoreValueType.List && !isNaN(update.filter._id)) || (type === StateStoreValueType.Hash && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
+                    case 'UPDATE':
+                        assert ((type === 'LIST' && !isNaN(update.filter._id)) || (type === 'HASH' && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
                         assert (Object.keys(update.doc).reduce((a: number,i: string) => {
                                 return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
                             }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
 
-                        const value_key = type === StateStoreValueType.List ? `${reducerKey}:${update.path}:${update.filter._id}` : `${reducerKey}:${update.path}`
+                        const value_key = type === 'LIST' ? `${reducerKey}:${update.path}:${update.filter._id}` : `${reducerKey}:${update.path}`
                         const existing_doc = effectiveStateValue(value_key)
 
                         assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (key=${value_key})`)
@@ -250,8 +255,8 @@ export class JSStateStore implements StateStore {
 
                         
                         break
-                    case UpdatesMethod.Inc:
-                        assert (type === StateStoreValueType.Counter, `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
+                    case 'INC':
+                        assert (type === 'COUNTER', `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
                         
                         const inc = effectiveStateValue(`${reducerKey}:${update.path}`) + 1
 
