@@ -1,4 +1,4 @@
-import type {  StateUpdateControl,  UpdatesMethod, WsMessage } from '../../../server/index';
+import type {  UpdatesMethod, WsMessage, StateUpdateControl, StateUpdates, StateStoreDefinition} from '../../../server/index';
 
 export interface StateUpdates {
     method: UpdatesMethod;
@@ -37,26 +37,27 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
 
     switch (action.type) {
         case 'SNAPSHOT':
-            return { state: action.state, metadata: action.metadata }
+            return { state: action.snapshot, metadata: action.metadata }
         case 'EVENTS':
 
-            const statechanges = action.state
+            const statechanges = action.statechanges as { [key: string] : Array<StateUpdates>}
 
-            const _control: StateUpdateControl = statechanges._control as StateUpdateControl
+            const _control: StateUpdateControl = statechanges['_control'] 
 
-            for (let reducerKey of Object.keys(statechanges)) {
+            for (let reducerKey of Object.keys(statechanges as any)) {
 
                 newstate = {...newstate, [reducerKey]: state[reducerKey]}
 
-                const stateKeyChanges: Array<StateUpdates> = statechanges[reducerKey] as Array<StateUpdates>
+                const stateKeyChanges = statechanges[reducerKey]
 
                 for (let update of stateKeyChanges) {
                     console.assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
-                    const {type, identifierFormat} = metadata.stateDefinition[reducerKey][update.path]
+                    const statestores = metadata.stateDefinition[reducerKey] as  StateStoreDefinition
+                     const {type, identifierFormat} = statestores[update.path] 
 
                     switch (update.method) {
                         case 'SET':
-                            console.assert (type === "hash" || (type === "list" && update.filter && !isNaN(update.filter._id)) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
+                            console.assert (type === "HASH" || (type === "LIST" && update.filter && !isNaN(update.filter._id)) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
                             if (type === "list") {
                                 const idx = effectiveStateValue(reducerKey,update.path).findIndex((i: { _id: any }) => i._id === update.filter._id)
                                 console.assert (idx >= 0 , `applyToLocalState: Could not find item with id "${update.filter._id}" in list "${reducerKey}.${update.path}"`)
@@ -66,7 +67,7 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
                             }
                             break
                         case 'ADD':
-                            console.assert (type === "list", `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
+                            console.assert (type === "LIST", `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
                             console.assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
                             
                             const next_seq = effectiveStateValue(reducerKey, `${update.path}:_next_sequence`)
@@ -78,7 +79,7 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
 
                         case 'RM':
 
-                            console.assert (type === "list", `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
+                            console.assert (type === "LIST", `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
                             console.assert (update.filter && !isNaN(update.filter._id), `applyToLocalState: "Rm" requires "filter._id", "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
 
                             const idx = effectiveStateValue(reducerKey,update.path).findIndex((i: { _id: any }) => i._id === update.filter._id)
@@ -89,14 +90,14 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
                             break
                         case 'UPDATE':
 
-                            console.assert ((type === "list" && !isNaN(update.filter._id)) || (type === "hash" && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
+                            console.assert ((type === "LIST" && !isNaN(update.filter._id)) || (type === "HASH" && !update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Update" to a "List" with a 'fliter', or a "Hash": "${reducerKey}.${update.path}", filter=${JSON.stringify(update.filter)}`)
                             console.assert (Object.keys(update.doc).reduce((a,i) => {
                                     return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
                                 }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
     
                             const existingkeyval = effectiveStateValue(reducerKey,update.path)
-                            const existing_idx = type === "list" ? existingkeyval.findIndex((i: { _id: any }) => i._id === update.filter._id) : -1
-                            const existing_doc = type === "list" ? (existing_idx >=0 ? existingkeyval[existing_idx]: undefined) : existingkeyval
+                            const existing_idx = type === "LIST" ? existingkeyval.findIndex((i: { _id: any }) => i._id === update.filter._id) : -1
+                            const existing_doc = type === "LIST" ? (existing_idx >=0 ? existingkeyval[existing_idx]: undefined) : existingkeyval
     
                             console.assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (filter=${update.filter})`)
                             
@@ -115,7 +116,7 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
                             // Add the rest of the existing doc to the new doc
                             const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
 
-                            if (type === "list") {
+                            if (type === "LIST") {
                                 newstate[reducerKey][update.path] = imm_splice(existingkeyval, existingkeyval.findIndex((i: { _id: any }) => i._id === update.filter._id), merged)
                             } else {
                                 newstate[reducerKey][update.path] = merged
@@ -123,7 +124,7 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
 
                             break
                         case 'INC':
-                            console.assert (type === "counter", `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
+                            console.assert (type === "COUNTER", `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
                             
                             const inc = effectiveStateValue(reducerKey, update.path) + 1
     

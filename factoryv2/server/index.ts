@@ -2,7 +2,7 @@ import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { FactoryActionType, FactoryAction, FactoryStateManager, WorkItemStage, WorkItemObject } from './factoryState.js'
+import { FactoryActionType, FactoryAction, FactoryStateManager, WORKITEM_STAGE, WorkItemObject } from './factoryState.js'
 import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
 
 import { z } from 'zod';
@@ -21,7 +21,7 @@ import { ObjectId } from 'bson'
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { observable } from '@trpc/server/observable';
 import type { ReducerInfo, StateStoreDefinition, StateUpdateControl, StateUpdates } from '@az-device-shop/eventing/state';
-export type { StateUpdateControl, UpdatesMethod } from '@az-device-shop/eventing/state';
+export type { StateUpdateControl, UpdatesMethod, StateUpdates, StateStoreDefinition } from '@az-device-shop/eventing/state';
 
 //--------------------------------------
 export type {  WorkItemObject } from './factoryState.js'
@@ -194,16 +194,27 @@ const ACTION_TYPE = {
 }
 export type ActionType = keyof typeof ACTION_TYPE
 
-
-export interface WsMessage {
-  type: ActionType,
-  metadata?: FactoryMetaData,
-  state?: any; //{
-  //  _control: StateUpdateControl,
- //   [key: string]: StateUpdateControl | Array<StateUpdates> 
- // }
+export type FactoryState = {
+  _control: StateUpdateControl,
+  workItems: {
+    items : Array<WorkItemObject>
+  },
+  factory: {
+    items: Array<OrderState>
+    factoryStatus: {
+      capacity_allocated: number
+    }
+  }
 }
 
+export type WsMessage = {
+  type: ActionType,
+  metadata?: FactoryMetaData,
+  statechanges?: {
+    [key: string]: StateUpdateControl | Array<StateUpdates> 
+  },
+  snapshot?: FactoryState
+}
 
 function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
@@ -216,7 +227,7 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
       // return an `observable` with a callback which is triggered immediately
       return observable<ZType>((emit) => {
         
-        const onAdd = (data: { type: string, state: any})  => {
+        const onAdd = (data : WsMessage)  => {
           // emit data to client
           //const output = data.fullDocument 
           console.log (data)
@@ -228,18 +239,18 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
           metadata: {
               stateDefinition: factoryState.stateStore.stateDefinition,
               factory_txt: ['Waiting', 'Building', 'Complete'],
-              stage_txt: ['Draft', 'New', 'FactoryReady', 'FactoryAccepted', 'FactoryComplete', 'MoveToWarehouse', 'InventoryAvailable']
+              stage_txt: ['DRAFT', 'NEW', 'FACTORY_READY', ' FACTORY_ACCEPTED', 'FACTORY_COMPLETE', 'MOVE_TO_WAREHOUSE', 'INVENTORY_AVAILABLE']
           },
-          state: factoryState.stateStore.serializeState
+          snapshot: factoryState.stateStore.serializeState as unknown as FactoryState
         } as WsMessage)
 
         // Need this to capture processor Linked State changes
         factoryProcessor.stateManager.on('changes', (events) => 
-          events[factoryState.name] && onAdd({ type: "events", state: events[factoryState.name] })
+          events[factoryState.name] && onAdd({ type: 'EVENTS', statechanges: events[factoryState.name] }  )
         )
         // Need thos to capture direct factory state changes
         factoryState.on('changes', (events) => 
-          onAdd({ type: "events", state: events[factoryState.name] })
+          onAdd({ type: 'EVENTS', statechanges: events[factoryState.name] }  )
         )
 
   /*

@@ -100,7 +100,7 @@ export default function OrderForm({Close, recordId}: DemoFormInterface) {
         
         <label className="block">
           <span className="text-gray-700">Quantity?</span>
-          <input value={form.data['quantity']} onChange={e => inputUpdate(e.target.name, e.target.value)}  name="quantity" type="text"
+          <input value={form.data['quantity'] || ""} onChange={e => inputUpdate(e.target.name, e.target.value)}  name="quantity" type="number"
               className="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-gray-500 focus:bg-white focus:ring-0"/>
           { form.errors['quantity'] && 
             <span className="ml-1 text-red-500 text-sm">{form.errors['quantity'].message}</span>

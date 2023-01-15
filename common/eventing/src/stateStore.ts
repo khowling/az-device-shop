@@ -18,7 +18,7 @@ export interface StateStore {
 }
 
 
-export interface StateUpdates {
+export type StateUpdates = {
     method: UpdatesMethod;
     path: string; // state path to process (optional)
     filter?: {

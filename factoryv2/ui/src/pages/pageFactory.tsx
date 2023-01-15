@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { trpc } from '../utils/trpc';
 
 import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
-import type { AppRouter, OrderState, FactoryMetaData, WorkItemObject, StateUpdateControl } from '../../../server/index';
+import type { AppRouter, OrderState, FactoryMetaData, WorkItemObject, StateUpdateControl, FactoryState } from '../../../server/index';
 import {SlideOut, DialogInterface} from '../components/slideout'
 import OrderForm from './pageFactoryOrder';
 import { stateReducer } from '../utils/stateStore'
@@ -20,18 +20,6 @@ interface ConnectedInfo {
     Error
   }
 
-  interface FactoryState  {
-    _control: StateUpdateControl,
-    workItems: {
-      items : Array<WorkItemObject>
-    },
-    factory: {
-      items: Array<OrderState>
-      factoryStatus: {
-        capacity_allocated: number
-      }
-    }
-  }
 
   type RouterOutput = inferRouterOutputs<AppRouter>;
   
@@ -101,21 +89,21 @@ interface ConnectedInfo {
          
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-            {c}
+            {state._control && state._control.head_sequence}
             </span>
             Sequence Number
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-              {c}
+              {state.workItems ? state.workItems.items.length : 0}
             </span>
-            Orders In Progress
+            Work Items In Progress
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-              {c}
+              {state.factory && state.factory.factoryStatus.capacity_allocated}
             </span>
-            Orders Completed
+            Capacity Allocated
           </div> 
         </div>
   

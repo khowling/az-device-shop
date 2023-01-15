@@ -44,7 +44,7 @@ const VALUE_TYPES = {
 }
 export type StateStoreValueType = keyof typeof VALUE_TYPES
 
-export interface StateStoreDefinition {
+export type StateStoreDefinition = {
     [key:string] : {
         type: StateStoreValueType
         identifierFormat?: {

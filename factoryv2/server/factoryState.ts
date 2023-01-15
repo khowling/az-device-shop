@@ -21,14 +21,14 @@ interface DocStatus {
 
 
 // replae enum with const type
-const WORKITEM_STAGE = {
+export const WORKITEM_STAGE = {
     DRAFT: 'Draft',
     NEW: 'New',
-    FACTORY_READY: 'FactoryReady',
-    FACTORY_ACCEPTED: 'FactoryAccepted',
-    FACTORY_COMPLETE: 'FactoryComplete',
-    MOVE_TO_WAREHOUSE: 'MoveToWarehouse',
-    INVENTORY_AVAILABLE: 'InventoryAvailable'
+    FACTORY_READY: 'Factory Ready',
+    FACTORY_ACCEPTED: 'Factory Accepted',
+    FACTORY_COMPLETE: 'Factory Complete',
+    MOVE_TO_WAREHOUSE: 'Move To Warehouse',
+    INVENTORY_AVAILABLE: 'Inventory Available'
 } as const
 
 export type WorkItemStage = keyof typeof WORKITEM_STAGE
