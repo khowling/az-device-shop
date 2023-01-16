@@ -1,4 +1,4 @@
-import type {  UpdatesMethod, WsMessage, StateUpdateControl, StateUpdates, StateStoreDefinition} from '../../../server/index';
+import type {  UpdatesMethod, WsMessage, StateUpdateControl, StateUpdates, StateStoreDefinition, FactoryState, FactoryMetaData} from '../../../server/index';
 
 export interface StateUpdates {
     method: UpdatesMethod;
@@ -23,7 +23,7 @@ function apply_incset({ method, doc }: {method: string, doc: any}, val : any) {
     }
 }
 
-export function stateReducer({ state, metadata } : { state: any, metadata: any }, action : WsMessage) {
+export function stateReducer({ state, metadata } : { state: FactoryState, metadata: FactoryMetaData }, action : WsMessage) {
 
     let newstate : { [key: string] : any} = {}
 
@@ -40,7 +40,7 @@ export function stateReducer({ state, metadata } : { state: any, metadata: any }
             return { state: action.snapshot, metadata: action.metadata }
         case 'EVENTS':
 
-            const statechanges = action.statechanges as { [key: string] : Array<StateUpdates>}
+            const statechanges = action.statechanges // as { [key: string] : Array<StateUpdates>}
 
             const _control: StateUpdateControl = statechanges['_control'] 
 

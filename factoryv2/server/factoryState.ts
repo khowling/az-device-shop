@@ -36,9 +36,11 @@ export type WorkItemStage = keyof typeof WORKITEM_STAGE
 
 
 
-import { StateManager }  from '@az-device-shop/eventing/state'
+import { StateManager, StateUpdateControl }  from '@az-device-shop/eventing/state'
 import type {  StateUpdates, StateStoreDefinition,  UpdatesMethod, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer, StateStoreValueType, ReducerInfo } from '@az-device-shop/eventing/state'
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
+import type { factoryOrderModel } from './schema/schemas.js';
+import { z } from 'zod';
 export { StateUpdates, StateUpdateControl } from '@az-device-shop/eventing/state'
 
 // Mutate state in a Consistant, Safe, recorded mannore
@@ -61,12 +63,17 @@ const FACTORY_ACTION = {
 
 export type FactoryActionType = keyof typeof FACTORY_ACTION
 
+type WorkItems = {
+    workItems: {
+        items: Array<WorkItemObject>
+    }
+}
 
 // This returns a 'Reducer' function that performs an 'action <FactoryAction>' on the 'workItems <WorkItemReducerState>' 'slice' of the factory State
 // and returns an array of 'state updates <StateUpdate>' that can be applied to a current state view by another function
 // It also provides a 'initState' for the slice.
 // It is a 'ReducerWithPassin', as the function it allows an attitional parameter 'passInSlice', this contains another Reducer & State that that  
-function workItemsReducer(): ReducerWithPassin<FactoryAction> {
+function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
 
     return {
         sliceKey: 'workItems',
@@ -105,7 +112,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryAction> {
 
                     const wi = state.getValue('workItems', 'items', _id)
                     if (wi) {
-                        const inventoryReducer = passInSlice as ReducerFunction<FactoryAction>
+                        const inventoryReducer = passInSlice as ReducerFunction<FactoryState, FactoryAction>
 
                         return [[{ failed: false }, [
                             { method: 'UPDATE', path: 'items', filter: { _id } as { _id: number}, doc: { "$set": {status: { failed: false, stage: 'INVENTORY_AVAILABLE' }} } }
@@ -136,7 +143,17 @@ export interface FactoryItem extends DocStatus {
 export enum FactoryStage { Waiting, Building, Complete }
 
 
-function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryAction> {
+export type OrderState = z.infer<typeof factoryOrderModel>
+type Factory = {
+    factory: {
+        items: Array<OrderState>,
+        factoryStatus: {
+            capacity_allocated: number
+        }
+    }
+}
+
+function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryState, FactoryAction> {
 
     return {
         sliceKey: 'factory',
@@ -162,7 +179,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     ]]]
                 case 'FACTORY_PROCESS':
 
-                    const workItemsReducer = passInSlice as ReducerFunctionWithSlide<FactoryAction>
+                    const workItemsReducer = passInSlice as ReducerFunctionWithSlide<FactoryState, FactoryAction>
 
                     //console.log(`workItemsState=${JSON.stringify(workItemsState)}`)
                     const now = Date.now()
@@ -237,21 +254,24 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
 }
 
 
-
-export interface InventoryItem {
+/*
+interface InventoryItem {
     _id: number;
     workItemId: string;
     qty: number;
     productId: string;
     warehouse: string;
 }
+*/
 
-interface InventoryReducerState {
-    //items: Array<InventoryItem>;
-    inventry_sequence: number;
+type Inventory = {
+    inventory_complete : {
+        inventry_sequence: number;
+        //items: Array<InventoryItem>;
+    }
 }
 
-function inventryReducer(): Reducer<FactoryAction> {
+function inventryReducer(): Reducer<FactoryState, FactoryAction> {
 
     return {
         sliceKey: 'inventory_complete',
@@ -283,7 +303,9 @@ function inventryReducer(): Reducer<FactoryAction> {
     }
 }
 
-export class FactoryStateManager extends StateManager<FactoryAction> {
+export type FactoryState = StateUpdateControl & WorkItems & Factory & Inventory
+
+export class FactoryStateManager extends StateManager<FactoryState, FactoryAction> {
 
     constructor(name: string, connection: EventStoreConnection) {
         super(name, connection, [

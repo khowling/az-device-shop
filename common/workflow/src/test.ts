@@ -1,8 +1,8 @@
 
-
+import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor.js"
 import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
-import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod } from '@az-device-shop/eventing/state'
+import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, StateUpdateControl } from '@az-device-shop/eventing/state'
 
 
 
@@ -24,8 +24,13 @@ export enum SimpleActionType {
     Update
 }
 
-function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): Reducer<SimpleAction> {
+type SimpleReducer = {
+    simple: {
+        simpleitems: Array<SimpleObject>
+    }
+}
 
+function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): Reducer<SimpleState, SimpleAction> {
     return {
         sliceKey: 'simple',
         initState : {
@@ -51,7 +56,9 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
     }
 }
 
-class TestStateManager extends StateManager<SimpleAction> {
+export type SimpleState = StateUpdateControl & SimpleReducer
+
+class TestStateManager extends StateManager<SimpleState, SimpleAction> {
 
     constructor(name: string, connection: EventStoreConnection) {
         super(name, connection, [
@@ -60,21 +67,22 @@ class TestStateManager extends StateManager<SimpleAction> {
     }
 }
 
+const murl : string = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev?replicaSet=rs0"
+const client = new MongoClient(murl);
+
+const esConnection = new EventStoreConnection(murl, 'test_events')
+const testState = new TestStateManager('emeatest_v0', esConnection)
+const processor = new Processor('processor_v001', esConnection, { linkedStateManager: testState })
+
 
 async function test() {
 
     // Event Store Connection
     // Store data as an immutable series of events in a mongo container
-    const murl = process.env.MONGO_DB
-    console.log(`Initilise EventStoreConnection with 'test_events' (MONGO_DB=${murl})`)
 
-    const esConnection = new EventStoreConnection(murl, 'test_events')
+    await client.connect();
+    await esConnection.initFromDB(client.db(), false)
     
-    const testState = new TestStateManager('emeafactory_v0', await esConnection.init(false))
-
-    // Create state machine
-    // statePlugin, allows you to pass in actions into the processor next() function
-    const processor = new Processor<SimpleActionType>('test_v001', esConnection,  { linkedStateManager: testState })
 //    setInterval(() => {
 //        console.log(processor.processList)
 //    },1000)
@@ -126,11 +134,11 @@ async function test() {
     const po = await submitFn({ trigger: { doc: {message: "my first workflow"} } }, null)
     console.log (`test() : po=${JSON.stringify(po)}`)
 
-    //await new Promise(resolve => setTimeout(resolve, 10 * 1000))
-    //processor.debugState()
-    //testState.stateStore.debugState()
-    //const po1 = await processor.initiateWorkflow({ trigger: { doc: {message: "my second workflow"} } }, null)
-    //console.log (`test() : po=${JSON.stringify(po1)}`)
+    await new Promise(resolve => setTimeout(resolve, 10 * 1000))
+    processor.debugState()
+    testState.stateStore.debugState()
+    const po1 = await submitFn({ trigger: { doc: {message: "my second workflow"} } }, null)
+    console.log (`test() : po=${JSON.stringify(po1)}`)
 
 }
 

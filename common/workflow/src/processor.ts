@@ -16,7 +16,7 @@ export interface ProcessorOptions {
 }
 
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { StateManager, StateStore, StateUpdates, UpdatesMethod, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType } from '@az-device-shop/eventing/state'
+import { StateManager, StateStore, StateUpdates, UpdatesMethod, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType, StateUpdateControl } from '@az-device-shop/eventing/state'
 import { EventEmitter } from 'events'
 
 interface ProcessAction {
@@ -47,7 +47,14 @@ interface ProcessObject {
     lastLinkedRes?: {[key: string]: ReducerInfo};
 }
 
-function processorReducer(): Reducer<ProcessAction> {
+type ProcessorSlice = {
+    processor: {
+        processList: Array<ProcessObject>;
+        last_incoming_processed: any; // trigger???
+    }
+}
+
+function processorReducer(): Reducer<ProcessorState, ProcessAction> {
 
     return {
         sliceKey: 'processor',
@@ -111,9 +118,12 @@ function processorReducer(): Reducer<ProcessAction> {
     }
 }
 
-class ProcessorStateManager extends StateManager<ProcessAction> {
+export type ProcessorState = StateUpdateControl & ProcessorSlice
 
-    constructor(name: string, connection: EventStoreConnection, linkedStateManager: StateManagerInterface) {
+
+class ProcessorStateManager<L> extends StateManager<ProcessorState, ProcessAction> {
+
+    constructor(name: string, connection: EventStoreConnection, linkedStateManager: StateManagerInterface<L>) {
         super(name, connection, [
             processorReducer()
         ],
@@ -133,7 +143,7 @@ export interface NextFunction<T>  {
 }
 
 // compose - returns a function that recusivly executes the middleware for each instance of the workflow.
-function compose (middleware: Array<(context, next?, lastDispatchResult?) => any>, processorStateManager: StateManager<ProcessAction>) {
+function compose (middleware: Array<(context, next?, lastDispatchResult?) => any>, processorStateManager: StateManager<ProcessorState, ProcessAction>) {
     if (!Array.isArray(middleware)) throw new TypeError('Middleware stack must be an array!')
     for (const fn of middleware) {
       if (typeof fn !== 'function') throw new TypeError('Middleware must be composed of functions!')
@@ -223,14 +233,14 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
   }
 
 
-export class Processor<T> extends EventEmitter {
+export class Processor<L = {}, LA = {}> extends EventEmitter {
 
     private _name: string
     private _connection: EventStoreConnection
-    private _stateManager: ProcessorStateManager
-    private _linkedStateManager: StateManagerInterface
+    private _stateManager: ProcessorStateManager<L>
+    private _linkedStateManager: StateManagerInterface<L>
     private _context: any
-    private _middleware: Array<(context: any, next: NextFunction<T> ) => Promise<WorkFlowStepResult>>
+    private _middleware: Array<(context: any, next: NextFunction<LA> ) => Promise<WorkFlowStepResult>>
     private _fnMiddleware
     private _restartInterval: NodeJS.Timeout
     private _active: Set<number>
@@ -242,22 +252,22 @@ export class Processor<T> extends EventEmitter {
         this._middleware = []
         this._linkedStateManager = opts.linkedStateManager
         this._context = { processor: this.name, linkedStore: this._linkedStateManager.stateStore }
-        this._stateManager = new ProcessorStateManager(name, connection, this._linkedStateManager)
+        this._stateManager = new ProcessorStateManager<L>(name, connection, this._linkedStateManager)
     }
 
     get connection(): EventStoreConnection {
         return this._connection 
     }
 
-    get stateManager(): StateManagerInterface {
+    get stateManager(): ProcessorStateManager<L> {
         return this._stateManager
     }
 
-    get linkedStateManager(): StateManagerInterface {
+    get linkedStateManager(): StateManagerInterface<L> {
         return this._linkedStateManager
     }
 
-    get stateStore(): StateStore {
+    get stateStore(): StateStore<ProcessorState> {
         return this._stateManager.stateStore
     }
 
@@ -323,7 +333,7 @@ export class Processor<T> extends EventEmitter {
         }
     }
 
-    use(fn: (context: any, next: NextFunction<T> ) => Promise<WorkFlowStepResult>) {
+    use(fn: (context: any, next: NextFunction<LA> ) => Promise<WorkFlowStepResult>) {
         if (typeof fn !== 'function') throw new TypeError('middleware must be a function!');
         //console.log('use %s', fn._name || fn.name || '-');
         this._middleware.push(fn);

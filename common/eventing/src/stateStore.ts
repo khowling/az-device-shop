@@ -3,18 +3,24 @@ import { StateStoreDefinition, StateStoreValueType } from './stateManager.js'
 
 
 export type StateUpdateControl = {
-    head_sequence: number;
-    lastupdated: number;
+    _control?: {
+        head_sequence: number;
+        lastupdated: number;
+    }
 }
 
-export interface StateStore {
+export type ApplyArg = {
+    [key: string]: Array<StateUpdates>
+} & StateUpdateControl
+
+export type StateStore<S> = {
     name: string;
     stateDefinition: { [sliceKey: string]: StateStoreDefinition};
     getValue(reducerKey: string, path: string, idx?: number): any;
     debugState(): void;
-    serializeState(): any;
-    deserializeState(newstate: any): void
-    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo
+    serializeState: S;
+    deserializeState(newstate: S): void
+    apply(statechanges: ApplyArg): ApplyReturnInfo
 }
 
 
@@ -43,7 +49,7 @@ export interface ApplyReturnInfo {
     [reducerKey: string]: {}
 }
 
-export class JSStateStore implements StateStore {
+export class JSStateStore<S> implements StateStore<S> {
 
     private _name: string
     private _stateDefinition: { [sliceKey: string]: StateStoreDefinition}
@@ -111,9 +117,9 @@ export class JSStateStore implements StateStore {
     }
 
 
-    get serializeState(): any {
+    get serializeState(): S {
 
-        let serializeState = {}
+        let serializeState = {} as S
 
         for (let sliceKey of Object.keys(this._stateDefinition)) {
 
@@ -152,16 +158,16 @@ export class JSStateStore implements StateStore {
         }
     }
 
-    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo {
+    apply(statechanges:ApplyArg): ApplyReturnInfo {
 
         
-        const _control: StateUpdateControl = statechanges._control as StateUpdateControl
+        const _control = (statechanges as StateUpdateControl)._control 
 
         let returnInfo = {}
-        //assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
+        //assert(_control && _control.head_sequence === this.state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this.state._control.head_sequence}`)
         let newstate = {} // { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
         let delkeys = []
-        //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
+        //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${this.state._control.head_sequence}`)
 
         // Returns effective state for key, taking into account, that the 'statechanges' array may have already modified the state
         const effectiveStateValue = (key: string): any => {
@@ -265,7 +271,7 @@ export class JSStateStore implements StateStore {
 
                         break
                     default:
-                        assert(false, `applyToLocalState: Cannot apply update seq=${_control.head_sequence}, unknown method=${update.method}`)
+                        assert(false, `applyToLocalState: Cannot apply update, unknown method=${update.method}`)
                 }
 /*
                 if (update.path) {

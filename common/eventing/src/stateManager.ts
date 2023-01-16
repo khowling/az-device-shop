@@ -3,7 +3,7 @@ import mongodb  from 'mongodb'
 const { Timestamp } = mongodb
 
 
-import type { StateStore, StateUpdates, StateUpdateControl } from './stateStore.js'
+import type { StateStore, StateUpdates, StateUpdateControl, ApplyArg } from './stateStore.js'
 import { JSStateStore } from './stateStore.js'
 import { LevelStateStore } from './levelStateStore.js'
 export type { StateUpdates, UpdatesMethod, StateStore, StateUpdateControl } from './stateStore.js'
@@ -17,23 +17,23 @@ export interface ReducerInfo {
 export type ReducerReturn = [ReducerInfo, Array<StateUpdates>] | null;
 export type ReducerReturnWithSlice = Array<([ReducerInfo, Array<StateUpdates>] | null)>;
 
-export type ReducerFunction<A> = (state: StateStore, action: A) => Promise<ReducerReturn>;
-export type ReducerFunctionWithSlide<A> = (state: StateStore, action: A, passInSlice?: (state: StateStore, action?: A) => Promise<ReducerReturn> | Promise<ReducerReturnWithSlice>) => Promise<ReducerReturnWithSlice>;
+export type ReducerFunction<S, A> = (state: StateStore<S>, action: A) => Promise<ReducerReturn>;
+export type ReducerFunctionWithSlide<S, A> = (state: StateStore<S>, action: A, passInSlice?: (state: StateStore<S>, action?: A) => Promise<ReducerReturn> | Promise<ReducerReturnWithSlice>) => Promise<ReducerReturnWithSlice>;
 
 // Interface for a Reducer, operating on the state sliceKey, defining an initial state
-export interface Reducer<A> {
+export interface Reducer<S, A> {
     sliceKey: string;
     initState: StateStoreDefinition;
-    fn: ReducerFunction<A>
+    fn: ReducerFunction<S, A>
 }
 
 // Interface for a Reducer, that has a Passin Slice
 // The Passin Slide is a update to a nested state
-export interface ReducerWithPassin<A> {
+export interface ReducerWithPassin<S, A> {
     sliceKey: string;
     passInSlice: string;
     initState: StateStoreDefinition;
-    fn: ReducerFunctionWithSlide<A>
+    fn: ReducerFunctionWithSlide<S, A>
 }
 
 // replae enum with const type
@@ -70,12 +70,12 @@ interface ControlReducer {
 }
 */
 
-export interface StateManagerInterface extends EventEmitter {
+export interface StateManagerInterface<S> extends EventEmitter {
     name: string;
-    stateStore: StateStore;
-    rootReducer: (state, action) => Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]>;
+    stateStore: StateStore<S>;
+    rootReducer: (state, action) => Promise<[{ [key: string]: ReducerInfo }, ApplyArg]>;
     dispatch(action, linkedStateAction?): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: ReducerInfo }]>
-    stateStoreApply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): void
+    stateStoreApply(statechanges: ApplyArg): void
 }
 
 import { EventEmitter } from 'events'
@@ -83,18 +83,18 @@ import { EventStoreConnection } from './eventStoreConnection.js'
 
 // StateManager
 // dispach() - takes 'Action', executes reducers to get array of "State Changes", pushes changes to eventStore, and applies to local stateStore (stateStore.apply)
-export class StateManager<A> extends EventEmitter implements StateManagerInterface {
+export class StateManager<S, A, L = {}> extends EventEmitter implements StateManagerInterface<S> {
 
     private _name
-    private _stateStore: StateStore
+    private _stateStore: StateStore<S>
     private _connection: EventStoreConnection
     // A reducer that invokes every reducer inside the reducers object, and constructs a state object with the same shape.
-    private _rootReducer: (state: StateStore, action: A) => Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]>
+    private _rootReducer: (state: StateStore<S>, action: A) => Promise<[{ [key: string]: ReducerInfo }, ApplyArg]>
     
     // Linked StateManager, where this StateManager can dispatch actions to the linked StateManager
-    private _linkedStateManager: StateManagerInterface
+    private _linkedStateManager: StateManagerInterface<L>
     
-    constructor(name: string, connection: EventStoreConnection, reducers: Array<Reducer<A> | ReducerWithPassin<A>>, linkedStateManager?: StateManagerInterface) {
+    constructor(name: string, connection: EventStoreConnection, reducers: Array<Reducer<S, A> | ReducerWithPassin<S, A>>, linkedStateManager?: StateManagerInterface<L>) {
         super()
         this._name = name
         this._connection = connection
@@ -103,7 +103,7 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
         // allReducers is array of all reducers returned objects <Reducer>
         const allReducers = [this.applyReducer()].concat(reducers as any)
 
-        this._stateStore = new JSStateStore(
+        this._stateStore = new JSStateStore<S>(
             this._name, 
             // construct the initstate of all reducers combined!
             allReducers.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {})
@@ -125,7 +125,7 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
         return this._stateStore
     }
 
-    private applyReducer(): Reducer<null> {
+    private applyReducer(): Reducer<S, A> {
         return {
             sliceKey: '_control',
             initState: { 
@@ -140,10 +140,10 @@ export class StateManager<A> extends EventEmitter implements StateManagerInterfa
     }
 
 
-    private combineReducers(/*coonnection,*/ reducers): (state: StateStore, action: A) => Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]> {
+    private combineReducers(/*coonnection,*/ reducers): (state: StateStore<S>, action: A) => Promise<[{ [key: string]: ReducerInfo }, ApplyArg]> {
         // A reducer function that invokes every reducer inside the passed
         // *   object, and builds a state object with the same shape.
-        return async function (state: StateStore, action: A): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: StateUpdateControl | Array<StateUpdates> }]> {
+        return async function (state: StateStore<S>, action: A): Promise<[{ [key: string]: ReducerInfo }, ApplyArg ]> {
 
             assert(action, 'reducers require action parameter')
             //let hasChanged = false

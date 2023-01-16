@@ -27,11 +27,6 @@ interface ConnectedInfo {
   
     const [stateresults, dispatchWorkitems] = React.useReducer(stateReducer, { state: {}, metadata: {} } )
     const { state, metadata } : { state: FactoryState, metadata: FactoryMetaData}  = stateresults 
-    /* Ugly code to get rid of the trpc Observability wrapper */
-    //type Output = RouterOutput['orderstate']['onAdd'];
-    //type ObservableOutput = Extract<Output, Observable<any, any>>;
-    //type UnpackObservable<X> = X extends Observable<infer I, unknown> ? I : any
-    //type A = UnpackObservable<ObservableOutput>
   
     const [dialog, setDialog] = useState<DialogInterface>({open: false})
     const [connected, setConnected] = useState({status: ConnectedStatus.Trying} as ConnectedInfo)

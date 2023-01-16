@@ -2,7 +2,7 @@ import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { FactoryActionType, FactoryAction, FactoryStateManager, WORKITEM_STAGE, WorkItemObject } from './factoryState.js'
+import { FactoryActionType, FactoryAction, FactoryStateManager, WORKITEM_STAGE, WorkItemObject, FactoryState } from './factoryState.js'
 import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
 
 import { z } from 'zod';
@@ -194,25 +194,20 @@ const ACTION_TYPE = {
 }
 export type ActionType = keyof typeof ACTION_TYPE
 
-export type FactoryState = {
-  _control: StateUpdateControl,
-  workItems: {
-    items : Array<WorkItemObject>
-  },
-  factory: {
-    items: Array<OrderState>
-    factoryStatus: {
-      capacity_allocated: number
-    }
-  }
+
+
+export type StateChangesControl = {
+  "_control": StateUpdateControl
+}
+
+export type StateChangesUpdates = {
+  [key: string ]: Array<StateUpdates> 
 }
 
 export type WsMessage = {
   type: ActionType,
   metadata?: FactoryMetaData,
-  statechanges?: {
-    [key: string]: StateUpdateControl | Array<StateUpdates> 
-  },
+  statechanges?: StateChangesControl | StateChangesUpdates,
   snapshot?: FactoryState
 }
 

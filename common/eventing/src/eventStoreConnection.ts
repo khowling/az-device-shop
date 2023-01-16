@@ -92,12 +92,12 @@ export class EventStoreConnection extends EventEmitter {
 
     // rollForwardState
     // This function will hydrate the state of the passed in stateStores from the event store
-    async rollForwardState(stateStores: StateStore[], additionalFn?: (changedataResults) => Promise<void>): Promise<number> {
+    async rollForwardState(stateStores: StateStore<any>[], additionalFn?: (changedataResults) => Promise<void>): Promise<number> {
 
         let processed_seq = this.sequence
         console.log(`rollForwardState: reading "${this.collection}" from database from_sequence#=${processed_seq}`)
     
-        const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
+        const stateStoreByName: { [key: string]: StateStore<any> } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
     
         await this.db.collection(this.collection).createIndex({ sequence: 1 })
         const cursor = await this.db.collection(this.collection).aggregate([
@@ -127,8 +127,8 @@ export class EventStoreConnection extends EventEmitter {
 
     // stateFollower
     // ONLY use this function to provide an upto-date ReadOnly Cache of the passed in state store
-    stateFollower(stateStores: StateStore[]) : ChangeStream {
-        const stateStoreByName: { [key: string]: StateStore } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
+    stateFollower(stateStores: StateStore<any>[]) : ChangeStream {
+        const stateStoreByName: { [key: string]: StateStore<any> } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
         
         return this.db.collection(this.collection).watch([
             { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { "fullDocument.partition_key": this.tenentKey }, { "fullDocument.sequence": { $gt: this.sequence } }] } },

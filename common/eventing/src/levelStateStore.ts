@@ -3,10 +3,10 @@ import assert from 'assert'
 import level from 'level'
 import sub from 'subleveldown'
 
-import type { StateStore, StateUpdates, StateUpdateControl, ApplyReturnInfo } from './stateStore.js'
+import type { StateStore, ApplyArg, StateUpdates, StateUpdateControl, ApplyReturnInfo } from './stateStore.js'
 import { StateStoreDefinition, StateStoreValueType } from './stateManager.js'
 
-export class LevelStateStore implements StateStore {
+export class LevelStateStore<S> implements StateStore<S> {
 
     private _name
     private _stateDefinition
@@ -119,7 +119,7 @@ export class LevelStateStore implements StateStore {
         this._state = newstate
     }
 
-    get serializeState() {
+    get serializeState(): S {
         return { ...this._state }
     }
 
@@ -141,10 +141,10 @@ export class LevelStateStore implements StateStore {
         }
     }
 
-    apply(statechanges: { [key: string]: StateUpdateControl | Array<StateUpdates> }): ApplyReturnInfo {
+    apply(statechanges: ApplyArg): ApplyReturnInfo {
 
         const state = this._state
-        const _control: StateUpdateControl = statechanges._control as StateUpdateControl
+        const _control = (statechanges as StateUpdateControl)._control 
 
 
         assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
