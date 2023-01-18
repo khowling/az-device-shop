@@ -1,12 +1,15 @@
+// @flow
 
-import React, { useEffect, useState } from 'react';
+import React, { Reducer, useEffect, useState } from 'react';
 import { trpc } from '../utils/trpc';
 
 import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
-import type { AppRouter, OrderState, FactoryMetaData, WorkItemObject, StateUpdateControl, FactoryState } from '../../../server/index';
+import { AppRouter, OrderState, type FactoryMetaData, WorkItemObject, type WsMessage } from '../../../server/index';
+import { type FactoryState, StateUpdateControl, WorkItems, Factory, Inventory } from '../../../server/factoryState.js'
+
 import {SlideOut, DialogInterface} from '../components/slideout'
 import OrderForm from './pageFactoryOrder';
-import { stateReducer } from '../utils/stateStore'
+import { FactoryReducerState, stateReducer } from '../utils/stateStore'
 
 // --------------------------------------------------------------- FACTORY
 interface ConnectedInfo {
@@ -20,13 +23,18 @@ interface ConnectedInfo {
     Error
   }
 
+  function myStateReducer(state : { val: number}, action : { action: number}) {
+    return { val: 2 }
+  }
+  function test1() {
+    const [state, dispatch] = React.useReducer(myStateReducer, { val: 1 } )
 
-  type RouterOutput = inferRouterOutputs<AppRouter>;
-  
+  }
+
+
   export function PageFactory() {
   
-    const [stateresults, dispatchWorkitems] = React.useReducer(stateReducer, { state: {}, metadata: {} } )
-    const { state, metadata } : { state: FactoryState, metadata: FactoryMetaData}  = stateresults 
+    const [state, dispatch] = React.useReducer<Reducer<FactoryReducerState, WsMessage>>(stateReducer, { state: null, metadata: null} )
   
     const [dialog, setDialog] = useState<DialogInterface>({open: false})
     const [connected, setConnected] = useState({status: ConnectedStatus.Trying} as ConnectedInfo)
@@ -39,8 +47,8 @@ interface ConnectedInfo {
       onStarted() {
         setConnected({status: ConnectedStatus.Connected})
       },
-      onData(data) {
-        dispatchWorkitems(data as any )
+      onData<WsMessage>(data: WsMessage) {
+        dispatch(data)
       },
       onError(err) {
         setConnected({status: ConnectedStatus.Error, message: err.message})
@@ -84,19 +92,19 @@ interface ConnectedInfo {
          
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-            {state._control && state._control.head_sequence}
+            {state.state._control?.head_sequence}
             </span>
             Sequence Number
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-              {state.workItems ? state.workItems.items.length : 0}
+              {state.state.workItems?.items.length || 0}
             </span>
             Work Items In Progress
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-              {state.factory && state.factory.factoryStatus.capacity_allocated}
+              {state.state.factory?.factoryStatus.capacity_allocated || 0}
             </span>
             Capacity Allocated
           </div> 
@@ -105,7 +113,7 @@ interface ConnectedInfo {
   
   
         <div className="mt-7 grid grid-cols-5 gap-1">
-          { [[['DRAFT', 'NEW', 'FACTORY_READY'], "Processing"], [['FACTORY_ACCEPTED', 'FACTORY_COMPLETE'], "In Factory"], [['MOVE_TO_WAREHOUSE'], metadata.stage_txt && metadata.stage_txt[5]], [['INVENTORY_AVAILABLE'], metadata.stage_txt && metadata.stage_txt[6]]].map (([stages, desc],idx) => 
+          { [[['DRAFT', 'NEW', 'FACTORY_READY'], "Processing"], [['FACTORY_ACCEPTED', 'FACTORY_COMPLETE'], "In Factory"], [['MOVE_TO_WAREHOUSE'], state.metadata.stage_txt && state.metadata.stage_txt[5] ], [['INVENTORY_AVAILABLE'], state.metadata.stage_txt && state.metadata.stage_txt[6]]].map (([stages, desc],idx) => 
           
           <div key={idx} className="basis-1/5">
             <p className="text-center font-sans text-l uppercase font-bold bg-green-400 rounded-full mx-2 py-1">{desc}</p>
@@ -121,7 +129,7 @@ interface ConnectedInfo {
               </button>
               }
               
-              { state.workItems && state.workItems.items.filter(i => stages.includes(i.status.stage as string)).map((o, i) => 
+              { state.state.workItems?.items.filter(i => stages.includes(i.status.stage as string)).map((o, i) => 
                 
                 <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                   <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
