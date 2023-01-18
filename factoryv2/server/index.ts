@@ -1,8 +1,10 @@
+// @flow
 import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { FactoryActionType, FactoryAction, FactoryStateManager, WORKITEM_STAGE, WorkItemObject, FactoryState } from './factoryState.js'
+import type { FactoryActionType, FactoryAction, WORKITEM_STAGE, WorkItemObject, FactoryState } from './factoryState.js'
+import { FactoryStateManager } from './factoryState.js'
 import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
 
 import { z } from 'zod';
@@ -182,8 +184,8 @@ export type FactoryMetaData = {
   stateDefinition: {
       [sliceKey: string]: StateStoreDefinition;
   },
-  factory_txt: string[],
-  stage_txt: string[]
+  factory_txt?: string[],
+  stage_txt?: string[]
 }
 
 // replae enum with const type
@@ -197,19 +199,26 @@ export type ActionType = keyof typeof ACTION_TYPE
 
 
 export type StateChangesControl = {
-  "_control": StateUpdateControl
+  _control: StateUpdateControl
 }
 
-export type StateChangesUpdates = {
-  [key: string ]: Array<StateUpdates> 
+export type StateChangesUpdates<T> = {
+  [key in  keyof T]: Array<StateUpdates> 
 }
 
-export type WsMessage = {
-  type: ActionType,
-  metadata?: FactoryMetaData,
-  statechanges?: StateChangesControl | StateChangesUpdates,
-  snapshot?: FactoryState
+type WsMessageEvent = {
+  type: 'EVENTS',
+  statechanges: StateChangesControl | StateChangesUpdates<FactoryState>
 }
+
+type WsMessageSnapshot = {
+  type: 'SNAPSHOT',
+  snapshot: FactoryState,
+  metadata: FactoryMetaData
+}
+
+
+export type WsMessage = WsMessageSnapshot | WsMessageEvent | {type: 'CLOSED'}
 
 function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 

@@ -1,5 +1,4 @@
-import assert from 'assert'
-
+// @flow
 
 export interface WorkItemObject {
     _id: number;
@@ -41,7 +40,7 @@ import type {  StateUpdates, StateStoreDefinition,  UpdatesMethod, ReducerReturn
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
 import type { factoryOrderModel } from './schema/schemas.js';
 import { z } from 'zod';
-export { StateUpdates, StateUpdateControl } from '@az-device-shop/eventing/state'
+export type { StateUpdates, StateUpdateControl } from '@az-device-shop/eventing/state'
 
 // Mutate state in a Consistant, Safe, recorded mannore
 export interface FactoryAction {
@@ -63,7 +62,7 @@ const FACTORY_ACTION = {
 
 export type FactoryActionType = keyof typeof FACTORY_ACTION
 
-type WorkItems = {
+export type WorkItems = {
     workItems: {
         items: Array<WorkItemObject>
     }
@@ -144,7 +143,7 @@ export enum FactoryStage { Waiting, Building, Complete }
 
 
 export type OrderState = z.infer<typeof factoryOrderModel>
-type Factory = {
+export type Factory = {
     factory: {
         items: Array<OrderState>,
         factoryStatus: {
@@ -264,7 +263,7 @@ interface InventoryItem {
 }
 */
 
-type Inventory = {
+export type Inventory = {
     inventory_complete : {
         inventry_sequence: number;
         //items: Array<InventoryItem>;
@@ -303,7 +302,7 @@ function inventryReducer(): Reducer<FactoryState, FactoryAction> {
     }
 }
 
-export type FactoryState = StateUpdateControl & WorkItems & Factory & Inventory
+export type FactoryState =  WorkItems & Factory & Inventory // StateUpdateControl //&
 
 export class FactoryStateManager extends StateManager<FactoryState, FactoryAction> {
 
