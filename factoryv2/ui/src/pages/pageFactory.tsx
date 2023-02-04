@@ -5,7 +5,7 @@ import { trpc } from '../utils/trpc';
 
 import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
 import { AppRouter, OrderState, type FactoryMetaData, WorkItemObject, type WsMessage } from '../../../server/index';
-import { type FactoryState, StateUpdateControl, WorkItems, Factory, Inventory } from '../../../server/factoryState.js'
+import { type FactoryState, Control, WorkItems, Factory, Inventory } from '../../../server/factoryState.js'
 
 import {SlideOut, DialogInterface} from '../components/slideout'
 import OrderForm from './pageFactoryOrder';

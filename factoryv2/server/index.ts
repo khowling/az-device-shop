@@ -22,11 +22,9 @@ import { ObjectId } from 'bson'
 
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { observable } from '@trpc/server/observable';
-import type { ReducerInfo, StateStoreDefinition, StateUpdateControl, StateUpdates } from '@az-device-shop/eventing/state';
-export type { StateUpdateControl, UpdatesMethod, StateUpdates, StateStoreDefinition } from '@az-device-shop/eventing/state';
-
+import type { ReducerInfo, StateStoreDefinition, Control, StateUpdate } from '@az-device-shop/eventing/state';
 //--------------------------------------
-export type {  WorkItemObject } from './factoryState.js'
+export type {  WorkItemObject, FactoryState } from './factoryState.js'
 export type ZodError = z.ZodError
 
 //------------------------------------
@@ -199,11 +197,11 @@ export type ActionType = keyof typeof ACTION_TYPE
 
 
 export type StateChangesControl = {
-  _control: StateUpdateControl
+  _control: Control
 }
 
 export type StateChangesUpdates<T> = {
-  [key in  keyof T]: Array<StateUpdates> 
+  [key in  keyof T]: Array<StateUpdate> 
 }
 
 type WsMessageEvent = {

@@ -1,5 +1,5 @@
 {
-  "name": "@full-stack-typesafe-ts/ui",
+  "name": "@az-device-shop/factory-ui",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -27,6 +27,12 @@
     ]
   },
   "devDependencies": {
+    "@types/node": "^18.11.18",
+    "@types/ws": "^8.5.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.9.4",
+    "@trpc/client": "^10.8.1",
+    "@trpc/server": "^10.8.1",
     "@headlessui/react": "^1.7.7",
     "@tailwindcss/forms": "^0.5.3",
     "@tailwindcss/typography": "^0.5.9",

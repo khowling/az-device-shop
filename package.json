@@ -3,11 +3,8 @@
   "workspaces": [
     "common/eventing",
     "common/workflow",
-    "ordering",
-    "factory/server",
-    "factory/ui",
-    "shop/ui",
-    "shop/server"
+    "factoryv2/server",
+    "factoryv2/ui"
   ],
   "devDependencies": {
     "@playwright/test": "^1.19.1",

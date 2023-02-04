@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { trpc } from '../utils/trpc';
 import { inferProcedureInput } from '@trpc/server';
-import type { AppRouter, ZodError } from '../../../server/index';
-import { factoryOrderModel } from '@full-stack-typesafe-ts/server';
+import type { AppRouter, ZodError } from "@az-device-shop/factory-server";
+import { factoryOrderModel } from "@az-device-shop/factory-server/schema";
 
 // ------------------------------------------------ Form
 

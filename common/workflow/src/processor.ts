@@ -16,7 +16,7 @@ export interface ProcessorOptions {
 }
 
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { StateManager, StateStore, StateUpdates, UpdatesMethod, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType, StateUpdateControl } from '@az-device-shop/eventing/state'
+import { StateManager, StateStore, StateUpdate, UpdatesMethod, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType, Control } from '@az-device-shop/eventing/state'
 import { EventEmitter } from 'events'
 
 interface ProcessAction {
@@ -77,7 +77,7 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
 
             switch (type) {
                 case ProcessActionType.New:
-                    let updates: Array<StateUpdates> = [{
+                    let updates: Array<StateUpdate> = [{
                         method: 'ADD', path: "processList", doc: {
                             function_idx: 0,
                             complete: false,
@@ -118,7 +118,7 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
     }
 }
 
-export type ProcessorState = StateUpdateControl & ProcessorSlice
+export type ProcessorState = Control & ProcessorSlice
 
 
 class ProcessorStateManager<L> extends StateManager<ProcessorState, ProcessAction> {

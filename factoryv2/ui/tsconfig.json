@@ -1,5 +1,16 @@
 {
-  "extends": "../tsconfig.workspace.json",
+  "extends": "../../tsconfig.workspace.json",
+
+  
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.stub.ts",
+    "**/node_modules",
+    "**/lib",
+    "**/out",
+    "**/dist"
+  ],
+  
   "compilerOptions": {
     "target": "es5",
     "lib": [

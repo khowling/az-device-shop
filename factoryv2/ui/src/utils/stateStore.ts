@@ -1,17 +1,7 @@
-import type {  UpdatesMethod, WsMessage, StateUpdateControl, StateUpdates, StateStoreDefinition, FactoryMetaData, StateChangesUpdates} from '../../../server/index';
-import type { FactoryState } from '../../../server/factoryState';
+import type { FactoryState, WsMessage, FactoryMetaData, StateChangesUpdates} from '@az-device-shop/factory-server';
+export type { Control, UpdatesMethod, StateUpdate, StateStoreDefinition } from '@az-device-shop/eventing';
+
 import { Reducer } from 'react';
-
-export interface StateUpdates {
-    method: UpdatesMethod;
-    path: string; // state path to process (optional)
-    filter: {
-        _id: number
-    }; // fiilter object
-    doc?: any;
-}
-
-
 
 // Replace array entry at index 'index' with 'val'
 function imm_splice(array: Array<any>, index: number, val?: any) { return [...array.slice(0, index), ...(val ? [val] : []), ...array.slice(index + 1)] }
@@ -50,7 +40,7 @@ export function stateReducer({ state, metadata }: FactoryReducerState, action : 
 
                 let newstate : FactoryState = {} as FactoryState
 
-                const _control: StateUpdateControl = (action.statechanges as StateUpdateControl)._control 
+                const _control: Control = (action.statechanges as Control)._control 
 
                 for (let reducerKey of Object.keys(action.statechanges) as Array<keyof FactoryState>) {
 
@@ -59,14 +49,14 @@ export function stateReducer({ state, metadata }: FactoryReducerState, action : 
                     const stateKeyChanges = (action.statechanges as StateChangesUpdates<FactoryState>)[reducerKey]
 
                     for (let update of stateKeyChanges) {
-                        console.assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
+                        console.assert ((update as StateUpdate).path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
                         const statestores = metadata.stateDefinition[reducerKey] as  StateStoreDefinition
                         const {type, identifierFormat} = statestores[update.path] 
 
                         switch (update.method) {
                             case 'SET':
                                 console.assert (type === "HASH" || (type === "LIST" && update.filter && !isNaN(update.filter._id)) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
-                                if (type === "list") {
+                                if (type === "LIST") {
                                     const idx = effectiveStateValue(state, newstate, reducerKey,update.path).findIndex((i: { _id: any }) => i._id === update.filter._id)
                                     console.assert (idx >= 0 , `applyToLocalState: Could not find item with id "${update.filter._id}" in list "${reducerKey}.${update.path}"`)
                                     (newstate[reducerKey] as Record<string, any>)[update.path] = imm_splice(effectiveStateValue(state, newstate, reducerKey,update.path), idx, update.doc)

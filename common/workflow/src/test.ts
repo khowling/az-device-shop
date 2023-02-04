@@ -2,7 +2,7 @@
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor.js"
 import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
-import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, StateUpdateControl } from '@az-device-shop/eventing/state'
+import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from '@az-device-shop/eventing/state'
 
 
 
@@ -56,7 +56,7 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
     }
 }
 
-export type SimpleState = StateUpdateControl & SimpleReducer
+export type SimpleState = Control & SimpleReducer
 
 class TestStateManager extends StateManager<SimpleState, SimpleAction> {
 

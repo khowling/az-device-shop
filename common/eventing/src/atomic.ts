@@ -8,7 +8,7 @@ export interface AtomicInterface {
 export class Atomic implements AtomicInterface {
 
     private _queue: Array<(lease: [number, () => void]) => void> = [];
-    private _currentReleaser: () => void | undefined;
+    private _currentReleaser: (() => void) | undefined = undefined;
     private _value: number = 1;
 
     isLocked() {

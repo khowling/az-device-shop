@@ -1,11 +1,12 @@
 import { Atomic, AtomicInterface } from './atomic.js'
-import { StateStore } from './stateStore.js'
+import { ApplyInfo, StateStore } from './stateManager.js'
 
-import mongodb, { ChangeStream, ChangeStreamInsertDocument } from 'mongodb'
+import mongodb, { ChangeStream, ChangeStreamInsertDocument, Db } from 'mongodb'
 const { MongoClient } = mongodb
 
 import { ObjectId } from 'bson'
 import { EventEmitter } from 'events'
+import assert from 'assert'
 
 interface Tenent {
     _id: ObjectId; //typeof ObjectID;
@@ -13,17 +14,16 @@ interface Tenent {
 }
 export class EventStoreConnection extends EventEmitter {
     private murl: string;
-    private _sequence: number;
+    private _sequence = 0;
     private _collection: string;
-    private _db: any;
-    private _tenent: Tenent;
-    private _updateMutex: AtomicInterface
+    private _db: Db | undefined;
+    private _tenent: Tenent | undefined;
+    private _updateMutex = new Atomic()
 
     constructor(murl: string, collection: string) {
         super()
         this.murl = murl
         this._collection = collection
-        this._sequence = 0
     }
 
     get db() {
@@ -39,7 +39,7 @@ export class EventStoreConnection extends EventEmitter {
     }
 
     get tenentKey() {
-        return this._tenent._id
+        return this._tenent?._id
     }
 
     set sequence(sequence) {
@@ -54,13 +54,12 @@ export class EventStoreConnection extends EventEmitter {
         return this._updateMutex
     }
 
-    private tenentCheck;
-    async initFromDB(db, tenent, reset?: boolean) {
+    async initFromDB(db: Db, tenent : Tenent | null, reset?: boolean) {
         this._db = db
 
         if (!tenent) {
             while (true) {
-                this._tenent = await this.db.collection("business").findOne({ type: "business", partition_key: "root" })
+                this._tenent = await db.collection("business").findOne({ type: "business", partition_key: "root" }) as Tenent
                 if (this._tenent) break
                 console.warn('EventStoreConnection: No type="business" document in "business" collection, waiting until initialised...')
                 await new Promise(resolve => setTimeout(resolve, 5000));
@@ -69,18 +68,16 @@ export class EventStoreConnection extends EventEmitter {
             this._tenent = tenent
         }
 
-        this._updateMutex = new Atomic()
-
         // check every 10seconds if the tenent changes, if it does emit event
-        this.tenentCheck = setInterval(async () => {
-            const latest_tenent: Tenent = await this._db.collection("business").findOne({ type: "business", partition_key: "root" })
-            if (!(latest_tenent && latest_tenent._id.equals(this._tenent._id))) {
-                this.emit('tenent_changed', this._tenent._id)
+        const tenentCheck = setInterval(async (t) => {
+            const latest_tenent: Tenent = await db.collection("business").findOne({ type: "business", partition_key: "root" }) as Tenent
+            if (!(latest_tenent && latest_tenent._id.equals(t._id))) {
+                this.emit('tenent_changed', (this._tenent as Tenent)._id)
             }
-        }, 10000)
+        }, 10000, this._tenent as Tenent)
 
         if (reset) {
-            await this.db.collection(this.collection).deleteMany({ partition_key: this.tenentKey })
+            await db.collection(this.collection).deleteMany({ partition_key: this.tenentKey })
         }
         return this
     }
@@ -92,7 +89,9 @@ export class EventStoreConnection extends EventEmitter {
 
     // rollForwardState
     // This function will hydrate the state of the passed in stateStores from the event store
-    async rollForwardState(stateStores: StateStore<any>[], additionalFn?: (changedataResults) => Promise<void>): Promise<number> {
+    async rollForwardState(stateStores: StateStore<any>[], additionalFn?: (changedataResults : any) => Promise<void>): Promise<number> {
+
+        assert (this.db, "EventStoreConnection: rollForwardState: db not initialised")
 
         let processed_seq = this.sequence
         console.log(`rollForwardState: reading "${this.collection}" from database from_sequence#=${processed_seq}`)
@@ -106,8 +105,8 @@ export class EventStoreConnection extends EventEmitter {
         ])
     
         while (await cursor.hasNext()) {
-            const { _id, partition_key, sequence, ...changedata } = await cursor.next()
-            let applyReturnInfo = {}
+            const { _id, partition_key, sequence, ...changedata } = await cursor.next() as any
+            let applyReturnInfo: { [slicekey: string]: ApplyInfo} = {}
             for (let key of Object.keys(changedata)) {
     
                 if (stateStoreByName.hasOwnProperty(key)) {
@@ -128,6 +127,9 @@ export class EventStoreConnection extends EventEmitter {
     // stateFollower
     // ONLY use this function to provide an upto-date ReadOnly Cache of the passed in state store
     stateFollower(stateStores: StateStore<any>[]) : ChangeStream {
+
+        assert (this.db, "EventStoreConnection: rollForwardState: db not initialised")
+
         const stateStoreByName: { [key: string]: StateStore<any> } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
         
         return this.db.collection(this.collection).watch([

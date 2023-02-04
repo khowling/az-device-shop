@@ -35,12 +35,12 @@ export type WorkItemStage = keyof typeof WORKITEM_STAGE
 
 
 
-import { StateManager, StateUpdateControl }  from '@az-device-shop/eventing/state'
-import type {  StateUpdates, StateStoreDefinition,  UpdatesMethod, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer, StateStoreValueType, ReducerInfo } from '@az-device-shop/eventing/state'
+import { StateManager, StateUpdate, Control }  from '@az-device-shop/eventing/state'
+import type { StateStoreDefinition,  UpdatesMethod, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer, StateStoreValueType, ReducerInfo } from '@az-device-shop/eventing/state'
 import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
 import type { factoryOrderModel } from './schema/schemas.js';
 import { z } from 'zod';
-export type { StateUpdates, StateUpdateControl } from '@az-device-shop/eventing/state'
+export type { Control } from '@az-device-shop/eventing/state'
 
 // Mutate state in a Consistant, Safe, recorded mannore
 export interface FactoryAction {
@@ -184,8 +184,8 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     const now = Date.now()
                     let capacity_allocated_update = 0
 
-                    let factory_updates: Array<StateUpdates> = []
-                    let workitem_updates: Array<StateUpdates> = []
+                    let factory_updates: Array<StateUpdate> = []
+                    let workitem_updates: Array<StateUpdate> = []
 
                     const factoryItems : Array<FactoryItem> = state.getValue('factory', 'items')
                     // check wi in factory_status status look for for completion to free up capacity
@@ -199,7 +199,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - (item.allocated_capacity as number)
                             factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } }})
-                            const [[status, complete_updates]] = await workItemsReducer(state, { type: 'STATUS_UPDATE', _id: item.workItem_id, status: { stage: 'FACTORY_COMPLETE' } }) as Array<[ReducerInfo, Array<StateUpdates>]> 
+                            const [[status, complete_updates]] = await workItemsReducer(state, { type: 'STATUS_UPDATE', _id: item.workItem_id, status: { stage: 'FACTORY_COMPLETE' } }) as Array<[ReducerInfo, Array<StateUpdate>]> 
                             workitem_updates = workitem_updates.concat(complete_updates)
                         }
                         //statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
@@ -211,7 +211,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     const {capacity_allocated} = state.getValue("factory", "factoryStatus")
                     const workItems: Array<WorkItemObject> = state.getValue('workItems', 'items')
                     for (let wi of workItems.filter(i => i.status.stage === 'FACTORY_READY') as Array<WorkItemObject>) {
-                        const [[{ failed }, accept_updates]] = await workItemsReducer(state, { type: 'STATUS_UPDATE', _id: wi._id, status: { stage: 'FACTORY_ACCEPTED' } }) as Array<[ReducerInfo, Array<StateUpdates>]> 
+                        const [[{ failed }, accept_updates]] = await workItemsReducer(state, { type: 'STATUS_UPDATE', _id: wi._id, status: { stage: 'FACTORY_ACCEPTED' } }) as Array<[ReducerInfo, Array<StateUpdate>]> 
                         workitem_updates = workitem_updates.concat(accept_updates)
 
                         if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
@@ -302,7 +302,7 @@ function inventryReducer(): Reducer<FactoryState, FactoryAction> {
     }
 }
 
-export type FactoryState =  WorkItems & Factory & Inventory // StateUpdateControl //&
+export type FactoryState =  WorkItems & Factory & Inventory // Control //&
 
 export class FactoryStateManager extends StateManager<FactoryState, FactoryAction> {
 

@@ -14,6 +14,8 @@
         "paths": {
             "@az-device-shop/eventing": ["./common/eventing"],
             "@az-device-shop/workflow": ["./common/workflow"],
+            "@az-device-shop/factory-server": ["./factoryv2/server"],
+            "@az-device-shop/factory-ui": ["./factoryv2/ui"],
             "@az-device-shop/webserver": ["./common/webserver"],
             "@az-device-shop/ordering": ["./ordering"]
         }
