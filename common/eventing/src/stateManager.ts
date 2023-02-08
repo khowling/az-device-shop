@@ -1,9 +1,9 @@
 import assert from 'assert'
-import mongodb  from 'mongodb'
-const { Timestamp } = mongodb
+import mongodb, {Timestamp }  from 'mongodb'
 
 
-import { JSStateStore } from './jsStateStore.js'
+
+//import { JSStateStore } from './jsStateStore.js'
 import { LevelStateStore } from './levelStateStore.js'
 
 export type ReducerInfo = {
@@ -66,9 +66,9 @@ export type StateStore<S> = {
     stateDefinition: { [sliceKey: string]: StateStoreDefinition};
     getValue(reducerKey: string, path: string, idx?: number): any;
     debugState(): void;
-    serializeState: S;
+    serializeState(): Promise<S>;
     // deserializeState(newstate: {[statekey: string]: any}): void
-    apply(statechanges: StateChanges): {[reducerKey: string] : ApplyInfo}
+    apply(statechanges: StateChanges): Promise<{[reducerKey: string] : ApplyInfo}>
 }
 
 
@@ -155,7 +155,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         const reducersInitState = reducersWithControl.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {})
         const reducersWithPassinInitState = reducersWithPassin.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {})
 
-        this._stateStore = new JSStateStore<S>(this._name, {...reducersInitState, ...reducersWithPassinInitState} )
+        this._stateStore = new LevelStateStore<S>(this._name, {...reducersInitState, ...reducersWithPassinInitState} )
 
         this._rootReducer = this.combineReducers(/*this._connection, */ reducersWithControl, reducersWithPassin)
         //console.log(`StateManager: ${JSON.stringify(this.state)}`)
@@ -276,9 +276,9 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
 
             // This is where the linked state will be updated, so any items added will get their new id's (used by process state manager)
             // We want to apply this output to the processor state
-            applyLinkInfo = linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 ? this._linkedStateManager.stateStore.apply(linkChanges) : {}
+            applyLinkInfo = linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 ? await this._linkedStateManager.stateStore.apply(linkChanges) : {}
             // apply events to local state
-            applyInfo = changes && Object.keys(changes).length > 0 ? this.stateStore.apply(changes) : {}
+            applyInfo = changes && Object.keys(changes).length > 0 ? await this.stateStore.apply(changes) : {}
             
         }
 

@@ -1,8 +1,8 @@
 import  assert from 'assert'
 import fs from 'fs'
 
-import { StateStore } from './jsStateStore.js'
-import { EventStoreConnection } from './eventStoreConnection.js'
+//import { StateStore } from './jsStateStore.js'
+//import { EventStoreConnection } from './eventStoreConnection.js'
 
 /*export async function restoreState(sc: EventStoreConnection, chkdir: string, stateStores: StateStore[], enableCheckpointing: boolean = false): Promise<number> {
 

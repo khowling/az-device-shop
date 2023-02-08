@@ -18,6 +18,7 @@ import assert, { throws } from 'assert'
 */
 
 import { Level } from 'level'
+import  type { AbstractSublevel, AbstractBatchOperation, AbstractBatchPutOperation, AbstractBatchDelOperation } from 'abstract-level'
 
 import { StateStoreDefinition, StateStoreValueType, Control, StateStore, StateChanges, StateUpdate, ApplyInfo, UpdatesMethod } from './stateManager.js'
 
@@ -41,7 +42,7 @@ export class LevelStateStore<S> implements StateStore<S> {
     private _name: string
     private _stateDefinition: { [sliceKey: string]: StateStoreDefinition}
     private _db: Level
-    private _list_sublevels: {[key: string]: Level} = {}
+    private _list_sublevels: {[key: string]: AbstractSublevel<Level<string, any>, string | Buffer | Uint8Array, number, any>} = {}
 
 
     constructor(name: string, stateDefinition: { [sliceKey: string]: StateStoreDefinition}) {
@@ -59,7 +60,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                     db.put (`${sliceKey}:${key}`, 0)
                 } else if (type === 'LIST') {
                     db.put (`${sliceKey}:${key}:_next_sequence`, 0)
-                    this._list_sublevels[`${sliceKey}:${key}`] = db.sublevel<Number, any>(`${sliceKey}:${key}`, {keyEncoding: 'number', valueEncoding: 'json'})
+                    this._list_sublevels[`${sliceKey}:${key}`] = db.sublevel<number, any>(`${sliceKey}:${key}`, {keyEncoding: 'number', valueEncoding: 'json'})
                 }
             }
         }
@@ -79,7 +80,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                 // return all values in array
                 return await this._list_sublevels[`${reducerKey}:${path}`].values().all()
             } else {
-                return await this._list_sublevels[`${reducerKey}:${path}`].get(idx)
+                return await this._list_sublevels[`${reducerKey}:${path}`].get(idx as number)
             }
         } else {
             return await this._db.get(`${reducerKey}:${path}`)
@@ -100,7 +101,7 @@ export class LevelStateStore<S> implements StateStore<S> {
     }
 
     /* Convert state into a JSON structure, used to send snapshot to clients */
-    get async serializeState(): Promise<S>  {
+    async serializeState(): Promise<S>  {
         
         const stateDefinition = this._stateDefinition
 
@@ -123,7 +124,7 @@ export class LevelStateStore<S> implements StateStore<S> {
     // }
 
 
-    apply(statechanges:StateChanges): {[slicekey: string]: ApplyInfo} {
+    async apply(statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
 
         const state = this._db
         const _control = (statechanges as Control)._control 
@@ -132,12 +133,9 @@ export class LevelStateStore<S> implements StateStore<S> {
         //assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
         //let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
         let returnInfo : {[slicekey: string]: ApplyInfo} = {}
-        let levelUpdates: Array<{
-            type: 'put' | 'del';
-            sublevel?: string;
-            key: string | number;
-            value?: any;
-        }> =  []
+
+        let levelUpdates: AbstractBatchOperation<Level<string, string>, any, any>[]=  []
+        let cacheUpdates: {[key: string]: any} = {}
 
         //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
@@ -159,14 +157,19 @@ export class LevelStateStore<S> implements StateStore<S> {
                         if (type === 'LIST') {
                             assert(!isNaN(update.filter?._id as number) , `apply (SET), requires filter._id as a number, got ${update?.filter?._id}`)
 
+                            cacheUpdates = {...cacheUpdates, [`${levelkey}:${update?.filter?._id}`]: update.doc}
+
                             levelUpdates = levelUpdates.concat({
                                 type: 'put',
-                                sublevel: levelkey,
-                                key: update?.filter?._id as number,
+                                sublevel: this._list_sublevels[levelkey],
+                                key: update?.filter?._id,
                                 value: update.doc
-                            })
+                            } as AbstractBatchPutOperation<Level<string, string>, any, any>)
                                 
                         } else { // object
+
+                            cacheUpdates = {...cacheUpdates, [levelkey]: update.doc}
+
                             levelUpdates = levelUpdates.concat({
                                 type: 'put',
                                 key: levelkey,
@@ -179,13 +182,16 @@ export class LevelStateStore<S> implements StateStore<S> {
                         assert (type === 'LIST', `apply (ADD): Can only apply to "List": "${reducerKey}.${update.path}"`)
                         assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
                         const seqKey = `${levelkey}:_next_sequence`
-                        const _next_sequence = levelUpdates.find(lu => lu.type === 'put' && lu.key === seqKey)?.value || this._db.get(seqKey) as number
+                        const _next_sequence = cacheUpdates.hasOwnProperty(seqKey) ? cacheUpdates[seqKey] :  await this._db.get(seqKey)
                         
                         const added = {_id: _next_sequence, ...(identifierFormat && { identifier: `${identifierFormat.prefix || ''}${identifierFormat.zeroPadding ?  String(_next_sequence).padStart(identifierFormat.zeroPadding, '0') : _next_sequence}`}), ...update.doc}
                         
+                        cacheUpdates = {...cacheUpdates, [`${levelkey}:${_next_sequence}`]: added}
+                        cacheUpdates = {...cacheUpdates, [seqKey]: _next_sequence + 1}
+
                         levelUpdates = levelUpdates.concat([{
                             type: 'put',
-                            sublevel: levelkey,
+                            sublevel: this._list_sublevels[levelkey],
                             key: _next_sequence,
                             value: added
                         }, {
@@ -205,11 +211,14 @@ export class LevelStateStore<S> implements StateStore<S> {
                         const existing = this._list_sublevels[levelkey].get(id)
                         assert (existing, `apply (RM): Cannot find existing value, "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
 
+                        
+                        cacheUpdates = {...cacheUpdates, [`${levelkey}:${id}`]: null}
+
                         levelUpdates = levelUpdates.concat({
                             type: 'del',
-                            sublevel: levelkey,
+                            sublevel: this._list_sublevels[levelkey],
                             key: id
-                        })
+                        } as AbstractBatchDelOperation<Level<string, string>, any>)
 
                         break
                     case 'UPDATE':
@@ -220,9 +229,9 @@ export class LevelStateStore<S> implements StateStore<S> {
 
                        
                         const existing_doc = type === 'LIST' ?
-                            levelUpdates.find(lu => lu.type === 'put' && lu.sublevel === levelkey && lu.key === update.filter?._id as number)?.value || this._list_sublevels[levelkey].get(update.filter?._id as number)
+                            cacheUpdates.hasOwnProperty(`${levelkey}:${update.filter?._id}`) ? cacheUpdates[`${levelkey}:${update.filter?._id}`] :  await this._list_sublevels[levelkey].get(update.filter?._id as number)
                             :
-                            levelUpdates.find(lu => lu.type === 'put' && lu.key === levelkey)?.value || this._db.get(levelkey) as number
+                            cacheUpdates.hasOwnProperty(levelkey) ? cacheUpdates[levelkey] :  await this._db.get(levelkey) 
 
                         assert(existing_doc, `apply (UPDATE): Applying a update on "${reducerKey}.${update.path}" to a non-existant document (key=)`)
                         
@@ -243,9 +252,11 @@ export class LevelStateStore<S> implements StateStore<S> {
                         // Add the rest of the existing doc to the new doc
                         const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
 
+                        cacheUpdates = {...cacheUpdates, ...(type === 'LIST' ? {[`${levelkey}:${update.filter?._id}`]: merged} : {[levelkey]: merged})}
+
                         levelUpdates = levelUpdates.concat( type === 'LIST' ? {
                             type: 'put',
-                            sublevel: levelkey,
+                            sublevel: this._list_sublevels[levelkey],
                             key: update.filter?._id as number,
                             value: merged
                         } : {
@@ -262,7 +273,9 @@ export class LevelStateStore<S> implements StateStore<S> {
                     case 'INC':
                         assert (type === 'COUNTER', `apply (INC): Can only apply to a "Counter": "${reducerKey}.${update.path}"`)
                         
-                        const inc = levelUpdates.find(lu => lu.type === 'put' && lu.key === levelkey)?.value || this._db.get(levelkey) as number + 1
+                        const inc = cacheUpdates.hasOwnProperty(levelkey) ? cacheUpdates[levelkey] :  await this._db.get(levelkey)  + 1
+
+                        cacheUpdates = {...cacheUpdates, [levelkey]: inc}
 
                         levelUpdates = levelUpdates.concat({
                             type: 'put',
@@ -277,7 +290,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                 }
             }
         }
-        this._db.batch(levelUpdates)
+        await this._db.batch(levelUpdates)
         return returnInfo
     }
 }

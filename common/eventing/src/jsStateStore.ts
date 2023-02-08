@@ -70,7 +70,7 @@ export class JSStateStore<S> implements StateStore<S> {
     }
 
      /* Convert state into a JSON structure, used to send snapshot to clients */
-    get serializeState(): S {
+    async serializeState(): Promise<S> {
 
         let serializeState = {} as {[statekey: string]: any}
 
@@ -111,7 +111,7 @@ export class JSStateStore<S> implements StateStore<S> {
         }
     }
 */
-    apply(statechanges:StateChanges): {[slicekey: string]: ApplyInfo} {
+    async apply(statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
 
         
         const _control = (statechanges as Control)._control 
