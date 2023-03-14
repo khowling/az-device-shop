@@ -45,7 +45,7 @@
     "@babel/preset-react": "^7.16.0",
     "babel-loader": "^8.2.3",
     "rimraf": "^3.0.2",
-    "webpack": "^5.64.1"
+    "webpack": "^5.76.0"
   },
   "dependencies": {
     "@fluentui/merge-styles": "^8.2.0",
