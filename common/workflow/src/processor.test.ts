@@ -1,6 +1,6 @@
 
-import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
-import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor.js"
+import { MongoClient } from 'mongodb'
+import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor"
 import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
 import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from '@az-device-shop/eventing/state'
 
@@ -47,7 +47,7 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
                     ]]
                 case SimpleActionType.Update:
                     return [{ failed: false }, [
-                        { method: 'UPDATE', path: 'simpleitems', filter: {_id}, doc: { "$set" : doc} }
+                        { method: 'UPDATE', path: 'simpleitems', filter: {_id } as {_id: number}, doc: { "$set" : doc} }
                     ]]
                 default: 
                     return [null, null]
@@ -63,33 +63,23 @@ class TestStateManager extends StateManager<SimpleState, SimpleAction> {
     constructor(name: string, connection: EventStoreConnection) {
         super(name, connection, [
             simpleReducer(),
-        ])
+        ], [])
     }
 }
 
-const murl : string = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev?replicaSet=rs0"
-const client = new MongoClient(murl);
 
-const esConnection = new EventStoreConnection(murl, 'test_events')
-const testState = new TestStateManager('emeatest_v0', esConnection)
-const processor = new Processor('processor_v001', esConnection, { linkedStateManager: testState })
+describe('Workflow tests (jesttest_02)', () => {
 
-
-async function test() {
-
-    // Event Store Connection
-    // Store data as an immutable series of events in a mongo container
-
-    await client.connect();
-    await esConnection.initFromDB(client.db(), false)
+    const murl : string = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev?replicaSet=rs0"
+    const client = new MongoClient(murl);
     
-//    setInterval(() => {
-//        console.log(processor.processList)
-//    },1000)
-
+    const esConnection = new EventStoreConnection(murl, 'jesttest_02')
+    const testState = new TestStateManager('jesttest_02', esConnection)
+    const processor = new Processor('jesttest_02', esConnection, { linkedStateManager: testState })
+    
     // Add workflow steps, ALL STEPS MUST BE ITEMPOTENT
 
-    async function sleepAndCtxTest(ctx, next) {
+    async function sleepAndCtxTest(ctx: any, next: any) {
         console.log (`step1: for ctx=${JSON.stringify(ctx)}, sleep for 5 seconds, checking await works ok`)
         //sleep for 5 seconds
         await new Promise(resolve => setTimeout(resolve, 5 * 1000))
@@ -106,7 +96,7 @@ async function test() {
     }
 
 
-    async function retryAndAddedTest (ctx, next) {
+    async function retryAndAddedTest (ctx: any, next: any) {
         console.log (`step2: result from linkedAction ctx._retry_count=${ctx._retry_count}, ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes)}`)
         const s : SimpleObject = ctx.lastLinkedRes.simple.added as SimpleObject
         return await next(
@@ -114,7 +104,7 @@ async function test() {
             { update_ctx: { simple_id: s._id }, retry_until: {isTrue: (ctx._retry_count || 0) === 3} })
     }
 
-    async function finish (ctx, next) {
+    async function finish (ctx: any, next: any) {
         console.log (`step3 done : ctx.linkedRes=${JSON.stringify(ctx.lastLinkedRes)}`)
 
         return await next()
@@ -126,21 +116,37 @@ async function test() {
     processor.use(finish)
 
 
-    // Trigger first workflow
-    const submitFn = await processor.listen()
-    
-    
-    
-    const po = await submitFn({ trigger: { doc: {message: "my first workflow"} } }, null)
-    console.log (`test() : po=${JSON.stringify(po)}`)
 
-    await new Promise(resolve => setTimeout(resolve, 10 * 1000))
-    processor.debugState()
-    testState.stateStore.debugState()
-    const po1 = await submitFn({ trigger: { doc: {message: "my second workflow"} } }, null)
-    console.log (`test() : po=${JSON.stringify(po1)}`)
 
-}
+    beforeAll(async () => {
+        await client.connect();
+        await esConnection.initFromDB(client.db(), null, false)
+        await testState.stateStore.initStore({distoryExisting: true})
+    })
 
-test()
+    afterAll(async () => {
+        esConnection.close()
+        await client.close()
+    })
+        
+//    setInterval(() => {
+//        console.log(processor.processList)
+//    },1000)
 
+
+    test('Test basics', async () => {
+
+        // Trigger first workflow
+        const submitFn = await processor.listen()
+        
+        const po = await submitFn({ trigger: { doc: {message: "my first workflow"} } }, {})
+        console.log (`test() : po=${JSON.stringify(po)}`)
+
+        await new Promise(resolve => setTimeout(resolve, 10 * 1000))
+        processor.debugState()
+        //testState.stateStore.debugState()
+        const po1 = await submitFn({ trigger: { doc: {message: "my second workflow"} } }, {})
+        console.log (`test() : po=${JSON.stringify(po1)}`)
+    })
+
+})

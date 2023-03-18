@@ -1,4 +1,5 @@
 
+import {describe, expect, test, beforeAll, afterAll} from '@jest/globals';
 
 import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from './stateManager'
 import { EventStoreConnection } from './eventStoreConnection'
@@ -19,10 +20,11 @@ export interface SimpleAction {
     status?: any;
 }
 
-export enum SimpleActionType {
-    New ,
-    Update
+const VALUE_TYPES = {
+    NEW: 'new',
+    UPDATE: 'udpate'
 }
+export type SimpleActionType = keyof typeof VALUE_TYPES
 
 type SimpleReducer = {
     simple: {
@@ -35,17 +37,24 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
         sliceKey: 'simple',
         initState : {
             "simpleitems": { 
-                type: 'LIST', 
+                type: 'LIST',
+                identifierFormat: {prefix: 'S_', zeroPadding: 5}
+            },
+            "workflow": {
+                type: 'HASH',
+                values: {
+                    keyStage: 'stage1'
+                }
             }
         },
         fn: async function (/*connection,*/ state, action): Promise<ReducerReturn> {
             const { type, _id, doc } = action
             switch (type) {
-                case SimpleActionType.New:
+                case 'NEW':
                     return [{ failed: !(action.doc && action.doc.hasOwnProperty('_id') === false) }, [
                         { method: 'ADD', path: 'simpleitems', doc: doc }
                     ]]
-                case SimpleActionType.Update:
+                case 'UPDATE':
                     return [{ failed: false }, [
                         { method: 'UPDATE', path: 'simpleitems', filter: {_id: _id as number}, doc: { "$set" : doc} }
                     ]]
@@ -68,29 +77,84 @@ class TestStateManager extends StateManager<SimpleState, SimpleAction> {
 }
 
 
-test('simple store test', async () => {
+describe('Test Data Types (jesttest_01)', () => {
 
     // Event Store Connection
     // Store data as an immutable series of events in a mongo container
 
     const murl : string = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev?replicaSet=rs0"
+    
     const client = new MongoClient(murl);
+    
+    const esConnection = new EventStoreConnection(murl, 'jesttest_01')
+    const testState = new TestStateManager('jesttest_01', esConnection)
 
-    const esConnection = new EventStoreConnection(murl, 'test_events')
-    const testState = new TestStateManager('emeatest_v0', esConnection)
+
+    beforeAll(async () => {
+        await client.connect();
+        await esConnection.initFromDB(client.db(), null, false)
+        await testState.stateStore.initStore({distoryExisting: true})
+    })
+
+    afterAll(async () => {
+        esConnection.close()
+        await client.close()
+    });
+
+    
+    test('Test LIST', async () => {
 
 
+        expect(
+            await testState.stateStore.getValue('_control', 'head_sequence')
+        ).toBe(0)
 
-    await client.connect();
-    await esConnection.initFromDB(client.db(), null, false)
 
-    var tsm = new TestStateManager('test', esConnection)
-    var [rinfo, dinfo] = await tsm.dispatch({ type: SimpleActionType.New, doc: { name: 'test', status: 1 } })
+        expect(
+            await testState.stateStore.getValue('simple', 'simpleitems')
+        ).toHaveLength(0)
 
-    console.log('Reducer Info', rinfo)
-    console.log('Dispatch Info', dinfo)
+        var [rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test', status: 1 } })
 
-    var val = tsm.stateStore.getValue('simple', 'simpleitems')
-    expect(val).toEqual([{ name: 'test', status: 1 }])
+        console.log('Reducer Info', rinfo)
+        console.log('Dispatch Info', dinfo)
 
+        // Ensure the _id field is set to 0
+        expect(rinfo).toHaveProperty('simple.added._id', 0)
+        expect(rinfo).toHaveProperty('simple.added.identifier', 'S_00000')
+    
+
+        var [rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test10', status: 10 } })
+
+        console.log('Reducer Info', rinfo)
+        console.log('Dispatch Info', dinfo)
+
+        // Ensure the _id field is set to 1
+        expect(rinfo).toHaveProperty('simple.added._id', 1)
+        expect(rinfo).toHaveProperty('simple.added.identifier', 'S_00001')
+
+        // Make 2 state changes, so expect 'head_sequence' to be 2
+        expect(
+            await testState.stateStore.getValue('_control', 'head_sequence')
+        ).toBe(2)
+
+        // Return full array of simpleitems
+        expect(
+            await testState.stateStore.getValue('simple', 'simpleitems')
+        ).toHaveLength(2)
+
+        expect(
+            await testState.stateStore.getValue('simple', 'simpleitems', 1)
+        ).toHaveProperty('_id', 1)
+    
+    })
+     
+    test('Test HASH', async () => {
+        expect(
+            await testState.stateStore.getValue('simple', 'workflow')
+        ).toHaveProperty('keyStage', 'stage1')
+    })
+
+    
 })
+

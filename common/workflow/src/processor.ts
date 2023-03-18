@@ -1,8 +1,4 @@
 import assert from 'assert'
-import Emitter from 'events'
-import mongodb from 'mongodb'
-const { Timestamp } = mongodb
-
 
 export interface ProcessorOptions {
     complete?: boolean,
@@ -95,7 +91,7 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
 
                     return [{ failed: false }, [
                         {
-                            method: 'UPDATE', path: 'processList', filter: { _id }, doc: {
+                            method: 'UPDATE', path: 'processList', filter: { _id } as { _id: number}, doc: {
                                 "$set": {
                                     function_idx,
                                     complete,
@@ -109,7 +105,7 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
 
                     return [{ failed: false }, [
                         {
-                            method: 'UPDATE', path: 'processList', filter: { _id }, doc : {["$set"]: { lastLinkedRes }}
+                            method: 'UPDATE', path: 'processList', filter: { _id } as { _id: number}, doc : {["$set"]: { lastLinkedRes }}
                         }]]
                 default:
                     assert.fail('Cannot apply processor actions, unknown ActionType')
@@ -121,13 +117,16 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
 export type ProcessorState = Control & ProcessorSlice
 
 
-class ProcessorStateManager<L> extends StateManager<ProcessorState, ProcessAction> {
+class ProcessorStateManager<LS, LA> extends StateManager<ProcessorState, ProcessAction, LS, LA> {
 
-    constructor(name: string, connection: EventStoreConnection, linkedStateManager: StateManagerInterface<L>) {
-        super(name, connection, [
-            processorReducer()
-        ],
-        linkedStateManager)
+    constructor(name: string, connection: EventStoreConnection, linkedStateManager: StateManagerInterface<LS, LA>) {
+        super(
+            name, 
+            connection, 
+            [ processorReducer() ],
+            [],
+            linkedStateManager
+        )
     }
 }
 
@@ -143,7 +142,7 @@ export interface NextFunction<T>  {
 }
 
 // compose - returns a function that recusivly executes the middleware for each instance of the workflow.
-function compose (middleware: Array<(context, next?, lastDispatchResult?) => any>, processorStateManager: StateManager<ProcessorState, ProcessAction>) {
+function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any}, next: NextFunction<LA>, lastDispatchResult?: any) => any>, processorStateManager: ProcessorStateManager<LS, LA>) {
     if (!Array.isArray(middleware)) throw new TypeError('Middleware stack must be an array!')
     for (const fn of middleware) {
       if (typeof fn !== 'function') throw new TypeError('Middleware must be composed of functions!')
@@ -155,7 +154,7 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
      * @api public
      */
   
-    return async function (context, /*next?,*/ initProcessorOptions?: ProcessorOptions) {
+    return async function (context :  { [ctxParam: string]: any}, /*next?,*/ initProcessorOptions?: ProcessorOptions) {
       // last called middleware #
       let index = -1
       return await dispatch(context._init_function_idx, null, initProcessorOptions)
@@ -163,8 +162,8 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
       // i: number, initial set from processor.init_fuction (from new (0) or restart handleRequest), then from the recusive (i+1) bind value below
       // linkedStateActions: this is additional state actions from the stage to be applied to the state using the CombindDispatch function
       // ProcessorOptions: these are processor options, to instruct this function.
-      async function dispatch (i: number, linkedStateActions: any, options: ProcessorOptions = null): Promise<WorkFlowStepResult> {
-        if (i <= index && !options.retry_until) return Promise.reject(new Error('next() called multiple times'))
+      async function dispatch (i: number, linkedStateActions: any, options?: ProcessorOptions): Promise<WorkFlowStepResult> {
+        if (i <= index && !options?.retry_until) return Promise.reject(new Error('next() called multiple times'))
         index = i
 
         const need_retry = options?.retry_until && !options.retry_until.isTrue || false
@@ -185,13 +184,13 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
             // add "_retry_count" key to options object to track number of retries
             const newOpts = options?.retry_until && options.retry_until._retry_count !==  context._retry_count ? {...options, retry_until: {...options.retry_until, _retry_count: context._retry_count}}  : options
 
-            const complete: boolean = (i >= middleware.length || (options && options.complete === true)) && !need_retry
+            const complete: boolean = (i >= middleware.length || (options && options.complete === true)) as boolean && !need_retry 
 
             const [processorInfo, linkedStateInfo] = await processorStateManager.dispatch({
                 type: ProcessActionType.RecordProcessStep,
                 _id: context._id,
                 function_idx: i,
-                lastLinkedRes: null,
+                //lastLinkedRes: null,
                 complete,
                 options: newOpts
             }, need_retry ? undefined : linkedStateActions/*, event_label*/)
@@ -199,7 +198,7 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
             if (linkedStateActions && !need_retry) {
                 // Store the linked state info in the processor state store! (capture any new id's that have been created)
                 // any processor re-hydration will need to use this info to rehydrate the linked state
-                const [addlinkedInfo, addlinkedInfoChanges] = await processorStateManager.rootReducer(null, {
+                const [addlinkedInfo, addlinkedInfoChanges] = await processorStateManager.rootReducer(processorStateManager.stateStore, {
                     type: ProcessActionType.RecordLinkedStateInfo,
                     _id: context._id,
                     lastLinkedRes: linkedStateInfo
@@ -214,7 +213,7 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
                 if (i === context._init_function_idx) {
                     i--
                 } else {
-                    return { state: options, _id: context._id}
+                    return { state: options as ProcessorOptions, _id: context._id}
 
                 }
             }
@@ -233,17 +232,17 @@ function compose (middleware: Array<(context, next?, lastDispatchResult?) => any
   }
 
 
-export class Processor<L = {}, LA = {}> extends EventEmitter {
+export class Processor<LS = {}, LA = {}> extends EventEmitter {
 
     private _name: string
     private _connection: EventStoreConnection
-    private _stateManager: ProcessorStateManager<L>
-    private _linkedStateManager: StateManagerInterface<L>
+    private _stateManager: ProcessorStateManager<LS, LA>
+    private _linkedStateManager: StateManagerInterface<LS, LA>
     private _context: any
-    private _middleware: Array<(context: any, next: NextFunction<LA> ) => Promise<WorkFlowStepResult>>
-    private _fnMiddleware
-    private _restartInterval: NodeJS.Timeout
-    private _active: Set<number>
+    private _middleware: Array<(context: { [ctxParam: string]: any}, next: NextFunction<LA> ) => Promise<WorkFlowStepResult>> = []
+    private _fnMiddleware: any
+    private _restartInterval: NodeJS.Timeout | null = null
+    private _active: Set<number> = new Set()
 
     constructor(name: string, connection: EventStoreConnection, opts: any = {}) {
         super()
@@ -252,18 +251,18 @@ export class Processor<L = {}, LA = {}> extends EventEmitter {
         this._middleware = []
         this._linkedStateManager = opts.linkedStateManager
         this._context = { processor: this.name, linkedStore: this._linkedStateManager.stateStore }
-        this._stateManager = new ProcessorStateManager<L>(name, connection, this._linkedStateManager)
+        this._stateManager = new ProcessorStateManager<LS, LA>(name, connection, this._linkedStateManager)
     }
 
     get connection(): EventStoreConnection {
         return this._connection 
     }
 
-    get stateManager(): ProcessorStateManager<L> {
+    get stateManager(): ProcessorStateManager<LS, LA> {
         return this._stateManager
     }
 
-    get linkedStateManager(): StateManagerInterface<L> {
+    get linkedStateManager(): StateManagerInterface<LS, LA> {
         return this._linkedStateManager
     }
 
@@ -301,10 +300,10 @@ export class Processor<L = {}, LA = {}> extends EventEmitter {
 
     private restartProcessors(/*checkSleepStageFn, restartall*/) {
         // Restart required_state_processor_state
-        for (let p of this.getProcessorState('processList').filter(p => !p.complete) as Array<ProcessObject>) {
+        for (let p of this.getProcessorState('processList').filter((p: ProcessObject) => !p.complete)) {
             let restartP = null
 
-            if (!this._active.has(p._id)) {
+            if (!this._active.has(p._id as number)) {
 
                 if (p.options) {
                     // if options, check if still waiting for sleep_until time, or, if retry_until, check if retry value is true, or if its needs to go back a step
@@ -312,7 +311,7 @@ export class Processor<L = {}, LA = {}> extends EventEmitter {
                         //
                         restartP = p
                     } else if (p.options.retry_until && !p.options.retry_until.isTrue) {
-                        restartP = {...p, function_idx: p.function_idx-1,  options: {...p.options, retry_until: {...p.options.retry_until,  _retry_count: p.options.retry_until._retry_count+1}}}
+                        restartP = {...p, function_idx: p.function_idx as number -1,  options: {...p.options, retry_until: {...p.options.retry_until,  _retry_count: p.options.retry_until._retry_count+1}}}
                     } else {
                         restartP = p
                     }
@@ -341,12 +340,12 @@ export class Processor<L = {}, LA = {}> extends EventEmitter {
     }
     
 
-    async listen (/*checkSleepStageFn?: (arg: any) => boolean*/): Promise<(update_ctx, trigger) => Promise<ReducerInfo>> {
-        const fn = this._fnMiddleware  = compose(this._middleware, this._stateManager)
+    async listen (/*checkSleepStageFn?: (arg: any) => boolean*/): Promise<(update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}) => Promise<ReducerInfo>> {
+        const fn = this._fnMiddleware  = compose<LS, LA>(this._middleware, this._stateManager)
     
         if (!this.listenerCount('error')) this.on('error', (err) => console.error(err.toString()))
     
-        const handleRequest = async (update_ctx, trigger): Promise<ReducerInfo> => {
+        const handleRequest = async (update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}): Promise<ReducerInfo> => {
             //console.log ("processor.listen.handleRequest, new process started")
             // Add to processList
             const [{ processor }] = await this._stateManager.dispatch({
@@ -370,7 +369,7 @@ export class Processor<L = {}, LA = {}> extends EventEmitter {
             if (processorStateInfo && linkedStateInfo) {
                 // Store the linked state info in the processor state store! (capture any new id's that have been created)
                 // any processor re-hydration will need to use this info to rehydrate the linked state
-                const [addlinkedInfo, addlinkedInfoChanges] = await this._stateManager.rootReducer(null, {
+                const [addlinkedInfo, addlinkedInfoChanges] = await this._stateManager.rootReducer(this._stateManager.stateStore, {
                     type: ProcessActionType.RecordLinkedStateInfo,
                     _id: processorStateInfo['processor']['merged']._id,
                     lastLinkedRes: linkedStateInfo
@@ -410,17 +409,17 @@ export class Processor<L = {}, LA = {}> extends EventEmitter {
         return ctx
     }
 
-    handleRequest (p: ProcessObject, fnMiddleware) {
+    handleRequest (p: ProcessObject, fnMiddleware: any) {
 
-        assert (!isNaN(p._id), 'ctx._id is required')
-        this._active.add(p._id)
+        assert (!isNaN(p._id as number), 'ctx._id is required')
+        this._active.add(p._id as number)
 
         const ctx = this.createContext(p)
-        return fnMiddleware(ctx, p.options).then((r) => {
+        return fnMiddleware(ctx, p.options).then((r: any) => {
             this._active.delete(ctx._id)
             // NEED to return await next in workflow step to get "r"
             // console.log(`handleResponse r=${JSON.stringify(r)}`)
-        }).catch((err) => {
+        }).catch((err: any) => {
             console.error(err)
         })
     }

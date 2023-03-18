@@ -1,5 +1,6 @@
 {
     "exclude": [
+        "**/jest.config.ts",
         "**/*.test.ts",
         "**/*.stub.ts",
         "**/node_modules",
@@ -7,8 +8,8 @@
         "**/out"
     ],
     "compilerOptions": {
-        "target": "es2021",
-        "module": "node16",
+        "target": "esnext",
+        "moduleResolution": "nodenext",
         "sourceMap": true,
         "declaration": true,
         "paths": {

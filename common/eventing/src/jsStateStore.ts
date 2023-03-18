@@ -8,17 +8,33 @@ export class JSStateStore<S> implements StateStore<S> {
     private _name: string
     private _stateDefinition: { [sliceKey: string]: StateStoreDefinition}
 
-    private _state : { [key: string]: any }
+    private _state : { [key: string]: any } = {}
 
     constructor(name: string, stateDefinition: { [sliceKey: string]: StateStoreDefinition}) {
         this._name = name
         this._stateDefinition = stateDefinition
 
+    }
+
+    get name() {
+        return this._name
+    }
+
+    get stateDefinition() {
+        return this._stateDefinition
+    }
+
+    async initStore({distoryExisting = false}: {distoryExisting: boolean}) {
+
+        if (distoryExisting || this._state === null) {
+            this._state = {}
+        }
+
         let state = {}
 
-        for (let sliceKey of Object.keys(stateDefinition)) {
-            for (let key of Object.keys(stateDefinition[sliceKey])) {
-                const {type, values} = stateDefinition[sliceKey][key]
+        for (let sliceKey of Object.keys(this.stateDefinition)) {
+            for (let key of Object.keys(this.stateDefinition[sliceKey])) {
+                const {type, values} = this.stateDefinition[sliceKey][key]
                 if (type === 'HASH') {
                     state = {...state, [`${sliceKey}:${key}`]: values}
 
@@ -34,14 +50,8 @@ export class JSStateStore<S> implements StateStore<S> {
 
         console.log (`JSStateStore: name=${name}, state=${JSON.stringify(state)}`)
         this._state = state
-    }
 
-    get name() {
-        return this._name
-    }
-
-    get stateDefinition() {
-        return this._stateDefinition
+        return Promise.resolve()
     }
 
     private get state() {

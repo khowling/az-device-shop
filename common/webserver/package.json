@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "npx tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -29,7 +29,7 @@
   "description": "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-5.html",
   "devDependencies": {
     "@types/ws": "^8.2.0",
-    "typescript": "^4.8.3"
+    "typescript": "^5.0.2"
   },
   "dependencies": {
     "ws": "^8.4.0"

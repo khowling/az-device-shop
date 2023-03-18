@@ -16,7 +16,7 @@ import assert, { throws } from 'assert'
     It conveniently bundles levelup, leveldown and encoding-down. 
     Its main export is levelup
 */
-
+import { rmdir } from 'node:fs/promises';
 import { Level } from 'level'
 import  type { AbstractSublevel, AbstractBatchOperation, AbstractBatchPutOperation, AbstractBatchDelOperation } from 'abstract-level'
 
@@ -41,29 +41,15 @@ export class LevelStateStore<S> implements StateStore<S> {
 
     private _name: string
     private _stateDefinition: { [sliceKey: string]: StateStoreDefinition}
-    private _db: Level
+    private _db: Level | null = null 
     private _list_sublevels: {[key: string]: AbstractSublevel<Level<string, any>, string | Buffer | Uint8Array, number, any>} = {}
-
+    private _storeDir: string
 
     constructor(name: string, stateDefinition: { [sliceKey: string]: StateStoreDefinition}) {
         this._name = name
         this._stateDefinition = stateDefinition
+        this._storeDir = `./_leveldb.${name}`
 
-        const db = this._db = new Level<string, any>(process.env.DBPATH || `./${name}.levelss`)
-
-        for (let sliceKey of Object.keys(stateDefinition)) {
-            for (let key of Object.keys(stateDefinition[sliceKey])) {
-                const {type, values} = stateDefinition[sliceKey][key]
-                if (type === 'HASH' && values) {
-                    db.put (`${sliceKey}:${key}`, values)
-                } else if (type == 'COUNTER') {
-                    db.put (`${sliceKey}:${key}`, 0)
-                } else if (type === 'LIST') {
-                    db.put (`${sliceKey}:${key}:_next_sequence`, 0)
-                    this._list_sublevels[`${sliceKey}:${key}`] = db.sublevel<number, any>(`${sliceKey}:${key}`, {keyEncoding: 'number', valueEncoding: 'json'})
-                }
-            }
-        }
     }
 
     get name() {
@@ -73,8 +59,47 @@ export class LevelStateStore<S> implements StateStore<S> {
     get stateDefinition() {
         return this._stateDefinition
     }
+
+    async initStore({distoryExisting = false}: {distoryExisting: boolean}) {
+
+        if (distoryExisting) {
+            try {
+                await rmdir(this._storeDir, {recursive: true})
+            } catch (e: any) {
+                if (!(e.message as string).startsWith('ENOENT')) {
+                    throw e
+                }
+            }
+        }
+
+        const db = this._db = new Level<string, any>(this._storeDir, {keyEncoding: 'utf8', valueEncoding: 'json'})
+
+        for (let sliceKey of Object.keys(this.stateDefinition)) {
+            for (let key of Object.keys(this.stateDefinition[sliceKey])) {
+                const levelkey = `${sliceKey}:${key}`
+                const {type, values} = this.stateDefinition[sliceKey][key]
+                if (type === 'HASH' && values) {
+                    if (distoryExisting || !await db.get(levelkey)) {
+                        await db.put (levelkey, values)
+                    }
+                } else if (type == 'COUNTER') {
+                    if (distoryExisting || !await db.get(levelkey)) {
+                        await db.put (levelkey, 0, {valueEncoding: 'binary'})
+                    }
+                } else if (type === 'LIST') {
+                    const next_sequenceKey = `${levelkey}:_next_sequence`
+                    if (distoryExisting || !await db.get(next_sequenceKey)) {
+                        await db.put (next_sequenceKey, 0, {valueEncoding: 'binary'})
+                        this._list_sublevels[levelkey] = db.sublevel<number, any>(levelkey, {keyEncoding: 'binary', valueEncoding: 'json'})
+                    }
+                }
+            }
+        }
+    }
     
     async getValue(reducerKey: string, path: string, idx?: number) {
+        assert (this._db, 'Store not initialized')
+
         if (this._stateDefinition[reducerKey][path].type == 'LIST') {
             if (isNaN(idx as number)) {
                 // return all values in array
@@ -126,6 +151,8 @@ export class LevelStateStore<S> implements StateStore<S> {
 
     async apply(statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
 
+        assert (this._db, 'Store not initialized')
+
         const state = this._db
         const _control = (statechanges as Control)._control 
 
@@ -163,6 +190,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                                 type: 'put',
                                 sublevel: this._list_sublevels[levelkey],
                                 key: update?.filter?._id,
+                                keyEncoding: 'binary',
                                 value: update.doc
                             } as AbstractBatchPutOperation<Level<string, string>, any, any>)
                                 
@@ -181,22 +209,23 @@ export class LevelStateStore<S> implements StateStore<S> {
                     case 'ADD':
                         assert (type === 'LIST', `apply (ADD): Can only apply to "List": "${reducerKey}.${update.path}"`)
                         assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
-                        const seqKey = `${levelkey}:_next_sequence`
-                        const _next_sequence = cacheUpdates.hasOwnProperty(seqKey) ? cacheUpdates[seqKey] :  await this._db.get(seqKey)
+                        const next_sequenceKey = `${levelkey}:_next_sequence`
+                        const _next_sequence = cacheUpdates.hasOwnProperty(next_sequenceKey) ? cacheUpdates[next_sequenceKey] :  parseInt(await this._db.get(next_sequenceKey))
                         
                         const added = {_id: _next_sequence, ...(identifierFormat && { identifier: `${identifierFormat.prefix || ''}${identifierFormat.zeroPadding ?  String(_next_sequence).padStart(identifierFormat.zeroPadding, '0') : _next_sequence}`}), ...update.doc}
                         
                         cacheUpdates = {...cacheUpdates, [`${levelkey}:${_next_sequence}`]: added}
-                        cacheUpdates = {...cacheUpdates, [seqKey]: _next_sequence + 1}
+                        cacheUpdates = {...cacheUpdates, [next_sequenceKey]: _next_sequence + 1}
 
                         levelUpdates = levelUpdates.concat([{
                             type: 'put',
                             sublevel: this._list_sublevels[levelkey],
                             key: _next_sequence,
+                            keyEncoding: 'binary',
                             value: added
                         }, {
                             type: 'put',
-                            key: seqKey,
+                            key: next_sequenceKey,
                             value: _next_sequence + 1
                         }])
 
@@ -217,6 +246,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                         levelUpdates = levelUpdates.concat({
                             type: 'del',
                             sublevel: this._list_sublevels[levelkey],
+                            keyEncoding: 'binary',
                             key: id
                         } as AbstractBatchDelOperation<Level<string, string>, any>)
 
@@ -258,6 +288,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                             type: 'put',
                             sublevel: this._list_sublevels[levelkey],
                             key: update.filter?._id as number,
+                            keyEncoding: 'binary',
                             value: merged
                         } : {
                             type: 'put',
@@ -273,13 +304,14 @@ export class LevelStateStore<S> implements StateStore<S> {
                     case 'INC':
                         assert (type === 'COUNTER', `apply (INC): Can only apply to a "Counter": "${reducerKey}.${update.path}"`)
                         
-                        const inc = cacheUpdates.hasOwnProperty(levelkey) ? cacheUpdates[levelkey] :  await this._db.get(levelkey)  + 1
+                        const inc = cacheUpdates.hasOwnProperty(levelkey) ? cacheUpdates[levelkey] + 1 :  parseInt(await this._db.get(levelkey))  + 1
 
                         cacheUpdates = {...cacheUpdates, [levelkey]: inc}
 
                         levelUpdates = levelUpdates.concat({
                             type: 'put',
                             key: levelkey,
+                            valueEncoding: 'binary',
                             value: inc
                         })
 

@@ -50,7 +50,7 @@ export type StateStoreDefinition = {
             zeroPadding?: number,
         }
         values?: {
-            [key: string] : string | number 
+            [key: string] : string | number | null
         }
     }
 }
@@ -66,6 +66,7 @@ export type StateStore<S> = {
     stateDefinition: { [sliceKey: string]: StateStoreDefinition};
     getValue(reducerKey: string, path: string, idx?: number): any;
     debugState(): void;
+    initStore(ops: {distoryExisting: boolean}): Promise<void>;
     serializeState(): Promise<S>;
     // deserializeState(newstate: {[statekey: string]: any}): void
     apply(statechanges: StateChanges): Promise<{[reducerKey: string] : ApplyInfo}>
@@ -190,7 +191,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
                 // If one fails, then use that as the info, otherwise use the last one
                 combinedReducerInfo[reducer.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducer.sliceKey]
                 // just concat all the state updates under the slicekey
-                if (stateUpdates) combinedStateUpdates[reducer.sliceKey] = [...combinedStateUpdates[reducer.sliceKey],  ...stateUpdates] 
+                if (stateUpdates) combinedStateUpdates[reducer.sliceKey] = [...(combinedStateUpdates[reducer.sliceKey] || []),  ...stateUpdates] 
             }
 
             for (let reducerpassin of reducersWithPassin) {
@@ -203,7 +204,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
                     // If one fails, then use that as the info, otherwise use the last one
                     combinedReducerInfo[reducerpassin.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducerpassin.sliceKey]
                     // just concat all the state updates under the slicekey
-                    if (stateUpdates) combinedStateUpdates[reducerpassin.sliceKey] = [...combinedStateUpdates[reducerpassin.sliceKey],  ...stateUpdates] 
+                    if (stateUpdates) combinedStateUpdates[reducerpassin.sliceKey] = [...(combinedStateUpdates[reducerpassin.sliceKey] || []),  ...stateUpdates] 
                 }
             }
 

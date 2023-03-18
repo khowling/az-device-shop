@@ -35,6 +35,6 @@
 	],
 	"settings": {
 		"npm.packageManager": "npm",
-		"typescript.tsdk": "__full_project/node_modules/typescript/lib"
+		"typescript.tsdk": "_workflow/node_modules/typescript/lib"
 	}
 }
