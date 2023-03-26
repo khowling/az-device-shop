@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "FactoryV2 (local dependencies)",
             "program": "${workspaceFolder}/server/src/index.ts",
-            "preLaunchTask": "npm: build - server",
+            //"preLaunchTask": "npm: build - server",
             "envFile": "${workspaceFolder}/../.env_local",
             "resolveSourceMapLocations": [
                 "${workspaceFolder}/server/dist/*.js",

@@ -74,7 +74,7 @@ common
 
             - flux/StateManager/apply
 
-               - assert _control.head_sequence === state._control.head_sequence
+               - 
                - 
 
 
@@ -83,7 +83,7 @@ common
 
  - flux/StateManager
   - apply(State changes)
-     - _control.head_sequence (ensures changes are applyed to state in order)
+     - 
 
 
 

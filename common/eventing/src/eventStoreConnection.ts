@@ -5,7 +5,7 @@ import { MongoClient,  ChangeStream, ChangeStreamInsertDocument, Db } from 'mong
 
 import { ObjectId } from 'bson'
 import { EventEmitter } from 'events'
-import assert from 'assert'
+import { strict as assert } from 'node:assert';
 
 interface Tenent {
     _id: ObjectId; //typeof ObjectID;
@@ -101,8 +101,7 @@ export class EventStoreConnection extends EventEmitter {
     // This function will hydrate the state of the passed in stateStores from the event store
     async rollForwardState(stateStores: StateStore<any>[], additionalFn?: (sequence: number, changedataResults : any) => Promise<void>): Promise<number> {
 
-        //console.log ("db", this._db && await this._db.stats())
-        //assert (this._db, "EventStoreConnection: rollForwardState: db not initialised")
+        assert (this._db, "EventStoreConnection: rollForwardState: db not initialised")
 
         // Getting the last log_sequence number from the state stores
         const stateStoreByName:  { stores: { [key: string]: StateStore<any> }, last_seq: number } = await stateStores.reduce(
@@ -115,8 +114,8 @@ export class EventStoreConnection extends EventEmitter {
         console.log(`rollForwardState: reading "${this.collection}" (current log sequence=${this.sequence}, stateStores oldest sequence applied=${stateStoreByName.last_seq})`)
 
     
-        await this._db?.collection(this.collection).createIndex({ sequence: 1 })
-        const cursor = await this._db?.collection(this.collection).aggregate([
+        await this._db.collection(this.collection).createIndex({ sequence: 1 })
+        const cursor = await this._db.collection(this.collection).aggregate([
             { $match: { $and: [{ "partition_key": this.tenentKey }, { sequence: { $gt: stateStoreByName.last_seq } }] } },
             { $sort: { "sequence": 1 /* assending */ } }
         ])

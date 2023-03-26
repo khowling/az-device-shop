@@ -13,10 +13,10 @@ export type ReducerInfo = {
 }
 
 export type ReducerReturn = [ReducerInfo, Array<StateUpdate>] | [null,null];
-export type ReducerReturnWithSlice = Array<([ReducerInfo, Array<StateUpdate>] |[null,null])>;
+export type ReducerReturnWithSlice = Array<ReducerReturn>;
 
 export type ReducerFunction<S, A> = (state: StateStore<S>, action: A) => Promise<ReducerReturn>;
-export type ReducerFunctionWithSlide<S, A> = (state: StateStore<S>, action: A, passInSlice?: ReducerFunction<S,A>) => Promise<ReducerReturnWithSlice>;
+export type ReducerFunctionWithSlide<S, A> = (state: StateStore<S>, action: A, passIn?: ReducerFunction<S,A>, passInWithSlice?: ReducerFunctionWithSlide<S,A>) => Promise<ReducerReturnWithSlice>;
 
 // Interface for a Reducer, operating on the state sliceKey, defining an initial state
 export type Reducer<S, A> = {
@@ -192,29 +192,44 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
             //let hasChanged = false
             const combinedReducerInfo: {[key: string]: ReducerInfo} = {}
             const combinedStateUpdates: {[key: string]: Array<StateUpdate>} = {}
+
+            function addreduceroutput(key: string, ret: ReducerReturn) {
+                const [info, updates] = ret
+                // If one fails, then use that as the info, otherwise use the last one
+                combinedReducerInfo[key] = info && info.failed ? info : combinedReducerInfo[key]
+                // just concat all the state updates under the slicekey
+                if (updates) combinedStateUpdates[key] = [...(combinedStateUpdates[key] || []),  ...updates] 
+            }
             
             for (let reducer of reducers) {
 
-                const [reducerInfo, stateUpdates] = await reducer.fn(/*coonnection,*/ state, action)
+                addreduceroutput(reducer.sliceKey, await reducer.fn(state, action))
+
+                //const [reducerInfo, stateUpdates] = await reducer.fn(/*coonnection,*/ state, action)
 
                 // If one fails, then use that as the info, otherwise use the last one
-                combinedReducerInfo[reducer.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducer.sliceKey]
+                //combinedReducerInfo[reducer.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducer.sliceKey]
                 // just concat all the state updates under the slicekey
-                if (stateUpdates) combinedStateUpdates[reducer.sliceKey] = [...(combinedStateUpdates[reducer.sliceKey] || []),  ...stateUpdates] 
+                //if (stateUpdates) combinedStateUpdates[reducer.sliceKey] = [...(combinedStateUpdates[reducer.sliceKey] || []),  ...stateUpdates] 
             }
 
             for (let reducerpassin of reducersWithPassin) {
                 // reducers wuth passin slice, so this reducer may call the fn on another reducer
-                const sliceFn = reducers.find(r => r.sliceKey === reducerpassin.passInSlice)?.fn
-                assert (action ? sliceFn: true, `combineReducers: reducer with pass in slice definition "${reducerpassin.sliceKey}" requires a missing passInSlice reducer function at "${reducerpassin.passInSlice}"`)
-                const resultsArray = await reducerpassin.fn(/*coonnection,*/ state, action, action ? sliceFn : undefined)
+                const passInFn = reducers.find(r => r.sliceKey === reducerpassin.passInSlice)?.fn
+                const passInWithSliceFn = reducersWithPassin.find(r => r.sliceKey === reducerpassin.passInSlice)?.fn
 
-                for (let [reducerInfo, stateUpdates] of resultsArray) {
-                    // If one fails, then use that as the info, otherwise use the last one
-                    combinedReducerInfo[reducerpassin.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducerpassin.sliceKey]
-                    // just concat all the state updates under the slicekey
-                    if (stateUpdates) combinedStateUpdates[reducerpassin.sliceKey] = [...(combinedStateUpdates[reducerpassin.sliceKey] || []),  ...stateUpdates] 
-                }
+                assert (action ? (passInFn || passInWithSliceFn): true, `combineReducers: reducer with pass in slice definition "${reducerpassin.sliceKey}" requires a missing passInSlice reducer function at "${reducerpassin.passInSlice}"`)
+                const [ret, passinret] = await reducerpassin.fn(/*coonnection,*/ state, action, action ? passInFn : undefined, action ? passInWithSliceFn : undefined)
+
+                if (ret) addreduceroutput(reducerpassin.sliceKey, ret)
+                if (passinret) addreduceroutput(reducerpassin.passInSlice, passinret)
+
+                //for (let [reducerInfo, stateUpdates] of resultsArray) {
+                //    // If one fails, then use that as the info, otherwise use the last one
+                //    combinedReducerInfo[reducerpassin.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducerpassin.sliceKey]
+                //    // just concat all the state updates under the slicekey
+                //    if (stateUpdates) combinedStateUpdates[reducerpassin.sliceKey] = [...(combinedStateUpdates[reducerpassin.sliceKey] || []),  ...stateUpdates] 
+                //}
             }
 
             return [combinedReducerInfo, combinedStateUpdates]
@@ -273,7 +288,6 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         // Store the changes in the mongo collection, with sequence number
         //
         if ((changes && Object.keys(changes).length > 0) || (linkChanges && Object.keys(linkChanges).length > 0)) {
-            //console.log(`[${this.name}] dispatch(): action.type=${action.type} ${changes ? `Event: current_head=${changes._control.head_sequence}` : ''}`)
             // persist events
             const msg = {
                 sequence: this._connection.sequence + 1,

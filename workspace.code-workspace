@@ -19,6 +19,6 @@
 	],
 	"settings": {
 		"npm.packageManager": "npm",
-		"typescript.tsdk": "./node_modules/typescript/lib"
+		"typescript.tsdk": "_Root/node_modules/typescript/lib"
 	}
 }

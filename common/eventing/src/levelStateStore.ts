@@ -159,12 +159,6 @@ export class LevelStateStore<S> implements StateStore<S> {
 
         assert (this._db, 'Store not initialized')
 
-        //const state = this._db
-        //const { sequence } = (statechanges as Control)._change_log 
-
-        //console.log (sequence)
-        //assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
-        //let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
         let returnInfo : {[slicekey: string]: ApplyInfo} = {}
 
         let levelUpdates: AbstractBatchOperation<Level<string, string>, any, any>[]=  []
@@ -178,11 +172,8 @@ export class LevelStateStore<S> implements StateStore<S> {
             value: sequence
         })
 
-        //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
-
         for (let reducerKey of Object.keys(statechanges)) {
-            //if (reducerKey === '_control') continue
-            // get the relevent section of the state
+
             const stateKeyChanges = statechanges[reducerKey] as Array<StateUpdate>
             ///let reducerKeyState = this._db[stateKey]
 

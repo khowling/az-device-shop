@@ -1,6 +1,6 @@
 // @flow
-import { StateManager, StateUpdate, Control }  from '@az-device-shop/eventing'
-import type { StateStoreDefinition,  UpdatesMethod, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer, ReducerInfo } from '@az-device-shop/eventing'
+import { ReducerInfo, StateManager, StateUpdate }  from '@az-device-shop/eventing'
+import type { StateStoreDefinition, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer } from '@az-device-shop/eventing'
 import { EventStoreConnection } from '@az-device-shop/eventing'
 import type { factoryOrderModel } from './schema/schemas.js';
 import { z } from 'zod';
@@ -106,7 +106,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
                     ]]]
                 case 'COMPLETE_INVENTORY':
 
-                    const wi = state.getValue('workItems', 'items', _id)
+                    const wi = await state.getValue('workItems', 'items', _id)
                     if (wi) {
                         const inventoryReducer = passInSlice as ReducerFunction<FactoryState, FactoryAction>
 
@@ -166,7 +166,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                 }
             }
         } as StateStoreDefinition,
-        fn: async function (/*connection, */state, action, passInSlice) {
+        fn: async function (/*connection, */state, action, passIn, passInWithSlice) {
 
             switch (action.type) {
                 case 'TIDY_UP':
@@ -175,7 +175,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     ]]]
                 case 'FACTORY_PROCESS':
 
-                    const workItemsReducer = passInSlice as ReducerFunction<FactoryState, FactoryAction>
+                    const workItemsFn = passInWithSlice as ReducerFunctionWithSlide<FactoryState, FactoryAction>
 
                     //console.log(`workItemsState=${JSON.stringify(workItemsState)}`)
                     const now = Date.now()
@@ -184,7 +184,8 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     let factory_updates: Array<StateUpdate> = []
                     let workitem_updates: Array<StateUpdate> = []
 
-                    const factoryItems : Array<FactoryItem> = state.getValue('factory', 'items')
+
+                    const factoryItems : Array<FactoryItem> = await state.getValue('factory', 'items')
                     // check wi in factory_status status look for for completion to free up capacity
                     for (let item of factoryItems.filter(o => o.stage === FactoryStage.Building)  as Array<FactoryItem>) {
                         // all wi in Picking status
@@ -192,12 +193,14 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                         const timeleft = (timeToProcess /* * qty */) - (now - (item.starttime as number))
 
                         if (timeleft > 0) { // not finished, just update progress
-                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number } , doc: { "$set": {progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) }} })
+                            //updates[1].push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number } , doc: { "$set": {progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) }} })
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - (item.allocated_capacity as number)
                             factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } }})
-                            const [status, complete_updates] = await workItemsReducer(state, { type: 'STATUS_UPDATE', _id: item.workItem_id, status: { stage: 'FACTORY_COMPLETE' } }) 
-                            workitem_updates = complete_updates ? workitem_updates.concat(complete_updates) : workitem_updates
+                            const result = await workItemsFn(state, { type: 'STATUS_UPDATE', _id: item.workItem_id, status: { stage: 'FACTORY_COMPLETE' } }) 
+                            // example::: [[null, null], [{failed: "false"}, [{a:1}, {b:2}]],[{failed: "true"},[{c:3}, {d:4}]]].map(i => i[1] ? [...i[1]]: []).reduce((acc, i) => [...acc, ...i],[])
+                            const all_updates = result.map(i => i[1] ? [...i[1]] : []).reduce((acc, i) => [...acc, ...i],[])
+                            workitem_updates = all_updates.length > 0 ? workitem_updates.concat(all_updates) : workitem_updates
                         }
                         //statechanges.push({ kind, metadata: { flow_id, type: ChangeEventType.UPDATE, next_sequence }, status: { failed: false, ...factory_status_update } })
                     }
@@ -205,11 +208,12 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     const required_capacity = 1
 
                     // new WorkItems that are ready for the Factory
-                    const {capacity_allocated} = state.getValue("factory", "factoryStatus")
-                    const workItems: Array<WorkItemObject> = state.getValue('workItems', 'items')
+                    const {capacity_allocated} = await state.getValue("factory", "factoryStatus")
+                    const workItems: Array<WorkItemObject> = await state.getValue('workItems', 'items')
                     for (let wi of workItems.filter(i => i.status.stage === 'FACTORY_READY') as Array<WorkItemObject>) {
-                        const [status, accept_updates] = await workItemsReducer(state, { type: 'STATUS_UPDATE', _id: wi._id, status: { stage: 'FACTORY_ACCEPTED' } })
-                        workitem_updates = accept_updates ? workitem_updates.concat(accept_updates): workitem_updates
+                        const result = await workItemsFn(state, { type: 'STATUS_UPDATE', _id: wi._id, status: { stage: 'FACTORY_ACCEPTED' } })
+                        const all_updates = result.map(i => i[1] ? [...i[1]] : []).reduce((acc, i) => [...acc, ...i],[])
+                        workitem_updates = all_updates.length > 0 ? workitem_updates.concat(all_updates) : workitem_updates
 
                         if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
                             // we have capacity, move to inprogress
@@ -222,7 +226,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     }
 
                     // check factory in "waiting" status
-                    const factoryItems2 : Array<FactoryItem> = state.getValue('factory', 'items')
+                    const factoryItems2 : Array<FactoryItem> = await state.getValue('factory', 'items')
                     for (let item of factoryItems2.filter(o => o.stage === FactoryStage.Waiting) as Array<FactoryItem>) {
                         if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
                             // we have capacity, move to inprogress
@@ -239,7 +243,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                         factory_updates.push({ method: 'UPDATE', path: 'factoryStatus',  doc: {  "$set": {capacity_allocated: capacity_allocated + capacity_allocated_update }} })
                     }
 
-                    return [factory_updates.length > 0 ? [{ failed: false }, factory_updates] : null, workitem_updates.length > 0 ? [{ failed: false }, workitem_updates] : null] as ReducerReturnWithSlice
+                    return [factory_updates.length > 0 ? [{ failed: false }, factory_updates] : [null, null], workitem_updates.length > 0 ? [{ failed: false }, workitem_updates] : [null, null]] as ReducerReturnWithSlice
 
                 default:
                     // action not for this reducer, so no updates

@@ -307,7 +307,7 @@ async function init() {
     await client.connect();
     
     // esFactoryEvents - the Mongo EventStoreConnection
-    await esFactoryEvents.initFromDB(client.db(), null, {distoryExisting: false})
+    await esFactoryEvents.initFromDB(client.db(), null, {distoryExisting: true})
 
     // stateStore - the leveldb state store for factory state and processor, need to rollforward from the Mongo Event Store is required!
     await factoryState.stateStore.initStore({distoryExisting: true})
