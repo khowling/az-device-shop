@@ -38,7 +38,7 @@ export class JSStateStore<S> implements StateStore<S> {
                 if (type === 'HASH') {
                     state = {...state, [`${sliceKey}:${key}`]: values}
 
-                } else if (type == 'COUNTER') {
+                } else if (type == 'METRIC') {
                     state = {...state, [`${sliceKey}:${key}`]: 0}
 
                 }else if (type === 'LIST') {
@@ -121,14 +121,16 @@ export class JSStateStore<S> implements StateStore<S> {
         }
     }
 */
-    async apply(statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
+    async apply(sequence: number, statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
 
         
-        const _control = (statechanges as Control)._control 
+        //const _control = (statechanges as Control)._control 
 
         let returnInfo : {[slicekey: string]: ApplyInfo} = {}
         //assert(_control && _control.head_sequence === this.state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${this.state._control.head_sequence}`)
-        let newstate: {[statekey: string]: any} = {} // { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
+        let newstate: {[statekey: string]: any} = {
+            '_control:log_sequence': sequence
+        } // { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
         let delkeys = []
         //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${this.state._control.head_sequence}`)
 
@@ -225,7 +227,7 @@ export class JSStateStore<S> implements StateStore<S> {
                         
                         break
                     case 'INC':
-                        assert (type === 'COUNTER', `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
+                        assert (type === 'METRIC', `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
                         
                         const inc = effectiveStateValue(`${reducerKey}:${update.path}`) + 1
 

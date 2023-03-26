@@ -41,6 +41,22 @@ To keep the example Cloud Agnostic, continers is the deployment model, rarther t
 
 ## Build and run - local dev laptop (Linux, Mac or WSL2)
 
+### Build and Test individual workspaces
+
+```
+## Build all workspaces
+npm run build --workspaces
+
+## Build factory server and all dependencies, and run factory server
+npm run build --workspace=common/eventing --workspace=common/workflow --workspace=factoryv2/server
+npm run start -w factoryv2/server
+
+
+#  Run tests 
+npm run test -- common/workflow
+
+```
+
 ### Requirements
 npm version >=8 (uses mono-repo workspaces dependencies)
 nodejs >= 16 

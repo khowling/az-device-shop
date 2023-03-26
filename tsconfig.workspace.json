@@ -5,20 +5,26 @@
         "**/*.stub.ts",
         "**/node_modules",
         "**/lib",
+        "**/dist",
         "**/out"
     ],
     "compilerOptions": {
-        "target": "esnext",
-        "moduleResolution": "nodenext",
-        "sourceMap": true,
+        //"target": "esnext",
+        "strict": true,
+        "esModuleInterop": true, /* Emit additional JavaScript to ease support for importing CommonJS modules. This enables 'allowSyntheticDefaultImports' for type compatibi
+        lity. */
+        "forceConsistentCasingInFileNames": true,
+        "module": "NodeNext",                     /* Specify what module code is generated. */
+        "moduleResolution": "NodeNext",           /* Specify how TypeScript looks up a file from a given module specifier. */
+        "sourceMap": true,          
+
         "declaration": true,
         "paths": {
             "@az-device-shop/eventing": ["./common/eventing"],
             "@az-device-shop/workflow": ["./common/workflow"],
             "@az-device-shop/factory-server": ["./factoryv2/server"],
-            "@az-device-shop/factory-ui": ["./factoryv2/ui"],
-            "@az-device-shop/webserver": ["./common/webserver"],
-            "@az-device-shop/ordering": ["./ordering"]
+            "@az-device-shop/factory-ui": ["./factoryv2/ui"]
         }
     }
 }
+

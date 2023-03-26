@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { trpc } from '../utils/trpc';
+import { trpc } from '../trpc';
 import {SlideOut, DialogInterface} from '../components/slideout'
 import { ItemForm } from './pageItemForm'
   

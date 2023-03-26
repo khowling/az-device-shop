@@ -1,9 +1,9 @@
 
 import React, { useEffect, useState } from 'react';
-import { trpc } from '../utils/trpc';
+import { trpc, type AppRouter, type ZodError } from '../trpc';
 import { inferProcedureInput } from '@trpc/server';
-import type { AppRouter, ZodError } from "@az-device-shop/factory-server";
-import { factoryOrderModel } from "@az-device-shop/factory-server/schema";
+
+import { factoryOrderModel } from '../../../server/src/schema/schemas';
 
 // ------------------------------------------------ Form
 

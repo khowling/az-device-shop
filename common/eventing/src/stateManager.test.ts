@@ -86,14 +86,16 @@ describe('Test Data Types (jesttest_01)', () => {
     
     const client = new MongoClient(murl);
     
-    const esConnection = new EventStoreConnection(murl, 'jesttest_01')
-    const testState = new TestStateManager('jesttest_01', esConnection)
+    const esConnection = new EventStoreConnection(murl, 'jesttest_collection_01')
+    const testState = new TestStateManager('jesttest_level_01', esConnection)
+    //const testState02 = new TestStateManager('jesttest_level_02', esConnection)
 
 
     beforeAll(async () => {
         await client.connect();
-        await esConnection.initFromDB(client.db(), null, false)
+        await esConnection.initFromDB(client.db(), null, {distoryExisting: true})
         await testState.stateStore.initStore({distoryExisting: true})
+        //await testState02.stateStore.initStore({distoryExisting: true})
     })
 
     afterAll(async () => {
@@ -105,16 +107,17 @@ describe('Test Data Types (jesttest_01)', () => {
     test('Test LIST', async () => {
 
 
-        expect(
-            await testState.stateStore.getValue('_control', 'head_sequence')
-        ).toBe(0)
+        // level store is initiallised with no data, so no changes should be applied
+        expect(await testState.stateStore.getValue('_control', 'change_count')).toBe(0)
 
+        // level store is initiallised with no data, so no mongo collection logs should be applied
+        expect(await testState.getLogSequenece()).toBe(0)
 
         expect(
             await testState.stateStore.getValue('simple', 'simpleitems')
         ).toHaveLength(0)
 
-        var [rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test', status: 1 } })
+        var [sequece, rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test', status: 1 } })
 
         console.log('Reducer Info', rinfo)
         console.log('Dispatch Info', dinfo)
@@ -124,7 +127,7 @@ describe('Test Data Types (jesttest_01)', () => {
         expect(rinfo).toHaveProperty('simple.added.identifier', 'S_00000')
     
 
-        var [rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test10', status: 10 } })
+        var [sequence, rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test10', status: 10 } })
 
         console.log('Reducer Info', rinfo)
         console.log('Dispatch Info', dinfo)
@@ -133,10 +136,9 @@ describe('Test Data Types (jesttest_01)', () => {
         expect(rinfo).toHaveProperty('simple.added._id', 1)
         expect(rinfo).toHaveProperty('simple.added.identifier', 'S_00001')
 
-        // Make 2 state changes, so expect 'head_sequence' to be 2
-        expect(
-            await testState.stateStore.getValue('_control', 'head_sequence')
-        ).toBe(2)
+        // Make 2 state changes, so expect change_count=2, and 2 collection documents recorded, log_sequence=2
+        expect(await testState.stateStore.getValue('_control', 'change_count')).toBe(2)
+        expect(await testState.getLogSequenece()).toBe(2)
 
         // Return full array of simpleitems
         expect(
@@ -149,10 +151,29 @@ describe('Test Data Types (jesttest_01)', () => {
     
     })
      
-    test('Test HASH', async () => {
+    test('Test HASH dafult value', async () => {
         expect(
             await testState.stateStore.getValue('simple', 'workflow')
         ).toHaveProperty('keyStage', 'stage1')
+    })
+
+    test('Rollforward level store', async () => {
+
+        console.log ('init leveldb log collection')
+        await testState.stateStore.initStore({distoryExisting: true})
+
+        console.log ('check its initialised')
+        expect(await testState.stateStore.getValue('_control', 'change_count')).toBe(0)
+        expect (await testState.getLogSequenece()).toBe(0)
+
+        console.log ('roll forward state')
+        await esConnection.rollForwardState([testState.stateStore])
+        expect(await testState.stateStore.getValue('_control', 'change_count')).toBe(2)
+        expect (await testState.getLogSequenece()).toBe(2)
+
+        expect(
+            await testState.stateStore.getValue('simple', 'simpleitems', 1)
+        ).toHaveProperty('_id', 1)
     })
 
     

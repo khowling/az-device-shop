@@ -1,4 +1,4 @@
-import assert from 'assert'
+import { strict as assert } from 'node:assert';
 import mongodb, {Timestamp }  from 'mongodb'
 
 
@@ -38,7 +38,7 @@ export type ReducerWithPassin<S, A> = {
 const VALUE_TYPES = {
     HASH: "hash",
     LIST: "list",
-    COUNTER: "counter"
+    METRIC: "counter"
 }
 export type StateStoreValueType = keyof typeof VALUE_TYPES
 
@@ -64,12 +64,12 @@ export type StateChanges = {
 export type StateStore<S> = {
     name: string;
     stateDefinition: { [sliceKey: string]: StateStoreDefinition};
-    getValue(reducerKey: string, path: string, idx?: number): any;
+    getValue(reducerKey: string, path: string, idx?: number): Promise<any>;
     debugState(): void;
     initStore(ops: {distoryExisting: boolean}): Promise<void>;
     serializeState(): Promise<S>;
     // deserializeState(newstate: {[statekey: string]: any}): void
-    apply(statechanges: StateChanges): Promise<{[reducerKey: string] : ApplyInfo}>
+    apply(sequence: number, statechanges: StateChanges): Promise<{[reducerKey: string] : ApplyInfo}>
 }
 
 
@@ -103,8 +103,9 @@ export type ApplyInfo = {
 export interface StateManagerInterface<S, A , LS = {}, LA ={}> extends EventEmitter {
     name: string;
     stateStore: StateStore<S>;
+    getLogSequenece(): Promise<number>;
     rootReducer: (state: StateStore<S>, action: A) => Promise<[{ [key: string]: ReducerInfo }, StateChanges]>;
-    dispatch(action: A, linkedStateAction?: LA): Promise<[{ [key: string]: ReducerInfo }, { [key: string]: ReducerInfo }]>
+    dispatch(action: A, linkedStateAction?: LA): Promise<[ sequence: number, reducerInfo: { [key: string]: ReducerInfo }, linkedReducerInfo: { [key: string]: ReducerInfo }]>
 }
 
 import { EventEmitter } from 'events'
@@ -112,7 +113,7 @@ import { EventStoreConnection } from './eventStoreConnection.js'
 
 export type Control = {
     _control?: {
-        head_sequence: number;
+        sequence: number;
      //   lastupdated: number;
     }
 }
@@ -121,12 +122,16 @@ function controlReducer<S,A>(): Reducer<S, A> {
     return {
         sliceKey: '_control',
         initState: { 
-            "head_sequence": {
-                type: 'COUNTER'
+            "log_sequence": {
+                type: 'METRIC'
+            },
+            "change_count": {
+                type: 'METRIC'
             }
         } as StateStoreDefinition,
         fn: async function () {
-            return [{ failed: false }, [{ method: 'INC', path: 'head_sequence' }]]
+            // Keep a counter of the number of changes that have been applyed to the state
+            return  [{ failed: false }, [{ method: 'INC', path: 'change_count' }]]
         }
     }
 }
@@ -168,6 +173,10 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
 
     get name() {
         return this._name
+    }
+
+    async getLogSequenece() {
+        return await this._stateStore.getValue('_control', 'log_sequence')
     }
 
     get stateStore() {
@@ -246,7 +255,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
 
     // Used when only this state is updated
     //
-    async dispatch(action: A, linkedStateAction?: LA): Promise<[{ [key: string]: ReducerInfo & ApplyInfo }, { [key: string]: ReducerInfo & ApplyInfo }]> {
+    async dispatch(action: A, linkedStateAction?: LA): Promise<[ sequence: number, reducerInfo: { [key: string]: ReducerInfo }, linkedReducerInfo: { [key: string]: ReducerInfo }]> {
         //console.log(`Action: \n${JSON.stringify(action)}`)
         assert (this._connection.db, 'dispatch: Cannot apply processor actions, no "db" details provided')
         assert(this._connection, 'dispatch: Cannot apply processor actions, no "Connection" details provided')
@@ -256,11 +265,13 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         let release = await this._connection.mutex.aquire()
         let applyInfo : { [key:string] : ApplyInfo} = {}, applyLinkInfo : { [key:string] : ApplyInfo} = {}
 
+        // Generate array of "Changes" to be recorded & applied to the leveldb store, and "Info" about the changes (has it failed etc)
+        //
         const [linkReducerInfo, linkChanges] = linkedStateAction && this._linkedStateManager ? await this._linkedStateManager.rootReducer(this._linkedStateManager.stateStore, linkedStateAction) : [{}, {}]
         const [reducerInfo, changes] = await this.rootReducer(this.stateStore, action)
         
-        // console.log(`Updates: \n${JSON.stringify(changes)}`)
-
+        // Store the changes in the mongo collection, with sequence number
+        //
         if ((changes && Object.keys(changes).length > 0) || (linkChanges && Object.keys(linkChanges).length > 0)) {
             //console.log(`[${this.name}] dispatch(): action.type=${action.type} ${changes ? `Event: current_head=${changes._control.head_sequence}` : ''}`)
             // persist events
@@ -277,9 +288,9 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
 
             // This is where the linked state will be updated, so any items added will get their new id's (used by process state manager)
             // We want to apply this output to the processor state
-            applyLinkInfo = linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 ? await this._linkedStateManager.stateStore.apply(linkChanges) : {}
+            applyLinkInfo = linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 ? await this._linkedStateManager.stateStore.apply(this._connection.sequence, linkChanges) : {}
             // apply events to local state
-            applyInfo = changes && Object.keys(changes).length > 0 ? await this.stateStore.apply(changes) : {}
+            applyInfo = changes && Object.keys(changes).length > 0 ? await this.stateStore.apply(this._connection.sequence, changes) : {}
             
         }
 
@@ -287,7 +298,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         // Combine reducerInfo with applyInfo
         const allInfo: { [key: string]: ReducerInfo & ApplyInfo } = reducerInfo ? Object.keys(applyInfo).reduce((acc, i) => { return { ...acc, [i]: {...applyInfo[i], ...acc[i]} as ReducerInfo & ApplyInfo } }, reducerInfo) : {}
         const allLinkInfo: { [key: string]: ReducerInfo & ApplyInfo } = linkReducerInfo ? Object.keys(applyLinkInfo).reduce((acc, i) => { return { ...acc, [i]: {...applyLinkInfo[i], ...acc[i]} } }, linkReducerInfo) : {}
-        return [allInfo, allLinkInfo]
+        return [this._connection.sequence, allInfo, allLinkInfo]
         //console.log(`State: \n${JSON.stringify(this.state)}`)
     }
 }

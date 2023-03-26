@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
-import { trpc } from '../utils/trpc';
+import { trpc, type AppRouter, type ZodError } from '../trpc';
 import { inferProcedureInput } from '@trpc/server';
-import type { AppRouter, ZodError } from '@full-stack-typesafe-ts/server/index';
-import { itemSKUModel } from '@full-stack-typesafe-ts/server';
+
+import { itemSKUModel } from '../../../server/src/schema/schemas';
 
 // ------------------------------------------------ Form
 

@@ -1,11 +1,11 @@
 // @flow
 
 import React, { Reducer, useEffect, useState } from 'react';
-import { trpc } from '../utils/trpc';
+import { trpc } from '../trpc';
 
-import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
-import { AppRouter, OrderState, type FactoryMetaData, WorkItemObject, type WsMessage } from '../../../server/index';
-import { type FactoryState, Control, WorkItems, Factory, Inventory } from '../../../server/factoryState.js'
+//import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
+import { AppRouter, type OrderState, type FactoryMetaData, WorkItemObject, type WsMessage } from '../../../server/src/index';
+//import { type FactoryState, Control, WorkItems, Factory, Inventory } from '../../../server/factoryState.js'
 
 import {SlideOut, DialogInterface} from '../components/slideout'
 import OrderForm from './pageFactoryOrder';
@@ -21,14 +21,6 @@ interface ConnectedInfo {
     Connected,
     Trying,
     Error
-  }
-
-  function myStateReducer(state : { val: number}, action : { action: number}) {
-    return { val: 2 }
-  }
-  function test1() {
-    const [state, dispatch] = React.useReducer(myStateReducer, { val: 1 } )
-
   }
 
 
@@ -47,7 +39,7 @@ interface ConnectedInfo {
       onStarted() {
         setConnected({status: ConnectedStatus.Connected})
       },
-      onData<WsMessage>(data: WsMessage) {
+      onData<WsMessage>(data:any) {
         dispatch(data)
       },
       onError(err) {
@@ -88,29 +80,31 @@ interface ConnectedInfo {
           </div>
         }
   
-        <div className="mt-7 place-content-center grid grid-flow-col gap-10 p-5 text-center auto-cols-max border-solid rounded-md border border-slate" >
-         
-          <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
-            <span className="countdown font-mono text-5xl">
-            {state.state._control?.head_sequence}
-            </span>
-            Sequence Number
-          </div> 
-          <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
-            <span className="countdown font-mono text-5xl">
-              {state.state.workItems?.items.length || 0}
-            </span>
-            Work Items In Progress
-          </div> 
-          <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
-            <span className="countdown font-mono text-5xl">
-              {state.state.factory?.factoryStatus.capacity_allocated || 0}
-            </span>
-            Capacity Allocated
-          </div> 
-        </div>
+        { state.state && 
+          <div className="mt-7 place-content-center grid grid-flow-col gap-10 p-5 text-center auto-cols-max border-solid rounded-md border border-slate" >
+          
+            <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
+              <span className="countdown font-mono text-5xl">
+              {state.state?._control?.head_sequence}
+              </span>
+              Sequence Number
+            </div> 
+            <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
+              <span className="countdown font-mono text-5xl">
+                {state.state?.workItems?.items.length || 0}
+              </span>
+              Work Items In Progress
+            </div> 
+            <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
+              <span className="countdown font-mono text-5xl">
+                {state.state?.factory?.factoryStatus.capacity_allocated || 0}
+              </span>
+              Capacity Allocated
+            </div> 
+          </div>
+        }
   
-  
+        { state.metadata && 
   
         <div className="mt-7 grid grid-cols-5 gap-1">
           { [[['DRAFT', 'NEW', 'FACTORY_READY'], "Processing"], [['FACTORY_ACCEPTED', 'FACTORY_COMPLETE'], "In Factory"], [['MOVE_TO_WAREHOUSE'], state.metadata.stage_txt && state.metadata.stage_txt[5] ], [['INVENTORY_AVAILABLE'], state.metadata.stage_txt && state.metadata.stage_txt[6]]].map (([stages, desc],idx) => 
@@ -129,7 +123,7 @@ interface ConnectedInfo {
               </button>
               }
               
-              { state.state.workItems?.items.filter(i => stages.includes(i.status.stage as string)).map((o, i) => 
+              { state.state.workItems?.items.filter((i: any) => stages.includes(i.status.stage as string)).map((o: any, i: number) => 
                 
                 <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                   <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
@@ -180,6 +174,7 @@ interface ConnectedInfo {
           )}
           
         </div>
+        }
   
         <SlideOut openprop={dialog.open} setOpen={(open: boolean) => setDialog({open: false})}>
             <OrderForm recordId={dialog.recordId} Close={() => setDialog({open: false})}/>

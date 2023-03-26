@@ -1,4 +1,4 @@
-import assert, { throws } from 'assert'
+import { strict as assert } from 'node:assert';
 
 // https://github.com/Level/levelup
 /*
@@ -16,7 +16,7 @@ import assert, { throws } from 'assert'
     It conveniently bundles levelup, leveldown and encoding-down. 
     Its main export is levelup
 */
-import { rmdir } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { Level } from 'level'
 import  type { AbstractSublevel, AbstractBatchOperation, AbstractBatchPutOperation, AbstractBatchDelOperation } from 'abstract-level'
 
@@ -60,11 +60,15 @@ export class LevelStateStore<S> implements StateStore<S> {
         return this._stateDefinition
     }
 
-    async initStore({distoryExisting = false}: {distoryExisting: boolean}) {
+    async initStore(options?: {distoryExisting: boolean}) {
 
-        if (distoryExisting) {
+        if (this._db && options?.distoryExisting) {
+            await this._db.close()
+        }
+
+        if (options?.distoryExisting) {
             try {
-                await rmdir(this._storeDir, {recursive: true})
+                await rm(this._storeDir, {recursive: true})
             } catch (e: any) {
                 if (!(e.message as string).startsWith('ENOENT')) {
                     throw e
@@ -79,18 +83,18 @@ export class LevelStateStore<S> implements StateStore<S> {
                 const levelkey = `${sliceKey}:${key}`
                 const {type, values} = this.stateDefinition[sliceKey][key]
                 if (type === 'HASH' && values) {
-                    if (distoryExisting || !await db.get(levelkey)) {
+                    if (options?.distoryExisting || !await db.get(levelkey)) {
                         await db.put (levelkey, values)
                     }
-                } else if (type == 'COUNTER') {
-                    if (distoryExisting || !await db.get(levelkey)) {
+                } else if (type == 'METRIC') {
+                    if (options?.distoryExisting || !await db.get(levelkey)) {
                         await db.put (levelkey, 0, {valueEncoding: 'binary'})
                     }
                 } else if (type === 'LIST') {
                     const next_sequenceKey = `${levelkey}:_next_sequence`
-                    if (distoryExisting || !await db.get(next_sequenceKey)) {
+                    if (options?.distoryExisting || !await db.get(next_sequenceKey)) {
                         await db.put (next_sequenceKey, 0, {valueEncoding: 'binary'})
-                        this._list_sublevels[levelkey] = db.sublevel<number, any>(levelkey, {keyEncoding: 'binary', valueEncoding: 'json'})
+                        this._list_sublevels[levelkey] = await db.sublevel<number, any>(levelkey, {keyEncoding: 'binary', valueEncoding: 'json'})
                     }
                 }
             }
@@ -99,16 +103,18 @@ export class LevelStateStore<S> implements StateStore<S> {
     
     async getValue(reducerKey: string, path: string, idx?: number) {
         assert (this._db, 'Store not initialized')
-
+        const levelkey = `${reducerKey}:${path}`
         if (this._stateDefinition[reducerKey][path].type == 'LIST') {
             if (isNaN(idx as number)) {
                 // return all values in array
-                return await this._list_sublevels[`${reducerKey}:${path}`].values().all()
+                return await this._list_sublevels[levelkey].values().all() || []
             } else {
-                return await this._list_sublevels[`${reducerKey}:${path}`].get(idx as number)
+                return await this._list_sublevels[levelkey].get(idx as number)
             }
+        } else if (this._stateDefinition[reducerKey][path].type == 'METRIC') { 
+            return  parseInt(await this._db.get(levelkey))
         } else {
-            return await this._db.get(`${reducerKey}:${path}`)
+            return await this._db.get(levelkey)
         }
 
     }
@@ -149,20 +155,28 @@ export class LevelStateStore<S> implements StateStore<S> {
     // }
 
 
-    async apply(statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
+    async apply(sequence: number, statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
 
         assert (this._db, 'Store not initialized')
 
-        const state = this._db
-        const _control = (statechanges as Control)._control 
+        //const state = this._db
+        //const { sequence } = (statechanges as Control)._change_log 
 
-
+        //console.log (sequence)
         //assert(_control && _control.head_sequence === state._control.head_sequence, `applyToLocalState: Panic, cannot apply update head_sequence=${_control && _control.head_sequence} to state at head_sequence=${state._control.head_sequence}`)
         //let newstate = { _control: { head_sequence: state._control.head_sequence + 1, lastupdated: _control.lastupdated } }
         let returnInfo : {[slicekey: string]: ApplyInfo} = {}
 
         let levelUpdates: AbstractBatchOperation<Level<string, string>, any, any>[]=  []
         let cacheUpdates: {[key: string]: any} = {}
+
+        // Store the log sequence into the level state for rolling forward
+        levelUpdates.push({
+            type: 'put',
+            key: '_control:log_sequence',
+            valueEncoding: 'binary',
+            value: sequence
+        })
 
         //console.log(`[${this.name}] apply(): change._control.head_sequence=${_control.head_sequence} to state._control.head_sequence=${state._control.head_sequence}`)
 
@@ -302,7 +316,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                         
                         break
                     case 'INC':
-                        assert (type === 'COUNTER', `apply (INC): Can only apply to a "Counter": "${reducerKey}.${update.path}"`)
+                        assert (type === 'METRIC', `apply (INC): Can only apply to a "Counter": "${reducerKey}.${update.path}"`)
                         
                         const inc = cacheUpdates.hasOwnProperty(levelkey) ? cacheUpdates[levelkey] + 1 :  parseInt(await this._db.get(levelkey))  + 1
 

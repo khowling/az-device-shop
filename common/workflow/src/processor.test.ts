@@ -1,8 +1,8 @@
 
 import { MongoClient } from 'mongodb'
 import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor"
-import { EventStoreConnection } from "@az-device-shop/eventing/store-connection"
-import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from '@az-device-shop/eventing/state'
+import { EventStoreConnection } from "@az-device-shop/eventing"
+import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from '@az-device-shop/eventing'
 
 
 
@@ -120,7 +120,7 @@ describe('Workflow tests (jesttest_02)', () => {
 
     beforeAll(async () => {
         await client.connect();
-        await esConnection.initFromDB(client.db(), null, false)
+        await esConnection.initFromDB(client.db(), null, {distoryExisting: false})
         await testState.stateStore.initStore({distoryExisting: true})
     })
 

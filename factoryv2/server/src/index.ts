@@ -2,13 +2,13 @@
 import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
-import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
+import { EventStoreConnection } from '@az-device-shop/eventing'
 import type { FactoryActionType, FactoryAction, WORKITEM_STAGE, WorkItemObject, FactoryState } from './factoryState.js'
 import { FactoryStateManager } from './factoryState.js'
 import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
 
 import { z } from 'zod';
-import * as trpc from '@trpc/server';
+import { initTRPC, TRPCError } from '@trpc/server';
 import {recordId, factoryOrderModel, itemSKUModel} from './schema/schemas.js'
 
 
@@ -22,31 +22,18 @@ import { ObjectId } from 'bson'
 
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { observable } from '@trpc/server/observable';
-import type { ReducerInfo, StateStoreDefinition, Control, StateUpdate } from '@az-device-shop/eventing/state';
+import type { ReducerInfo, StateStoreDefinition, Control, StateUpdate } from '@az-device-shop/eventing';
 //--------------------------------------
 export type {  WorkItemObject, FactoryState } from './factoryState.js'
 export type ZodError = z.ZodError
 
-//------------------------------------
-
-const murl : string = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev?replicaSet=rs0"
-const client = new MongoClient(murl);
-
-//-------------------------------------------------------
-const esConnection = new EventStoreConnection(murl, 'factory_events')
-const factoryState = new FactoryStateManager('emeafactory_v0', esConnection)
-const factoryProcessor = new Processor('emeaprocessor_v001', esConnection, { linkedStateManager: factoryState })
-
-var submitFn : (update_ctx: any, trigger: any) => Promise<ReducerInfo> = async (update_ctx, trigger) => { throw new Error("submitFm not initialized") }
-
 
 //-----------------------------------
-
-async function validateRequest({ esConnection, trigger }: {esConnection: any, trigger: any}, next: (action: FactoryAction, options: ProcessorOptions, event_label?: string) => any) {
+async function validateRequest({ esFactoryEvents, trigger }: {esFactoryEvents: any, trigger: any}, next: (action: FactoryAction, options: ProcessorOptions, event_label?: string) => any) {
 
   let spec = trigger && trigger.doc
   if (trigger && trigger.doc_id) {
-      const mongo_spec = await esConnection.db.collection("inventory_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: esConnection.tenentKey })
+      const mongo_spec = await esFactoryEvents.db.collection("inventory_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: esFactoryEvents.tenentKey })
       // translate the db document '*_id' ObjectId fields to '*Id' strings
       spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
   }
@@ -81,11 +68,11 @@ async function publishInventory(ctx: any, next: any) {
 async function completeInventoryAndFinish(ctx: any, next: any) {
   console.log (`publishInventory: ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes.inventory_complete.inc)}`)
   const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inc)
-  const result = await ctx.esConnection.db.collection("inventory_complete").updateOne(
+  const result = await ctx.esFactoryEvents.db.collection("inventory_complete").updateOne(
       {sequence: completeInvSeq}, { "$set": {
           sequence: completeInvSeq,
           identifier: 'INV' + String(completeInvSeq).padStart(5, '0'),
-          partition_key: ctx.esConnection.tenentKey,
+          partition_key: ctx.esFactoryEvents.tenentKey,
           spec: ctx.spec,
           workItem_id: ctx.wi_id
       }},
@@ -97,13 +84,7 @@ async function completeInventoryAndFinish(ctx: any, next: any) {
   return await next(/*{ type: FactoryActionType.TidyUp, _id: ctx.wi_id }*/)
 }
 
-factoryProcessor.context.esConnection = esConnection
-factoryProcessor.use(validateRequest)
-factoryProcessor.use(sendToFactory)
-factoryProcessor.use(waitforFactoryComplete)
-factoryProcessor.use(moveToWarehouse)
-factoryProcessor.use(publishInventory)
-factoryProcessor.use(completeInventoryAndFinish)
+
 
 
 //--------------------------------------------------
@@ -113,7 +94,9 @@ export type WithWebId<TSchema> = TSchema & {
     id: string;
   };
 
-const t = trpc.initTRPC.create();
+const t = initTRPC.create();
+const router = t.router;
+const publicProcedure = t.procedure;
 
 function modelCRUDRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
   type ZType = z.infer<typeof schema>
@@ -123,8 +106,8 @@ function modelCRUDRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
     return {id: _id.toHexString(), ...rest as T}
   }
   
-  return t.router({
-    list: t.procedure
+  return router({
+    list: publicProcedure
       .input(
         z.object({
           limit: z.number().min(1).max(100).nullish(),
@@ -146,13 +129,13 @@ function modelCRUDRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
       }),
 
-    byId: t.procedure
+    byId: publicProcedure
       .input(recordId)
       .query(async ({input}) => {
         const { id } = input;
         const item =  await client.db().collection(coll).findOne({_id: new ObjectId(id)})
         if (!item) {
-          throw new trpc.TRPCError({
+          throw new TRPCError({
             code: 'NOT_FOUND',
             message: `No users with id '${id}'`,
           });
@@ -160,11 +143,11 @@ function modelCRUDRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
         return idTransform<ZType>(item) 
       }),
 
-    add: t.procedure
+    add: publicProcedure
       .input(schema.and(recordId.partial({id: true})))
-      .mutation(async ({input} : {input: WithId<ZType>}) => {
+      .mutation(async ({input}) => {
         if (!input.id) {
-          const item = await client.db().collection(coll).insertOne(input)
+          const item = await client.db().collection(coll).insertOne(input as Document)
           return item;
         } else {
           const {id, ...rest} = input
@@ -223,7 +206,7 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
   type ZType = z.infer<typeof schema>
 
   return t.router({
-    onAdd: t.procedure
+    onAdd: publicProcedure
     .subscription(() => {
       // `resolve()` is triggered for each client when they start subscribing `onAdd`
       // return an `observable` with a callback which is triggered immediately
@@ -273,10 +256,10 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
 type FactoryOrder = z.infer<typeof factoryOrderModel>
 
-const appRouter = t.router({
+const appRouter = router({
     item: modelCRUDRoutes(itemSKUModel, 'item'),
-    order: t.router({
-      add: t.procedure
+    order: router({
+      add: publicProcedure
       .input(factoryOrderModel)
       .mutation(async ({input} : {input: FactoryOrder}) => {
         await submitFn({ trigger: { doc: input } }, null)
@@ -292,22 +275,51 @@ const appRouter = t.router({
 export type AppRouter = typeof appRouter;
 //--------------------------------------------------
 
+//------------------------------------
+
+const murl : string = process.env.MONGO_DB || "mongodb://localhost:27017/dbdev?replicaSet=rs0"
+const client = new MongoClient(murl);
+
+//-------------------------------------------------------
+// esFactoryEvents = Mongo Event Store Collection
+const esFactoryEvents = new EventStoreConnection(murl, 'factory_events')
+
+// stateStore - the leveldb state store for factory state and processor, both mastered from the same Mongo Event Store
+const factoryState = new FactoryStateManager('emeafactory_v0', esFactoryEvents)
+const factoryProcessor = new Processor('emeaprocessor_v001', esFactoryEvents, { linkedStateManager: factoryState })
+
+factoryProcessor.context.esFactoryEvents = esFactoryEvents
+factoryProcessor.use(validateRequest)
+factoryProcessor.use(sendToFactory)
+factoryProcessor.use(waitforFactoryComplete)
+factoryProcessor.use(moveToWarehouse)
+factoryProcessor.use(publishInventory)
+factoryProcessor.use(completeInventoryAndFinish)
+
+var submitFn : (update_ctx: any, trigger: any) => Promise<ReducerInfo> = async (update_ctx, trigger) => { throw new Error("submitFm not initialized") }
 
 // ---------------------------------------------------------------------------------------
 async function init() {
 
     const appState = console /*(new ApplicationState()*/
 
+    // Connect MongoDB
     await client.connect();
-    await esConnection.initFromDB(client.db(), false)
+    
+    // esFactoryEvents - the Mongo EventStoreConnection
+    await esFactoryEvents.initFromDB(client.db(), null, {distoryExisting: false})
 
-    esConnection.on('tenent_changed', async (oldTenentId) => {
-        appState.log(`EventStoreConnection: TENENT CHANGED - DELETING existing ${esConnection.collection} documents partition_id=${oldTenentId} & existing`, false, true)
-        await esConnection.db.collection(esConnection.collection).deleteMany({ partition_key: oldTenentId })
+    // stateStore - the leveldb state store for factory state and processor, need to rollforward from the Mongo Event Store is required!
+    await factoryState.stateStore.initStore({distoryExisting: true})
+    await factoryProcessor.stateStore.initStore({distoryExisting: true})
+
+    esFactoryEvents.on('tenent_changed', async (oldTenentId) => {
+        appState.log(`EventStoreConnection: TENENT CHANGED - DELETING existing ${esFactoryEvents.collection} documents partition_id=${oldTenentId} & existing`, false, true)
+        await esFactoryEvents.db?.collection(esFactoryEvents.collection).deleteMany({ partition_key: oldTenentId })
         process.exit()
     })
 
-    //let { submitFn, factoryState, processorState } = await factoryStartup(await esConnection.initFromDB(client.db(), null ,false)/*, appState*/)
+    //let { submitFn, factoryState, processorState } = await factoryStartup(await esFactoryEvents.initFromDB(client.db(), null ,false)/*, appState*/)
     
     submitFn = await factoryProcessor.listen()
 

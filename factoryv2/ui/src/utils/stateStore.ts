@@ -1,8 +1,6 @@
 import type { FactoryState, WsMessage, FactoryMetaData, StateChangesUpdates} from '@az-device-shop/factory-server';
 export type { Control, UpdatesMethod, StateUpdate, StateStoreDefinition } from '@az-device-shop/eventing';
 
-import { Reducer } from 'react';
-
 // Replace array entry at index 'index' with 'val'
 function imm_splice(array: Array<any>, index: number, val?: any) { return [...array.slice(0, index), ...(val ? [val] : []), ...array.slice(index + 1)] }
 function apply_incset({ method, doc }: {method: string, doc: any}, val : any) {
@@ -122,7 +120,7 @@ export function stateReducer({ state, metadata }: FactoryReducerState, action : 
 
                                 break
                             case 'INC':
-                                console.assert (type === "COUNTER", `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
+                                console.assert (type === "METRIC", `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
                                 
                                 const inc = effectiveStateValue(state, newstate, reducerKey, update.path) + 1
         

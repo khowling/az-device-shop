@@ -1,10 +1,12 @@
-import React, {useState} from 'react';
+import { useState } from 'react'
 import { httpBatchLink, createWSClient, wsLink } from '@trpc/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { trpc } from './utils/trpc';
-import logo from './logo.svg';
-import './App.css';
+import reactLogo from './assets/react.svg'
+import viteLogo from '/vite.svg'
+import './App.css'
+import { trpc } from './trpc';
 import IndexPage  from './pages/home';
+
 
 //const ws_url = process.env.REACT_APP_ORDERING_PORT ? `ws://${window.location.hostname}:${process.env.REACT_APP_ORDERING_PORT}` : `wss://${window.location.hostname}/ws/ordering/`
 const wsClient = createWSClient({

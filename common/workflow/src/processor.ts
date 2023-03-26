@@ -11,8 +11,8 @@ export interface ProcessorOptions {
     }
 }
 
-import { EventStoreConnection } from '@az-device-shop/eventing/store-connection'
-import { StateManager, StateStore, StateUpdate, UpdatesMethod, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, StateStoreValueType, Control } from '@az-device-shop/eventing/state'
+import { EventStoreConnection } from '@az-device-shop/eventing'
+import { StateManager, StateStore, StateUpdate, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, Control } from '@az-device-shop/eventing'
 import { EventEmitter } from 'events'
 
 interface ProcessAction {
@@ -186,7 +186,7 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
 
             const complete: boolean = (i >= middleware.length || (options && options.complete === true)) as boolean && !need_retry 
 
-            const [processorInfo, linkedStateInfo] = await processorStateManager.dispatch({
+            const [sequence, processorInfo, linkedStateInfo] = await processorStateManager.dispatch({
                 type: ProcessActionType.RecordProcessStep,
                 _id: context._id,
                 function_idx: i,
@@ -203,7 +203,7 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
                     _id: context._id,
                     lastLinkedRes: linkedStateInfo
                 })
-                await processorStateManager.stateStore.apply(addlinkedInfoChanges)
+                await processorStateManager.stateStore.apply(sequence, addlinkedInfoChanges)
                 context.lastLinkedRes = linkedStateInfo
             }
 
@@ -270,8 +270,8 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
         return this._stateManager.stateStore
     }
 
-    getProcessorState(path: string, idx?: number) {
-        return this.stateStore.getValue('processor', path, idx)
+    async getProcessorState(path: string, idx?: number) {
+        return await this.stateStore.getValue('processor', path, idx)
     }
 
     debugState() {
@@ -298,9 +298,9 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
     }
 */
 
-    private restartProcessors(/*checkSleepStageFn, restartall*/) {
+    private async restartProcessors(/*checkSleepStageFn, restartall*/) {
         // Restart required_state_processor_state
-        for (let p of this.getProcessorState('processList').filter((p: ProcessObject) => !p.complete)) {
+        for (let p of (await this.getProcessorState('processList')).filter((p: ProcessObject) => !p.complete)) {
             let restartP = null
 
             if (!this._active.has(p._id as number)) {
@@ -340,7 +340,7 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
     }
     
 
-    async listen (/*checkSleepStageFn?: (arg: any) => boolean*/): Promise<(update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}) => Promise<ReducerInfo>> {
+    async listen (options: {rollforwadStores: boolean} = {rollforwadStores: true}): Promise<(update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}) => Promise<ReducerInfo>> {
         const fn = this._fnMiddleware  = compose<LS, LA>(this._middleware, this._stateManager)
     
         if (!this.listenerCount('error')) this.on('error', (err) => console.error(err.toString()))
@@ -348,7 +348,7 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
         const handleRequest = async (update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}): Promise<ReducerInfo> => {
             //console.log ("processor.listen.handleRequest, new process started")
             // Add to processList
-            const [{ processor }] = await this._stateManager.dispatch({
+            const [sequence, { processor }] = await this._stateManager.dispatch({
                 type: ProcessActionType.New,
                 options: { update_ctx },
                 ...(trigger && { trigger })
@@ -361,33 +361,35 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
             return processor
         }
 
-        // re-hydrate the processor state store
-        // TBC - Need to restore "linkedStateInfo" that is NOT stored in the message, its applyed AFTER to the processor state!
-        await this.connection.rollForwardState([this.stateStore, this.linkedStateManager.stateStore], async (applyInfo) => {
-            const processorStateInfo = applyInfo[this.stateStore.name]
-            const linkedStateInfo = applyInfo[this.linkedStateManager.stateStore.name]
-            if (processorStateInfo && linkedStateInfo) {
-                // Store the linked state info in the processor state store! (capture any new id's that have been created)
-                // any processor re-hydration will need to use this info to rehydrate the linked state
-                const [addlinkedInfo, addlinkedInfoChanges] = await this._stateManager.rootReducer(this._stateManager.stateStore, {
-                    type: ProcessActionType.RecordLinkedStateInfo,
-                    _id: processorStateInfo['processor']['merged']._id,
-                    lastLinkedRes: linkedStateInfo
-                })
-                await this._stateManager.stateStore.apply(addlinkedInfoChanges)
-            }
-        })
-        console.log (`Processor: re-hydrated processor state store to sequence=${this.connection.sequence}`)
+        if (options.rollforwadStores) {
+            // re-hydrate the processor state store
+            // TBC - Need to restore "linkedStateInfo" that is NOT stored in the message, its applyed AFTER to the processor state!
+            await this.connection.rollForwardState([this.stateStore, this.linkedStateManager.stateStore], async (sequence, applyInfo) => {
+                const processorStateInfo = applyInfo[this.stateStore.name]
+                const linkedStateInfo = applyInfo[this.linkedStateManager.stateStore.name]
+                if (processorStateInfo && linkedStateInfo) {
+                    // Store the linked state info in the processor state store! (capture any new id's that have been created)
+                    // any processor re-hydration will need to use this info to rehydrate the linked state
+                    const [addlinkedInfo, addlinkedInfoChanges] = await this._stateManager.rootReducer(this._stateManager.stateStore, {
+                        type: ProcessActionType.RecordLinkedStateInfo,
+                        _id: processorStateInfo['processor']['merged']._id,
+                        lastLinkedRes: linkedStateInfo
+                    })
+                    await this._stateManager.stateStore.apply(sequence, addlinkedInfoChanges)
+                }
+            })
+            console.log (`Processor: re-hydrated processor state store(s) to sequence=${this.connection.sequence}`)
+        }
         this._active = new Set()
 
         // restart any processors that have been pre-loaded into the processor state store
-        this.restartProcessors(/*checkSleepStageFn, true*/)
+        await this.restartProcessors(/*checkSleepStageFn, true*/)
 
         // restart any processors that have been put into a sleeping state in the processor state store
         console.log(`Processor: Starting Interval to process 'sleep_until' workflows.`)
-        this._restartInterval = setInterval(() => {
+        this._restartInterval = setInterval(async () => {
             //console.log('factory_startup: check to restart "sleep_until" processes')
-            this.restartProcessors(/*checkSleepStageFn, false*/)
+            await this.restartProcessors(/*checkSleepStageFn, false*/)
         }, 1000 * 1 )
     
         return handleRequest
@@ -424,12 +426,4 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
         })
     }
 
-
-    get processList()  : Array<ProcessObject>  {
-        return this.getProcessorState('processList')
-    }
-
-    get stats(): {total: number, running: number, completed: number} {
-        return this.processList.reduce((acc, p) => {return {total: acc.total + 1, running: acc.running + (p.complete ? 0:1), completed: acc.completed + (p.complete ? 1:0)}}, {total: 0, running: 0, completed: 0})
-    }
 }
