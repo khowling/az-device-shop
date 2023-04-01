@@ -10,7 +10,7 @@ import IndexPage  from './pages/home';
 
 //const ws_url = process.env.REACT_APP_ORDERING_PORT ? `ws://${window.location.hostname}:${process.env.REACT_APP_ORDERING_PORT}` : `wss://${window.location.hostname}/ws/ordering/`
 const wsClient = createWSClient({
-  url: `ws://localhost:5000`,
+  url: `ws://localhost:5000/trpc`,
 });
 
 function App() {

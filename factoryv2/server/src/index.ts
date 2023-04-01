@@ -219,15 +219,17 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
           emit.next(data);
         };
 
-        emit.next({
-          type: 'SNAPSHOT',
-          metadata: {
-              stateDefinition: factoryState.stateStore.stateDefinition,
-              factory_txt: ['Waiting', 'Building', 'Complete'],
-              stage_txt: ['DRAFT', 'NEW', 'FACTORY_READY', ' FACTORY_ACCEPTED', 'FACTORY_COMPLETE', 'MOVE_TO_WAREHOUSE', 'INVENTORY_AVAILABLE']
-          },
-          snapshot: factoryState.stateStore.serializeState as unknown as FactoryState
-        } as WsMessage)
+        (async () => {
+          emit.next({
+            type: 'SNAPSHOT',
+            metadata: {
+                stateDefinition: factoryState.stateStore.stateDefinition,
+                factory_txt: ['Waiting', 'Building', 'Complete'],
+                stage_txt: ['DRAFT', 'NEW', 'FACTORY_READY', ' FACTORY_ACCEPTED', 'FACTORY_COMPLETE', 'MOVE_TO_WAREHOUSE', 'INVENTORY_AVAILABLE']
+            },
+            snapshot: await factoryState.stateStore.serializeState()
+          } as WsMessage)
+        })()
 
         // Need this to capture processor Linked State changes
         factoryProcessor.stateManager.on('changes', (events) => 

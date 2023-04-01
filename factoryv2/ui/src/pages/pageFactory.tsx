@@ -85,9 +85,15 @@ interface ConnectedInfo {
           
             <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
               <span className="countdown font-mono text-5xl">
-              {state.state?._control?.head_sequence}
+              {state.state?._control?.log_sequence}
               </span>
-              Sequence Number
+              Log Sequence
+            </div> 
+            <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
+              <span className="countdown font-mono text-5xl">
+              {state.state?._control?.change_count}
+              </span>
+              Change Count
             </div> 
             <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
               <span className="countdown font-mono text-5xl">
