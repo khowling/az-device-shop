@@ -1,10 +1,9 @@
 // @flow
 import { ReducerInfo, StateManager, StateUpdate }  from '@az-device-shop/eventing'
-import type { StateStoreDefinition, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer } from '@az-device-shop/eventing'
+import type { StateStoreDefinition, ReducerReturnWithSlice, ReducerFunction, ReducerFunctionWithSlide, ReducerWithPassin, Reducer, Control } from '@az-device-shop/eventing'
 import { EventStoreConnection } from '@az-device-shop/eventing'
 import type { factoryOrderModel } from './schema/schemas.js';
 import { z } from 'zod';
-export type { Control } from '@az-device-shop/eventing'
 
 
 export interface WorkItemObject {
@@ -303,7 +302,7 @@ function inventryReducer(): Reducer<FactoryState, FactoryAction> {
     }
 }
 
-export type FactoryState =  WorkItems & Factory & Inventory // Control //&
+export type FactoryState =  WorkItems & Factory & Inventory & Control
 
 export class FactoryStateManager extends StateManager<FactoryState, FactoryAction> {
 

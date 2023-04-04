@@ -1,5 +1,5 @@
-import assert from 'assert'
-import { ApplyInfo, StateChanges, StateStore, StateStoreDefinition, StateStoreValueType, StateUpdate, type Control } from './stateManager.js'
+import { strict as assert } from 'node:assert';
+import { ApplyInfo, StateChanges, StateStore, StateStoreDefinition, StateStoreValueType, StateUpdate } from './stateManager.js'
 
 
 
@@ -42,13 +42,14 @@ export class JSStateStore<S> implements StateStore<S> {
                     state = {...state, [`${sliceKey}:${key}`]: 0}
 
                 }else if (type === 'LIST') {
+                    // _all_keys needed for deletes & itternations
                     state = {...state, [`${sliceKey}:${key}:_all_keys`]: []}
                     state = {...state, [`${sliceKey}:${key}:_next_sequence`]: 0}
                 }
             }
         }
 
-        console.log (`JSStateStore: name=${name}, state=${JSON.stringify(state)}`)
+        //console.log (`JSStateStore: name=${this.name}, state=${JSON.stringify(state)}`)
         this._state = state
 
         return Promise.resolve()
@@ -131,7 +132,7 @@ export class JSStateStore<S> implements StateStore<S> {
             '_control:log_sequence': sequence
         } 
         
-        let delkeys = []
+        //let delkeys = []
 
         // Returns effective state for key, taking into account, that the 'statechanges' array may have already modified the state
         const effectiveStateValue = (key: string): any => {
@@ -147,34 +148,42 @@ export class JSStateStore<S> implements StateStore<S> {
 
 
             for (let update of stateKeyChanges) {
-                assert (update.path, `applyToLocalState: State Updates for ${reducerKey} require a 'path'`)
+                
                 const {type, identifierFormat} = this._stateDefinition[reducerKey][update.path]
+                const levelkey = `${reducerKey}:${update.path}`
 
                 switch (update.method) {
                     case 'SET':
-                        assert (type === 'HASH' || (type === 'LIST' && update.filter) , `applyToLocalState: Can only apply "UpdatesMethod.Set" to "Hash" or "List" with a filter: "${reducerKey}.${update.path}"`)
                         if (type === 'LIST') {
-                            newstate[`${reducerKey}:${update.path}:${update.filter?._id}`] = update.doc
+                            assert(!isNaN(update.filter?._id as number) , `apply (SET), requires filter._id as a number, got ${update?.filter?._id}`)
+
+                            newstate[`${levelkey}:${update.filter?._id}`] = update.doc
+
                         } else {
-                            newstate[`${reducerKey}:${update.path}`] = update.doc
+                            newstate[`${levelkey}`] = update.doc
                         }
                        
                         break
                     case 'ADD':
-                        
+                        console.log (`adding ${type}`)
                         assert (type === 'LIST', `applyToLocalState: Can only apply "UpdatesMethod.Add" to "List": "${reducerKey}.${update.path}"`)
                         assert (typeof update.doc === "object" && !update.doc.hasOwnProperty('_id'), `applyToLocalState: "Add" requires a document object that doesnt contain a "_id" property": "${reducerKey}.${update.path}" doc=${JSON.stringify(update.doc)}`)
 
-                        const next_seq = effectiveStateValue(`${reducerKey}:${update.path}:_next_sequence`)
-                        const all_keys = effectiveStateValue(`${reducerKey}:${update.path}:_all_keys`)
+                        const next_sequenceKey = `${levelkey}:_next_sequence`
+                        const _next_sequence = effectiveStateValue(next_sequenceKey)
 
-                        const added = {_id: next_seq, ...(identifierFormat && { identifier: `${identifierFormat.prefix || ''}${identifierFormat.zeroPadding ?  String(next_seq).padStart(identifierFormat.zeroPadding, '0') : next_seq}`}), ...update.doc}
-                        newstate[`${reducerKey}:${update.path}:${next_seq}`] = added
-                        newstate[`${reducerKey}:${update.path}:_all_keys`] = all_keys.concat(next_seq)
+                        // NOTE:: all keys needed for deletions!
+                        const all_keys = effectiveStateValue(`${levelkey}:_all_keys`)
+
+                        const added = {_id: _next_sequence, ...(identifierFormat && { identifier: `${identifierFormat.prefix || ''}${identifierFormat.zeroPadding ?  String(_next_sequence).padStart(identifierFormat.zeroPadding, '0') : _next_sequence}`}), ...update.doc}
+                        
+                        newstate[`${levelkey}:${_next_sequence}`] = added
+
+                        newstate[`${levelkey}:_all_keys`] = all_keys.concat(_next_sequence)
+                        newstate[next_sequenceKey] = _next_sequence + 1
 
                         returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], added }}
 
-                        newstate[`${reducerKey}:${update.path}:_next_sequence`] = next_seq + 1
 
                         break
                     case 'RM':
@@ -182,12 +191,12 @@ export class JSStateStore<S> implements StateStore<S> {
                         assert (type === 'LIST', `applyToLocalState: Can only apply "UpdatesMethod.Rm" to "List": "${reducerKey}.${update.path}"`)
                         assert (!isNaN(update.filter?._id as number), `applyToLocalState: "Rm" requires "filter._id", "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
 
-                        const all_keys1 = effectiveStateValue(`${reducerKey}:${update.path}:_all_keys`)
-                        const rm_key_idx = all_keys1.indexOf(update.filter?._id)
+                        const all_keys_rm = effectiveStateValue(`${levelkey}:_all_keys`)
+                        const rm_key_idx = all_keys_rm.indexOf(update.filter?._id)
                         assert (rm_key_idx >= 0, `applyToLocalState: "Rm", cannot find existing value, "${reducerKey}.${update.path}" update.filter=${JSON.stringify(update.filter)}`)
 
-                        newstate[`${reducerKey}:${update.path}:_all_keys`] = JSStateStore.imm_splice(all_keys1, rm_key_idx)
-                        delkeys.push(`${reducerKey}:${update.path}:${update.filter?._id}`)
+                        newstate[`${levelkey}:_all_keys`] = JSStateStore.imm_splice(all_keys_rm, rm_key_idx)
+                        //delkeys.push(`${levelkey}:${update.filter?._id}`)
 
 
                         break
@@ -197,7 +206,7 @@ export class JSStateStore<S> implements StateStore<S> {
                                 return   a >= 0 ? ((i === '$set' || i === '$merge') ? 1+a : -1) : a
                             }, 0) > 0, `applyToLocalState: Can only apply "UpdatesMethod.Update" doc with only '$merge' or '$set' keys: "${reducerKey}.${update.path}"`)
 
-                        const value_key = type === 'LIST' ? `${reducerKey}:${update.path}:${update.filter?._id}` : `${reducerKey}:${update.path}`
+                        const value_key = type === 'LIST' ? `${levelkey}:${update.filter?._id}` : `${levelkey}`
                         const existing_doc = effectiveStateValue(value_key)
 
                         assert(existing_doc, `applyToLocalState: Panic applying a update on "${reducerKey}.${update.path}" to a non-existant document (key=${value_key})`)
@@ -228,10 +237,10 @@ export class JSStateStore<S> implements StateStore<S> {
                     case 'INC':
                         assert (type === 'METRIC', `applyToLocalState: Can only apply "UpdatesMethod.Inc" to a "Counter": "${reducerKey}.${update.path}"`)
                         
-                        const inc = effectiveStateValue(`${reducerKey}:${update.path}`) + 1
+                        const inc = effectiveStateValue(`${levelkey}`) + 1
 
                         returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], inc }}
-                        newstate[`${reducerKey}:${update.path}`] = inc
+                        newstate[`${levelkey}`] = inc
 
                         break
                     default:

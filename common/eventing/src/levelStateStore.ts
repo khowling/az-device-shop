@@ -20,7 +20,7 @@ import { rm } from 'node:fs/promises';
 import { Level } from 'level'
 import  type { AbstractSublevel, AbstractBatchOperation, AbstractBatchPutOperation, AbstractBatchDelOperation } from 'abstract-level'
 
-import { StateStoreDefinition, StateStoreValueType, Control, StateStore, StateChanges, StateUpdate, ApplyInfo, UpdatesMethod } from './stateManager.js'
+import { StateStoreDefinition, StateStore, StateChanges, StateUpdate, ApplyInfo, UpdatesMethod } from './stateManager.js'
 
 
 
@@ -177,8 +177,8 @@ export class LevelStateStore<S> implements StateStore<S> {
             const stateKeyChanges = statechanges[reducerKey] as Array<StateUpdate>
             ///let reducerKeyState = this._db[stateKey]
 
-            for (let i = 0; i < stateKeyChanges.length; i++) {
-                const update: StateUpdate = stateKeyChanges[i]
+            for (let update of stateKeyChanges) {
+
                 const {type, identifierFormat} = this._stateDefinition[reducerKey][update.path]
                 const levelkey = `${reducerKey}:${update.path}`
 

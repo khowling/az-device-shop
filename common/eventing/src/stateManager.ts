@@ -1,9 +1,10 @@
 import { strict as assert } from 'node:assert';
-import mongodb, {Timestamp }  from 'mongodb'
+import mongodb, {MongoAPIError, Timestamp }  from 'mongodb'
+import { ObjectId } from 'bson'
 
 
 
-//import { JSStateStore } from './jsStateStore.js'
+import { JSStateStore } from './jsStateStore.js'
 import { LevelStateStore } from './levelStateStore.js'
 
 export type ReducerInfo = {
@@ -59,7 +60,7 @@ export type StateStoreDefinition = {
 
 export type StateChanges = {
     [sliceKey: string]: Array<StateUpdate>
-} & Control
+} 
 
 export type StateStore<S> = {
     name: string;
@@ -100,6 +101,15 @@ export type ApplyInfo = {
     inc?: {};
 }
 
+export type ChangeMessage = {
+    sequence: number;
+    _ts: Timestamp;
+    partition_key: ObjectId | undefined;
+    stores: {
+        [storeName: string]: StateChanges
+    }
+}
+
 export interface StateManagerInterface<S, A , LS = {}, LA ={}> extends EventEmitter {
     name: string;
     stateStore: StateStore<S>;
@@ -131,7 +141,8 @@ function controlReducer<S,A>(): Reducer<S, A> {
         } as StateStoreDefinition,
         fn: async function () {
             // Keep a counter of the number of changes that have been applyed to the state
-            return  [{ failed: false }, [{ method: 'INC', path: 'change_count' }]]
+            //return  [{ failed: false }, [{ method: 'INC', path: 'change_count' }]]
+            return [null, null]
         }
     }
 }
@@ -161,7 +172,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         const reducersInitState = reducersWithControl.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {})
         const reducersWithPassinInitState = reducersWithPassin.reduce((acc, i) => { return { ...acc, ...{ [i.sliceKey]: i.initState } } }, {})
 
-        this._stateStore = new LevelStateStore<S>(this._name, {...reducersInitState, ...reducersWithPassinInitState} )
+        this._stateStore = new /*Level*/ /*JS*/ LevelStateStore<S>(this._name, {...reducersInitState, ...reducersWithPassinInitState} )
 
         this._rootReducer = this.combineReducers(/*this._connection, */ reducersWithControl, reducersWithPassin)
         //console.log(`StateManager: ${JSON.stringify(this.state)}`)
@@ -282,19 +293,31 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
 
         // Generate array of "Changes" to be recorded & applied to the leveldb store, and "Info" about the changes (has it failed etc)
         //
-        const [linkReducerInfo, linkChanges] = linkedStateAction && this._linkedStateManager ? await this._linkedStateManager.rootReducer(this._linkedStateManager.stateStore, linkedStateAction) : [{}, {}]
-        const [reducerInfo, changes] = await this.rootReducer(this.stateStore, action)
+        let [linkReducerInfo, linkChanges] = linkedStateAction && this._linkedStateManager ? await this._linkedStateManager.rootReducer(this._linkedStateManager.stateStore, linkedStateAction) : [{}, {}]
+        let [reducerInfo, changes] = await this.rootReducer(this.stateStore, action)
+
+        //  If changes in store, then increment the store change_count
+        if (changes && Object.keys(changes).length > 0) {
+            changes = { ...changes, _control: [{ method: 'INC', path: 'change_count' }] }
+        }
+
+        //  If changes on linkStore, then increment the store change_count
+        if (linkChanges && Object.keys(linkChanges).length > 0) {
+            linkChanges = { ...linkChanges, _control: [{ method: 'INC', path: 'change_count' }] }
+        }
         
         // Store the changes in the mongo collection, with sequence number
         //
         if ((changes && Object.keys(changes).length > 0) || (linkChanges && Object.keys(linkChanges).length > 0)) {
             // persist events
-            const msg = {
+            const msg : ChangeMessage = {
                 sequence: this._connection.sequence + 1,
                 _ts: new Timestamp(0,0), // Emptry timestamp will be replaced by the server to the current server time
                 partition_key: this._connection.tenentKey,
-                ...(changes && Object.keys(changes).length > 0 && { [this.name]: changes }),
-                ...(linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 && { [this._linkedStateManager.name]: linkChanges })
+                stores: {
+                    ...(changes && Object.keys(changes).length > 0 && { [this.name]: changes }),
+                    ...(linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 && { [this._linkedStateManager.name]: linkChanges })
+                }
             }
             const res = await this._connection.db.collection(this._connection.collection).insertOne(msg)
             this.emit('changes', msg)

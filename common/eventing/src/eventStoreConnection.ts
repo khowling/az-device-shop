@@ -1,5 +1,5 @@
 import { Atomic, AtomicInterface } from './atomic.js'
-import { ApplyInfo, StateStore } from './stateManager.js'
+import { ApplyInfo, StateStore, type ChangeMessage } from './stateManager.js'
 
 import { MongoClient,  ChangeStream, ChangeStreamInsertDocument, Db } from 'mongodb'
 
@@ -96,6 +96,15 @@ export class EventStoreConnection extends EventEmitter {
     }
 
 
+    // Utility static function
+    static async getStateStoreByName(stateStores: StateStore<any>[]): Promise<{ stores: { [key: string]: StateStore<any> }, last_seq: number }> {
+        return await stateStores.reduce(
+            async (acc, i) => { 
+                let { stores } = await acc
+                return { stores: {...stores, [i.name]: i}, last_seq: await i.getValue('_control', 'log_sequence')} 
+            }, 
+            Promise.resolve({stores: {}, last_seq: 0}))
+    }
 
     // rollForwardState
     // This function will hydrate the state of the passed in stateStores from the event store
@@ -104,16 +113,10 @@ export class EventStoreConnection extends EventEmitter {
         assert (this._db, "EventStoreConnection: rollForwardState: db not initialised")
 
         // Getting the last log_sequence number from the state stores
-        const stateStoreByName:  { stores: { [key: string]: StateStore<any> }, last_seq: number } = await stateStores.reduce(
-            async (acc, i) => { 
-                let { stores } = await acc
-                return { stores: {...stores, [i.name]: i}, last_seq: await i.getValue('_control', 'log_sequence')} 
-            }, 
-            Promise.resolve({stores: {}, last_seq: 0}))
+        const stateStoreByName = await EventStoreConnection.getStateStoreByName(stateStores)
 
         console.log(`rollForwardState: reading "${this.collection}" (current log sequence=${this.sequence}, stateStores oldest sequence applied=${stateStoreByName.last_seq})`)
 
-    
         await this._db.collection(this.collection).createIndex({ sequence: 1 })
         const cursor = await this._db.collection(this.collection).aggregate([
             { $match: { $and: [{ "partition_key": this.tenentKey }, { sequence: { $gt: stateStoreByName.last_seq } }] } },
@@ -121,18 +124,18 @@ export class EventStoreConnection extends EventEmitter {
         ])
     
         while (await cursor?.hasNext()) {
-            const { _id, partition_key, sequence, ...changedata } = await cursor?.next() as any
+            const { partition_key, sequence, stores } = await cursor?.next() as ChangeMessage
             let applyReturnInfo: { [slicekey: string]: ApplyInfo} = {}
-            for (let key of Object.keys(changedata)) {
+            for (let storeName of Object.keys(stores)) {
     
-                if (stateStoreByName.stores.hasOwnProperty(key)) {
-                    const ss = stateStoreByName.stores[key]
+                if (stateStoreByName.stores.hasOwnProperty(storeName)) {
+                    const ss = stateStoreByName.stores[storeName]
                     const ss_log_seq = await ss.getValue('_control', 'log_sequence')
 
-                    console.log (`rollForwardState: applying "${key}" (sequence=${sequence}, to stateStore log_sequence=${ss_log_seq})?`)
+                    console.log (`rollForwardState: applying storeName=${storeName} (sequence=${sequence}, to stateStore log_sequence=${ss_log_seq})?`)
 
                     if (sequence > ss_log_seq) {
-                        applyReturnInfo[key] = await ss.apply(sequence, changedata[key])
+                        applyReturnInfo[storeName] = await ss.apply(sequence, stores[storeName])
                     }
                 }
             }
@@ -149,12 +152,12 @@ export class EventStoreConnection extends EventEmitter {
 
     // stateFollower
     // ONLY use this function to provide an upto-date ReadOnly Cache of the passed in state store
-    stateFollower(stateStores: StateStore<any>[]) : ChangeStream {
+    async stateFollower(stateStores: StateStore<any>[]) : Promise<ChangeStream> {
 
         assert (this.db, "EventStoreConnection: rollForwardState: db not initialised")
 
-        const stateStoreByName: { [key: string]: StateStore<any> } = stateStores.reduce((acc, i) => { return { ...acc, [i.name]: i } }, {})
-        
+        const stateStoreByName = await EventStoreConnection.getStateStoreByName(stateStores)
+
         return this.db.collection(this.collection).watch([
             { $match: { $and: [{ 'operationType': { $in: ['insert'].concat(process.env.USE_COSMOS ? ['update', 'replace'] : []) } }, { "fullDocument.partition_key": this.tenentKey }, { "fullDocument.sequence": { $gt: this.sequence } }] } },
             { $project: { '_id': 1, 'fullDocument': 1, 'ns': 1, 'documentKey': 1 } }
@@ -162,13 +165,14 @@ export class EventStoreConnection extends EventEmitter {
         { fullDocument: 'updateLookup' }
         ).on('change', async (change: ChangeStreamInsertDocument): Promise<void> => {
             //console.log (`resume token: ${bson.serialize(data._id).toString('base64')}`)
-            const eventCompleteDoc = change.fullDocument
-            const { _id, partition_key, sequence, ...changedata } = eventCompleteDoc
+            const eventCompleteDoc = change.fullDocument  as ChangeMessage
+            const { partition_key, sequence, stores } = eventCompleteDoc
             
-            for (let key of Object.keys(changedata)) {
+            for (let storeName of Object.keys(stores)) {
     
-                if (stateStoreByName.hasOwnProperty(key)) {
-                    await stateStoreByName[key].apply(sequence, changedata[key])
+                if (stateStoreByName.hasOwnProperty(storeName)) {
+                    const ss = stateStoreByName.stores[storeName]
+                    await ss.apply(sequence, stores[storeName])
                 }
             }
 

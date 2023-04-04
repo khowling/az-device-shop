@@ -2,7 +2,7 @@
 import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
-import { EventStoreConnection } from '@az-device-shop/eventing'
+import { EventStoreConnection, type ChangeMessage, type StateChanges } from '@az-device-shop/eventing'
 import type { FactoryActionType, FactoryAction, WORKITEM_STAGE, WorkItemObject, FactoryState } from './factoryState.js'
 import { FactoryStateManager } from './factoryState.js'
 import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
@@ -22,7 +22,7 @@ import { ObjectId } from 'bson'
 
 import { MongoClient, ChangeStreamInsertDocument, WithId, Document, ChangeStream, ChangeStreamDocument } from 'mongodb'
 import { observable } from '@trpc/server/observable';
-import type { ReducerInfo, StateStoreDefinition, Control, StateUpdate } from '@az-device-shop/eventing';
+import type { ReducerInfo, StateStoreDefinition, StateUpdate } from '@az-device-shop/eventing';
 //--------------------------------------
 export type {  WorkItemObject, FactoryState } from './factoryState.js'
 export type ZodError = z.ZodError
@@ -49,7 +49,7 @@ async function sendToFactory(ctx: any, next: any) {
 }
 
 async function waitforFactoryComplete(ctx : any, next: any) {
-  const currentVal : WorkItemObject = ctx.linkedStore.getValue('workItems', 'items', ctx.wi_id)
+  const currentVal : WorkItemObject = await ctx.linkedStore.getValue('workItems', 'items', ctx.wi_id)
   return await next(null, 
       { retry_until: { isTrue: currentVal.status.stage === 'FACTORY_COMPLETE'} } as ProcessorOptions
   )
@@ -178,18 +178,14 @@ const ACTION_TYPE = {
 export type ActionType = keyof typeof ACTION_TYPE
 
 
-
-export type StateChangesControl = {
-  _control: Control
-}
-
 export type StateChangesUpdates<T> = {
   [key in  keyof T]: Array<StateUpdate> 
 }
 
 type WsMessageEvent = {
   type: 'EVENTS',
-  statechanges: StateChangesControl | StateChangesUpdates<FactoryState>
+  sequence: number,
+  statechanges: StateChangesUpdates<FactoryState>
 }
 
 type WsMessageSnapshot = {
@@ -232,12 +228,12 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
         })()
 
         // Need this to capture processor Linked State changes
-        factoryProcessor.stateManager.on('changes', (events) => 
-          events[factoryState.name] && onAdd({ type: 'EVENTS', statechanges: events[factoryState.name] }  )
+        factoryProcessor.stateManager.on('changes', (message: ChangeMessage) => 
+          message.stores[factoryState.name] && onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name] as StateChangesUpdates<FactoryState> }  )
         )
         // Need thos to capture direct factory state changes
-        factoryState.on('changes', (events) => 
-          onAdd({ type: 'EVENTS', statechanges: events[factoryState.name] }  )
+        factoryState.on('changes', (message: ChangeMessage) => 
+          onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name] as StateChangesUpdates<FactoryState> }  )
         )
 
   /*

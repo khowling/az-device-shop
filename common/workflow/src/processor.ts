@@ -12,7 +12,7 @@ export interface ProcessorOptions {
 }
 
 import { EventStoreConnection } from '@az-device-shop/eventing'
-import { StateManager, StateStore, StateUpdate, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, Control } from '@az-device-shop/eventing'
+import { StateManager, StateStore, StateUpdate, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, type Control } from '@az-device-shop/eventing'
 import { EventEmitter } from 'events'
 
 interface ProcessAction {
