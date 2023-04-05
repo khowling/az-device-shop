@@ -29,6 +29,7 @@ const effectiveStateValue = (state: FactoryState, newstate: FactoryState, reduce
 }
 */
 
+var assert = console.assert
 function apply(state: any, _stateDefinition: {[reducerKey: string]: StateStoreDefinition}, sequence: number, statechanges:StateChanges): {newstate: {[statekey: string]: any}, returnInfo: {[slicekey: string]: ApplyInfo}} {
 
     /***************  START COPY ***************************/  

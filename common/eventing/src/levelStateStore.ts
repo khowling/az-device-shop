@@ -132,19 +132,32 @@ export class LevelStateStore<S> implements StateStore<S> {
     }
 
     /* Convert state into a JSON structure, used to send snapshot to clients */
-    async serializeState(): Promise<S>  {
-        
+    async serializeState(): Promise<any>  {
+        assert (this._db, 'Store not initialized')
+
         const stateDefinition = this._stateDefinition
 
         let sState : any = {}
 
         for (let reducerKey of Object.keys(stateDefinition)) {
             for (let path of Object.keys(stateDefinition[reducerKey])) {
+                const levelkey = `${reducerKey}:${path}`
                 const {type, values} = stateDefinition[reducerKey][path]
-                sState = {...sState, ...{ [reducerKey]: {...sState[reducerKey] , ...{ [path]: await this.getValue(reducerKey, path)}}}}
+                if (type === 'LIST') {
+                    const allsub = await this._list_sublevels[levelkey].iterator( {keyEncoding: 'binary', valueEncoding: 'json'}).all()
+                    sState = {...sState, 
+                        ...allsub.map(v => { return {[`${levelkey}:${v[0]}`]: v[1]} }).reduce((a, i) => { return {...a, ...i} }, { 
+                            [`${levelkey}:_next_sequence`]: await this._db.get(`${levelkey}:_next_sequence`),
+                            [`${levelkey}:_all_keys`]: allsub.map(v => { return parseInt(v[0] as any)}),
+                        }),
+                    }
+                } else {
+                    sState = {...sState, [levelkey]: await this._db.get(levelkey)}
+                }
+
             }
         }
-        return sState as Promise<S>
+        return sState 
     }
 
     // deserializeState(newstate: {[statekey: string]: any}) {

@@ -77,7 +77,7 @@ class TestStateManager extends StateManager<SimpleState, SimpleAction> {
 }
 
 
-describe('Test Data Types (jesttest_01)', () => {
+describe('Basic State Store Tests (jesttest_01)', () => {
 
     // Event Store Connection
     // Store data as an immutable series of events in a mongo container
@@ -149,6 +149,7 @@ describe('Test Data Types (jesttest_01)', () => {
             await testState.stateStore.getValue('simple', 'simpleitems', 1)
         ).toHaveProperty('_id', 1)
     
+        console.log ('serializeState', await testState.stateStore.serializeState())
     })
      
     test('Test HASH dafult value', async () => {
