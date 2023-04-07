@@ -138,7 +138,7 @@ export interface WorkFlowStepResult {
 }
 
 export interface NextFunction<T>  {
-    (linkedStateActions: T, options: ProcessorOptions ) : Promise<WorkFlowStepResult>
+    (linkedStateActions: T, options?: ProcessorOptions ) : Promise<WorkFlowStepResult>
 }
 
 // compose - returns a function that recusivly executes the middleware for each instance of the workflow.

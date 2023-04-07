@@ -21,6 +21,7 @@ export interface SimpleAction {
 }
 
 const VALUE_TYPES = {
+    MULTI_NEW: 'multi_new',
     NEW: 'new',
     UPDATE: 'udpate'
 }
@@ -53,6 +54,11 @@ function simpleReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factory
                 case 'NEW':
                     return [{ failed: !(action.doc && action.doc.hasOwnProperty('_id') === false) }, [
                         { method: 'ADD', path: 'simpleitems', doc: doc }
+                    ]]
+                case 'MULTI_NEW':
+                    return [{ failed: !(action.doc && action.doc.hasOwnProperty('_id') === false) }, [
+                        { method: 'ADD', path: 'simpleitems', doc: {info: 'multi1', ...doc }},
+                        { method: 'ADD', path: 'simpleitems', doc: {info: 'multi2', ...doc }}
                     ]]
                 case 'UPDATE':
                     return [{ failed: false }, [
@@ -123,18 +129,27 @@ describe('Basic State Store Tests (jesttest_01)', () => {
         console.log('Dispatch Info', dinfo)
 
         // Ensure the _id field is set to 0
-        expect(rinfo).toHaveProperty('simple.added._id', 0)
-        expect(rinfo).toHaveProperty('simple.added.identifier', 'S_00000')
+        expect(rinfo).toHaveProperty('simple.simpleitems.added')
+        expect(rinfo.simple.simpleitems.added).toHaveLength (1)
+        expect(rinfo.simple.simpleitems.added && rinfo.simple.simpleitems.added[0]).toHaveProperty('_id', 0)
+        expect(rinfo.simple.simpleitems.added && rinfo.simple.simpleitems.added[0]).toHaveProperty('identifier', 'S_00000')
+
     
 
-        var [sequence, rinfo, dinfo] = await testState.dispatch({ type: 'NEW', doc: { name: 'test10', status: 10 } })
+        var [sequence, rinfo, dinfo] = await testState.dispatch({ type: 'MULTI_NEW', doc: { name: 'test10', status: 10 } })
 
         console.log('Reducer Info', rinfo)
         console.log('Dispatch Info', dinfo)
 
+        console.log ('serializeState', await testState.stateStore.serializeState())
+
         // Ensure the _id field is set to 1
-        expect(rinfo).toHaveProperty('simple.added._id', 1)
-        expect(rinfo).toHaveProperty('simple.added.identifier', 'S_00001')
+        expect(rinfo).toHaveProperty('simple.simpleitems.added')
+        expect(rinfo.simple.simpleitems.added).toHaveLength (2)
+        expect(rinfo.simple.simpleitems.added && rinfo.simple.simpleitems.added[0]).toHaveProperty('_id', 1)
+        expect(rinfo.simple.simpleitems.added && rinfo.simple.simpleitems.added[1]).toHaveProperty('_id', 2)
+        expect(rinfo.simple.simpleitems.added && rinfo.simple.simpleitems.added[0]).toHaveProperty('identifier', 'S_00001')
+        expect(rinfo.simple.simpleitems.added && rinfo.simple.simpleitems.added[1]).toHaveProperty('identifier', 'S_00002')
 
         // Make 2 state changes, so expect change_count=2, and 2 collection documents recorded, log_sequence=2
         expect(await testState.stateStore.getValue('_control', 'change_count')).toBe(2)
@@ -143,11 +158,11 @@ describe('Basic State Store Tests (jesttest_01)', () => {
         // Return full array of simpleitems
         expect(
             await testState.stateStore.getValue('simple', 'simpleitems')
-        ).toHaveLength(2)
+        ).toHaveLength(3)
 
         expect(
-            await testState.stateStore.getValue('simple', 'simpleitems', 1)
-        ).toHaveProperty('_id', 1)
+            await testState.stateStore.getValue('simple', 'simpleitems', 2)
+        ).toHaveProperty('_id', 2)
     
         console.log ('serializeState', await testState.stateStore.serializeState())
     })

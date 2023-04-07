@@ -50,6 +50,7 @@ export interface FactoryAction {
 const FACTORY_ACTION = {
     NEW: 'New',
     STATUS_UPDATE: 'StatusUpdate',
+    FACTORY_ACCEPTED_UPDATE: 'FactoryAcceptedUpdate',
     FACTORY_PROCESS: 'FactoryProcess',
     COMPLETE_INVENTORY: 'CompleteInventry',
     RESERVE_INV_SEQ: 'ReserveInvSeq',
@@ -99,6 +100,23 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
                     return [[{ failed: false }, [
                         { method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$set": {status} } }
                     ]]]
+
+                case 'FACTORY_ACCEPTED_UPDATE':
+                    return [[{ failed: false }, [
+                        { 
+                            setCalc: {
+                                target: 'status.factory_id',
+                                applyInfo: {
+                                    sliceKey: 'simple', 
+                                    path: 'simpleitems', 
+                                    operation: 'added', 
+                                    find: { workItem_id: _id} 
+                                }
+                            },
+                            method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$set": {status: { stage: 'FACTORY_ACCEPTED' }} 
+                        } }
+                    ]]]
+
                 case 'TIDY_UP':
                     return [[{ failed: false }, [
                         { method: 'RM', path: 'items', filter: { _id } as { _id: number} }
@@ -192,7 +210,7 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                         const timeleft = (timeToProcess /* * qty */) - (now - (item.starttime as number))
 
                         if (timeleft > 0) { // not finished, just update progress
-                            //updates[1].push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number } , doc: { "$set": {progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) }} })
+                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number } , doc: { "$set": {progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) }} })
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - (item.allocated_capacity as number)
                             factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } }})
@@ -210,7 +228,10 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
                     const {capacity_allocated} = await state.getValue("factory", "factoryStatus")
                     const workItems: Array<WorkItemObject> = await state.getValue('workItems', 'items')
                     for (let wi of workItems.filter(i => i.status.stage === 'FACTORY_READY') as Array<WorkItemObject>) {
-                        const result = await workItemsFn(state, { type: 'STATUS_UPDATE', _id: wi._id, status: { stage: 'FACTORY_ACCEPTED' } })
+
+                        // look for ALL workitem in FACTORY_READY, and update workitem status to FACTORY_ACCEPTED, and create a new factory item
+                        const result = await workItemsFn(state, { type: 'FACTORY_ACCEPTED_UPDATE', _id: wi._id })
+
                         const all_updates = result.map(i => i[1] ? [...i[1]] : []).reduce((acc, i) => [...acc, ...i],[])
                         workitem_updates = all_updates.length > 0 ? workitem_updates.concat(all_updates) : workitem_updates
 

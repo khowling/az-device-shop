@@ -81,6 +81,17 @@ export type StateUpdate = {
         _id: number
     }; // fiilter object
     doc?: any;
+    setCalc?: { 
+        target: string;
+        applyInfo : {
+            sliceKey: string;
+            path: string;
+            operation: string;
+            find: { 
+                [field: string]: number;
+            }
+        }
+    }
 }
 
 // replae enum with const type
@@ -96,9 +107,11 @@ export type UpdatesMethod = keyof typeof UPDATES_METHOD
 
 
 export type ApplyInfo = {
-    added?: {};
-    merged?: {};
-    inc?: {};
+    [path: string]: {
+        added?: any[];
+        merged?: any[];
+        inc?: {};
+    }
 }
 
 export type ChangeMessage = {
@@ -110,11 +123,14 @@ export type ChangeMessage = {
     }
 }
 
+type CombindReducerFunction<S, A> = (state: StateStore<S>, action: A) => Promise<[{ [sliceKey: string]: ReducerInfo }, {[sliceKey: string]: Array<StateUpdate>} ]>
+
+
 export interface StateManagerInterface<S, A , LS = {}, LA ={}> extends EventEmitter {
     name: string;
     stateStore: StateStore<S>;
     getLogSequenece(): Promise<number>;
-    rootReducer: (state: StateStore<S>, action: A) => Promise<[{ [key: string]: ReducerInfo }, StateChanges]>;
+    rootReducer: CombindReducerFunction<S, A>;
     dispatch(action: A, linkedStateAction?: LA): Promise<[ sequence: number, reducerInfo: { [key: string]: ReducerInfo }, linkedReducerInfo: { [key: string]: ReducerInfo }]>
 }
 
@@ -156,7 +172,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
     private _stateStore: StateStore<S>
     private _connection: EventStoreConnection
     // A reducer that invokes every reducer inside the reducers object, and constructs a state object with the same shape.
-    private _rootReducer: (state: StateStore<S>, action: A) => Promise<[{ [key: string]: ReducerInfo }, StateChanges]>
+    private _rootReducer: CombindReducerFunction<S, A>
     
     // Linked StateManager, where this StateManager can dispatch actions to the linked StateManager
     private _linkedStateManager: StateManagerInterface<LS, LA> | undefined
@@ -174,8 +190,8 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
 
         this._stateStore = new /*Level*/ /*JS*/ LevelStateStore<S>(this._name, {...reducersInitState, ...reducersWithPassinInitState} )
 
-        this._rootReducer = this.combineReducers(/*this._connection, */ reducersWithControl, reducersWithPassin)
-        //console.log(`StateManager: ${JSON.stringify(this.state)}`)
+        this._rootReducer = this.combineReducers( reducersWithControl, reducersWithPassin)
+
     }
 
     get rootReducer() {
@@ -194,34 +210,31 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         return this._stateStore
     }
 
-    private combineReducers(/*coonnection,*/ reducers: Array<Reducer<S, A>>, reducersWithPassin: Array<ReducerWithPassin<S, A>>): (state: StateStore<S>, action: A) => Promise<[{ [key: string]: ReducerInfo }, StateChanges]> {
-        // A reducer function that invokes every reducer inside the passed
-        // *   object, and builds a state object with the same shape.
-        return async function (state: StateStore<S>, action: A): Promise<[{ [key: string]: ReducerInfo }, StateChanges ]> {
+    /* combineReducers: Returns a function that runs all the registered state reducers that produces info on success/failour of the reducer action, and the changes required to the state
+     * This function will only be ran once and stored in the event log once, so can be happliy changed in new release of the software 
+     * the Function Returning:
+     *  In position [0], the all the reducerInfo by sliceKey (reducer info is information about if the operation was a success or failour).
+     *  In position [1], the array of resulting state changes by sliceKey (that is applied to the store in strict sequence)
+     */
+    private combineReducers(reducers: Array<Reducer<S, A>>, reducersWithPassin: Array<ReducerWithPassin<S, A>>): CombindReducerFunction<S,A> {
+        
+        return async function (state, action) {
 
             assert(action, 'reducers require action parameter')
             //let hasChanged = false
-            const combinedReducerInfo: {[key: string]: ReducerInfo} = {}
-            const combinedStateUpdates: {[key: string]: Array<StateUpdate>} = {}
+            const combinedReducerInfo: {[sliceKey: string]: ReducerInfo} = {}
+            const combinedStateUpdates: {[sliceKey: string]: Array<StateUpdate>} = {}
 
-            function addreduceroutput(key: string, ret: ReducerReturn) {
+            function addreduceroutput(sliceKey: string, ret: ReducerReturn) {
                 const [info, updates] = ret
                 // If one fails, then use that as the info, otherwise use the last one
-                combinedReducerInfo[key] = info && info.failed ? info : combinedReducerInfo[key]
+                combinedReducerInfo[sliceKey] = info && info.failed ? info : combinedReducerInfo[sliceKey]
                 // just concat all the state updates under the slicekey
-                if (updates) combinedStateUpdates[key] = [...(combinedStateUpdates[key] || []),  ...updates] 
+                if (updates) combinedStateUpdates[sliceKey] = [...(combinedStateUpdates[sliceKey] || []),  ...updates] 
             }
             
             for (let reducer of reducers) {
-
                 addreduceroutput(reducer.sliceKey, await reducer.fn(state, action))
-
-                //const [reducerInfo, stateUpdates] = await reducer.fn(/*coonnection,*/ state, action)
-
-                // If one fails, then use that as the info, otherwise use the last one
-                //combinedReducerInfo[reducer.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducer.sliceKey]
-                // just concat all the state updates under the slicekey
-                //if (stateUpdates) combinedStateUpdates[reducer.sliceKey] = [...(combinedStateUpdates[reducer.sliceKey] || []),  ...stateUpdates] 
             }
 
             for (let reducerpassin of reducersWithPassin) {
@@ -235,53 +248,15 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
                 if (ret) addreduceroutput(reducerpassin.sliceKey, ret)
                 if (passinret) addreduceroutput(reducerpassin.passInSlice, passinret)
 
-                //for (let [reducerInfo, stateUpdates] of resultsArray) {
-                //    // If one fails, then use that as the info, otherwise use the last one
-                //    combinedReducerInfo[reducerpassin.sliceKey] = reducerInfo && reducerInfo.failed ? reducerInfo : combinedReducerInfo[reducerpassin.sliceKey]
-                //    // just concat all the state updates under the slicekey
-                //    if (stateUpdates) combinedStateUpdates[reducerpassin.sliceKey] = [...(combinedStateUpdates[reducerpassin.sliceKey] || []),  ...stateUpdates] 
-                //}
             }
 
             return [combinedReducerInfo, combinedStateUpdates]
-
-/*
-            for (let reducer of reducers) {
-                //const key = finalReducerKeys[i]
-                //const previousStateForKey = null // state[sliceKey]
-                assert(reducer.passInSlice ? reducers.findIndex(r => r.sliceKey === reducer.passInSlice) >= 0 : true, `reducer definition "${reducer.sliceKey}" requires a missing passInSlice reducer "${reducer.passInSlice}"`)
-
-                // reducers return [ReducerInfo, Array<StateUpdates>]
-                // return for a Reducer that has a "passInSlice", it return a array of [ReducerInfo, Array<StateUpdates>]
-                const reducerRes = await reducer.fn(/ *coonnection,* / state, action, action && reducer.passInSlice ? reducers.find(r => r.sliceKey === reducer.passInSlice).fn : null)
-
-                // state changes
-                const sliceUpdates = reducer.passInSlice ? reducerRes[0] : reducerRes
-                const passInUpdates = reducer.passInSlice ? reducerRes[1] : null
-
-                //console.log(`get sliceKey=${sliceKey}: ${JSON.stringify(reducerRes)}`)
-                if (sliceUpdates) {
-                    //console.log(sliceUpdates)
-                    assert(sliceUpdates.length === 2 && reducer.sliceKey === '_control' ? true : Array.isArray(sliceUpdates[1]) && sliceUpdates[1].length > 0, `Error reducer at sliceKey=${reducer.sliceKey}, return unexected value`)
-                    allUpdates[reducer.sliceKey] = allUpdates[reducer.sliceKey] ? [allUpdates[reducer.sliceKey][0] || sliceUpdates[0], [...allUpdates[reducer.sliceKey][1], ...sliceUpdates[1]]] : sliceUpdates
-                }
-                if (passInUpdates) {
-                    assert(passInUpdates.length === 2 && Array.isArray(passInUpdates[1]) && passInUpdates[1].length > 0, `Error reducer at sliceKey=${reducer.sliceKey}, return unexected passInUpdates value for passInSlice=${reducer.passInSlice}`)
-                    allUpdates[reducer.passInSlice] = allUpdates[reducer.passInSlice] ? [allUpdates[reducer.passInSlice][0] || passInUpdates[0], [...allUpdates[reducer.passInSlice][1], ...passInUpdates[1]]] : passInUpdates
-                }
-            }
-
-            return Object.keys(allUpdates).length > 1 ? [
-                Object.keys(allUpdates).map(k => { return { [k]: allUpdates[k][0] } }).reduce((acc, i) => { return { ...acc, ...i } }, {}),
-                Object.keys(allUpdates).map(k => { return { [k]: allUpdates[k][1] } }).reduce((acc, i) => { return { ...acc, ...i } }, {})
-            ] : [null, null]
-*/
         }
     }
 
     // Used when only this state is updated
     //
-    async dispatch(action: A, linkedStateAction?: LA): Promise<[ sequence: number, reducerInfo: { [key: string]: ReducerInfo }, linkedReducerInfo: { [key: string]: ReducerInfo }]> {
+    async dispatch(action: A, linkedStateAction?: LA): Promise<[ sequence: number, reducerInfo: { [key: string]: ReducerInfo & ApplyInfo }, linkedReducerInfo: { [key: string]: ReducerInfo & ApplyInfo }]> {
         //console.log(`Action: \n${JSON.stringify(action)}`)
         assert (this._connection.db, 'dispatch: Cannot apply processor actions, no "db" details provided')
         assert(this._connection, 'dispatch: Cannot apply processor actions, no "Connection" details provided')
@@ -306,10 +281,13 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
             linkChanges = { ...linkChanges, _control: [{ method: 'INC', path: 'change_count' }] }
         }
         
-        // Store the changes in the mongo collection, with sequence number
-        //
+
+
         if ((changes && Object.keys(changes).length > 0) || (linkChanges && Object.keys(linkChanges).length > 0)) {
-            // persist events
+            
+                    
+            // Store the changes in the mongo collection, with sequence number
+            //
             const msg : ChangeMessage = {
                 sequence: this._connection.sequence + 1,
                 _ts: new Timestamp(0,0), // Emptry timestamp will be replaced by the server to the current server time
@@ -323,6 +301,8 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
             this.emit('changes', msg)
             this._connection.sequence = this._connection.sequence + 1
 
+
+            // Apply Changes to State Store
             // This is where the linked state will be updated, so any items added will get their new id's (used by process state manager)
             // We want to apply this output to the processor state
             applyLinkInfo = linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 ? await this._linkedStateManager.stateStore.apply(this._connection.sequence, linkChanges) : {}
@@ -332,7 +312,8 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
         }
 
         release()
-        // Combine reducerInfo with applyInfo
+
+        // Combine reducerInfo with applyInfo & return
         const allInfo: { [key: string]: ReducerInfo & ApplyInfo } = reducerInfo ? Object.keys(applyInfo).reduce((acc, i) => { return { ...acc, [i]: {...applyInfo[i], ...acc[i]} as ReducerInfo & ApplyInfo } }, reducerInfo) : {}
         const allLinkInfo: { [key: string]: ReducerInfo & ApplyInfo } = linkReducerInfo ? Object.keys(applyLinkInfo).reduce((acc, i) => { return { ...acc, [i]: {...applyLinkInfo[i], ...acc[i]} } }, linkReducerInfo) : {}
         return [this._connection.sequence, allInfo, allLinkInfo]

@@ -172,7 +172,7 @@ export class LevelStateStore<S> implements StateStore<S> {
 
         assert (this._db, 'Store not initialized')
 
-        let returnInfo : {[slicekey: string]: ApplyInfo} = {}
+        let returnInfo : {[slicekey: string]:  ApplyInfo} = {}
 
         let levelUpdates: AbstractBatchOperation<Level<string, string>, any, any>[]=  []
         let cacheUpdates: {[key: string]: any} = {}
@@ -247,7 +247,8 @@ export class LevelStateStore<S> implements StateStore<S> {
                             value: _next_sequence + 1
                         }])
 
-                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], added }}
+
+                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], [update.path]: { added: returnInfo?.[reducerKey]?.[update.path]?.['added']?.concat(added) || [added] } }}
                         break
 
                     case 'RM':
@@ -300,6 +301,8 @@ export class LevelStateStore<S> implements StateStore<S> {
                         // Add the rest of the existing doc to the new doc
                         const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
 
+                        
+
                         cacheUpdates = {...cacheUpdates, ...(type === 'LIST' ? {[`${levelkey}:${update.filter?._id}`]: merged} : {[levelkey]: merged})}
 
                         levelUpdates = levelUpdates.concat( type === 'LIST' ? {
@@ -313,11 +316,8 @@ export class LevelStateStore<S> implements StateStore<S> {
                             key: levelkey,
                             value: merged
                         })
-
-                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], merged }}
                         
-
-                        
+                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], [update.path]: { merged: returnInfo?.[reducerKey]?.[update.path]?.['merged']?.concat(merged) || [merged] }}}
                         break
                     case 'INC':
                         assert (type === 'METRIC', `apply (INC): Can only apply to a "Counter": "${reducerKey}.${update.path}"`)
@@ -333,7 +333,7 @@ export class LevelStateStore<S> implements StateStore<S> {
                             value: inc
                         })
 
-                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], inc }}
+                        returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], [update.path]: { inc: [inc]}}}
                         break
                     default:
                         assert(false, `apply: Cannot apply update, unknown method=${update.method}`)

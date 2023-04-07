@@ -5,7 +5,7 @@ import { applyWSSHandler } from '@trpc/server/adapters/ws';
 import { EventStoreConnection, type ChangeMessage, type StateChanges } from '@az-device-shop/eventing'
 import type { FactoryActionType, FactoryAction, WORKITEM_STAGE, WorkItemObject, FactoryState } from './factoryState.js'
 import { FactoryStateManager } from './factoryState.js'
-import { Processor, ProcessorOptions } from "@az-device-shop/workflow"
+import { NextFunction, Processor, ProcessorOptions } from "@az-device-shop/workflow"
 
 import { z } from 'zod';
 import { initTRPC, TRPCError } from '@trpc/server';
@@ -29,20 +29,24 @@ export type ZodError = z.ZodError
 
 
 //-----------------------------------
-async function validateRequest({ esFactoryEvents, trigger }: {esFactoryEvents: any, trigger: any}, next: (action: FactoryAction, options: ProcessorOptions, event_label?: string) => any) {
+async function validateRequest({ esFactoryEvents, input }: {esFactoryEvents: any, input: any}, next : NextFunction<FactoryAction>) {
 
-  let spec = trigger && trigger.doc
-  if (trigger && trigger.doc_id) {
-      const mongo_spec = await esFactoryEvents.db.collection("inventory_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: esFactoryEvents.tenentKey })
-      // translate the db document '*_id' ObjectId fields to '*Id' strings
-      spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
-  }
+  //let spec = trigger && trigger.doc
+  //if (trigger && trigger.doc_id) {
+  //    const mongo_spec = await esFactoryEvents.db.collection("inventory_spec").findOne({ _id: new ObjectId(trigger.doc_id), partition_key: esFactoryEvents.tenentKey })
+  //    // translate the db document '*_id' ObjectId fields to '*Id' strings
+  //    spec = { ...mongo_spec, ...(mongo_spec.product_id && { productId: mongo_spec.product_id.toHexString() }) }
+  //}
 
-  return await next({ type: 'NEW', spec }, { update_ctx: { spec } } as ProcessorOptions)
+  // Take processor input, and create 'NEW' 'workItems' in factoryStore
+  return await next({ type: 'NEW', spec: input }/*, { update_ctx: { spec } } as ProcessorOptions*/)
 }
 
 async function sendToFactory(ctx: any, next: any) {
+  // The output of the linked action from the prevoise step is stored in 'lastLinkedRes'
   const added : WorkItemObject  = ctx.lastLinkedRes.workItems.added as WorkItemObject
+
+  // move the workItem to the FACTORY_READY stage,  this will be picked up by the 'factory' processor
   return await next(
       { type: 'STATUS_UPDATE', _id: added._id, status: { stage: 'FACTORY_READY' } }, { update_ctx: { wi_id: added._id } } as ProcessorOptions
   )
@@ -260,7 +264,7 @@ const appRouter = router({
       add: publicProcedure
       .input(factoryOrderModel)
       .mutation(async ({input} : {input: FactoryOrder}) => {
-        await submitFn({ trigger: { doc: input } }, null)
+        await submitFn(input, null)
       })
 
     }),
@@ -294,7 +298,7 @@ factoryProcessor.use(moveToWarehouse)
 factoryProcessor.use(publishInventory)
 factoryProcessor.use(completeInventoryAndFinish)
 
-var submitFn : (update_ctx: any, trigger: any) => Promise<ReducerInfo> = async (update_ctx, trigger) => { throw new Error("submitFm not initialized") }
+var submitFn : (update_ctx: any, input: any) => Promise<ReducerInfo> = async (update_ctx, input) => { throw new Error("submitFm not initialized") }
 
 // ---------------------------------------------------------------------------------------
 async function init() {
@@ -347,7 +351,7 @@ async function init() {
                     return {};
                 }
             }, req, res, path: hurl.pathname.slice(6) });
-        } else if (req.method === 'POST' && hurl.pathname === '/submit') {
+        /*} else if (req.method === 'POST' && hurl.pathname === '/submit') {
           
             let body = ''
             req.on('data', (chunk) => {
@@ -370,7 +374,7 @@ async function init() {
                         error: `failed to create workflow err=${err}`
                     }))
                 }
-            })
+            }) */
         } else {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
             res.end("404 Not Found\n");
