@@ -36,16 +36,17 @@ function getValue({ state, metadata }: {  state: any,  metadata: FactoryMetaData
   }
 }
 
+
+
 export function PageFactory() {
 
   const [state, dispatch] = React.useReducer<Reducer<FactoryReducerState, WsMessage>>(stateReducer, { state: null, metadata: null} )
 
   const [dialog, setDialog] = useState<DialogInterface>({open: false})
   const [connected, setConnected] = useState({status: ConnectedStatus.Trying} as ConnectedInfo)
-  const [realtimeItems, setRealtimeItems] = useState<OrderState[]>([])
-  const [c, setC] = useState(0)
 
-    
+
+
   // this returns a useEffect
   trpc.factoryEvents.onAdd.useSubscription(undefined, {
     onStarted() {
@@ -61,10 +62,10 @@ export function PageFactory() {
     }
   });
 
-  useEffect(() => {
-    //const t = setInterval(() => setC((o) => o+1), 200)
-    //return () => clearInterval(t)
-  },[])
+  const prodQueries = trpc.useQueries((t) =>
+    state.state ? getValue(state, 'workItems', 'items').map((w: any) => t.item.byId({ id: w?.spec?.item_ref?.id })): []
+  )
+
 
   return (
     <>
@@ -130,6 +131,10 @@ export function PageFactory() {
         <div className="collapse-content">
           
           <pre>{JSON.stringify(state.state, null, 2)}</pre>
+
+
+
+          <pre>{JSON.stringify(prodQueries, null, 2)}</pre>
         </div>
       </div>
           
@@ -160,8 +165,10 @@ export function PageFactory() {
               <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                 <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
                   <div className="group-hover:text-white font-semibold text-slate-900">
-                    {o.identifier || "<TBC>"} {o._id}
+                    {o.identifier || "<TBC>"}
                   </div>
+                  <div>{prodQueries?.find((p: any) => p.data.id === o.spec.item_ref.id)?.data?.name}</div>
+                  <div>Factory  {getValue(state, 'factory', 'items', o.status.factory_id)?.identifier}</div>
                   <dl className="mt-2 flex flex-wrap text-sm leading-6 font-medium text-slate-500">
                     <div>
                       <dt className="sr-only">Rating</dt>
