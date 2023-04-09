@@ -74,6 +74,18 @@ export type StateStore<S> = {
 }
 
 
+export type CalculatedValueDef = { 
+    target: string;
+    applyInfo : {
+        sliceKey: string;
+        path: string;
+        operation: 'added' | 'merged';
+        find: { 
+            key: string;
+            value: number;
+        }
+    }
+}
 export type StateUpdate = {
     method: UpdatesMethod;
     path: string; // state path to process (optional)
@@ -81,17 +93,8 @@ export type StateUpdate = {
         _id: number
     }; // fiilter object
     doc?: any;
-    setCalc?: { 
-        target: string;
-        applyInfo : {
-            sliceKey: string;
-            path: string;
-            operation: string;
-            find: { 
-                [field: string]: number;
-            }
-        }
-    }
+    setCalc?: CalculatedValueDef
+    
 }
 
 // replae enum with const type
@@ -228,7 +231,9 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
             function addreduceroutput(sliceKey: string, ret: ReducerReturn) {
                 const [info, updates] = ret
                 // If one fails, then use that as the info, otherwise use the last one
-                combinedReducerInfo[sliceKey] = info && info.failed ? info : combinedReducerInfo[sliceKey]
+                if (info && !(combinedReducerInfo[sliceKey] && combinedReducerInfo[sliceKey].failed)){
+                    combinedReducerInfo[sliceKey] = info
+                }
                 // just concat all the state updates under the slicekey
                 if (updates) combinedStateUpdates[sliceKey] = [...(combinedStateUpdates[sliceKey] || []),  ...updates] 
             }

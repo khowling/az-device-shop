@@ -1,7 +1,7 @@
 
 
 import type { FactoryState, WsMessage, FactoryMetaData, StateChangesUpdates} from '../../../server/dist/index';
-import type { StateChanges, ApplyInfo, StateUpdate, StateStoreDefinition } from '../../../../common/eventing/dist/stateManager';
+import type { StateChanges, ApplyInfo, StateUpdate, StateStoreDefinition, CalculatedValueDef } from '../../../../common/eventing/dist/stateManager';
 export type { Control, UpdatesMethod, StateUpdate, StateStoreDefinition } from '@az-device-shop/eventing';
 
 // Replace array entry at index 'index' with 'val'
@@ -37,6 +37,11 @@ function apply(state: any, _stateDefinition: {[reducerKey: string]: StateStoreDe
     //const _control = (statechanges as Control)._control 
 
     let returnInfo : {[slicekey: string]: ApplyInfo} = {}
+
+    // record all the required calcuated field rules, this needs to be executed after all the ApplyInfo has been created
+    const recordCalc : Array<{ levelUpdates_idx: string, setCalc: CalculatedValueDef}> = []
+
+
     let newstate: {[statekey: string]: any} = {
         '_control:log_sequence': sequence
     } 
@@ -91,9 +96,7 @@ function apply(state: any, _stateDefinition: {[reducerKey: string]: StateStoreDe
                     newstate[`${levelkey}:_all_keys`] = all_keys.concat(_next_sequence)
                     newstate[next_sequenceKey] = _next_sequence + 1
 
-                    returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], added }}
-
-
+                    returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], [update.path]: { added: returnInfo?.[reducerKey]?.[update.path]?.['added']?.concat(added) || [added] } }}
                     break
                 case 'RM':
 
@@ -137,10 +140,14 @@ function apply(state: any, _stateDefinition: {[reducerKey: string]: StateStoreDe
                     // Add the rest of the existing doc to the new doc
                     const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
 
+                    if (update.setCalc) {
+                        recordCalc.push({ levelUpdates_idx: value_key, setCalc: update.setCalc})
+                    }
+
                     //pathKeyState = JSStateStore.imm_splice(pathKeyState, update_idx, new_doc)
-                    returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], merged }}
                     newstate[value_key] = merged
 
+                    returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], [update.path]: { merged: returnInfo?.[reducerKey]?.[update.path]?.['merged']?.concat(merged) || [merged] }}}
                     
                     break
                 case 'INC':
@@ -151,6 +158,7 @@ function apply(state: any, _stateDefinition: {[reducerKey: string]: StateStoreDe
                     returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], inc }}
                     newstate[`${levelkey}`] = inc
 
+                    returnInfo = {...returnInfo, [reducerKey]: { ...returnInfo[reducerKey], [update.path]: { inc: [inc]}}}
                     break
                 default:
                     assert(false, `applyToLocalState: Cannot apply update, unknown method=${update.method}`)
@@ -160,6 +168,19 @@ function apply(state: any, _stateDefinition: {[reducerKey: string]: StateStoreDe
 
     }
 
+    for (let {levelUpdates_idx, setCalc} of recordCalc) {
+        if (setCalc) {
+            // If update has a Calculated field (field dependent on Apply Info, mainly for new ADDED _ids)
+            console.log ('applying calculated fields')
+            const {target, applyInfo} = setCalc
+            const {sliceKey, path, operation, find} = applyInfo
+
+            const result = returnInfo?.[sliceKey]?.[path]?.[operation]?.find((i: any) => i[find.key] === find.value)
+            if (result) {
+                target.split('.').reduce((a,c,idx, all) => { if (idx === all.length-1) { a[c] = result._id; return idx } else return a[c]}, newstate[levelUpdates_idx])
+            }
+        }
+    }
 
     /***************  END COPY ***************************/
     return {newstate, returnInfo}

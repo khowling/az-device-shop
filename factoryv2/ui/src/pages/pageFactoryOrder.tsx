@@ -66,7 +66,7 @@ export default function OrderForm({Close, recordId}: DemoFormInterface) {
     const $form = e.currentTarget;
     try {
       console.log ('mutation.mutate: ', form.data)
-      await mutation.mutate(form.data)
+      mutation.mutate(form.data)
       $form.reset();
       
     } catch (cause) {

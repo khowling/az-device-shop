@@ -84,7 +84,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
             const { spec, _id, status } = action
             switch (action.type) {
                 case 'NEW':
-                    const required_props = ['productId', 'qty', 'warehouse']
+                    const required_props = ['item_ref', 'quantity', 'status']
                     if (required_props.reduce((a, v) => a && spec.hasOwnProperty(v), true)) {
 
                         return [[{ failed: false }, [
@@ -98,7 +98,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
                     }
                 case 'STATUS_UPDATE':
                     return [[{ failed: false }, [
-                        { method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$set": {status} } }
+                        { method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$merge": {status} } }
                     ]]]
 
                 case 'FACTORY_ACCEPTED_UPDATE':
@@ -107,14 +107,14 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
                             setCalc: {
                                 target: 'status.factory_id',
                                 applyInfo: {
-                                    sliceKey: 'simple', 
-                                    path: 'simpleitems', 
+                                    sliceKey: 'factory', 
+                                    path: 'items', 
                                     operation: 'added', 
-                                    find: { workItem_id: _id} 
+                                    find: { key: 'workItem_id', value:  _id as number } 
                                 }
                             },
-                            method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$set": {status: { stage: 'FACTORY_ACCEPTED' }} 
-                        } }
+                            method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$merge": {status: { stage: 'FACTORY_ACCEPTED' }} }
+                        }
                     ]]]
 
                 case 'TIDY_UP':
@@ -128,7 +128,7 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
                         const inventoryReducer = passInSlice as ReducerFunction<FactoryState, FactoryAction>
 
                         return [[{ failed: false }, [
-                            { method: 'UPDATE', path: 'items', filter: { _id } as { _id: number}, doc: { "$set": {status: { failed: false, stage: 'INVENTORY_AVAILABLE' }} } }
+                            { method: 'UPDATE', path: 'items', filter: { _id } as { _id: number}, doc: { "$merge": {status: { failed: false, stage: 'INVENTORY_AVAILABLE' }} } }
                         ]], await inventoryReducer(/*connection, */ state, { type:  'RESERVE_INV_SEQ', _id, spec })]
                     } else {
                         return [[{ failed: true }, [

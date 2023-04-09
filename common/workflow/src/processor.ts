@@ -345,18 +345,19 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
     
         if (!this.listenerCount('error')) this.on('error', (err) => console.error(err.toString()))
     
-        const handleRequest = async (update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}): Promise<ReducerInfo> => {
+        const handleRequest = async (input: any, trigger:{ [triggerParams: string]: any}): Promise<ReducerInfo> => {
             //console.log ("processor.listen.handleRequest, new process started")
             // Add to processList
-            const [sequence, { processor }] = await this._stateManager.dispatch({
+            const [sequence,  { processor } ] = await this._stateManager.dispatch({
                 type: ProcessActionType.New,
-                options: { update_ctx },
+                options: { update_ctx: { input } },
                 ...(trigger && { trigger })
             })
 
             // Launch the workflow
             if (!processor.failed) {
-                this.handleRequest(processor.added, fn)
+                const processItem = processor?.processList?.added?.[0]
+                this.handleRequest(processItem, fn)
             }
             return processor
         }

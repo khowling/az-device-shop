@@ -29,7 +29,7 @@ export type ZodError = z.ZodError
 
 
 //-----------------------------------
-async function validateRequest({ esFactoryEvents, input }: {esFactoryEvents: any, input: any}, next : NextFunction<FactoryAction>) {
+async function validateRequest(ctx: any, next : NextFunction<FactoryAction>) {
 
   //let spec = trigger && trigger.doc
   //if (trigger && trigger.doc_id) {
@@ -39,12 +39,12 @@ async function validateRequest({ esFactoryEvents, input }: {esFactoryEvents: any
   //}
 
   // Take processor input, and create 'NEW' 'workItems' in factoryStore
-  return await next({ type: 'NEW', spec: input }/*, { update_ctx: { spec } } as ProcessorOptions*/)
+  return await next({ type: 'NEW', spec: ctx.input }/*, { update_ctx: { spec } } as ProcessorOptions*/)
 }
 
 async function sendToFactory(ctx: any, next: any) {
   // The output of the linked action from the prevoise step is stored in 'lastLinkedRes'
-  const added : WorkItemObject  = ctx.lastLinkedRes.workItems.added as WorkItemObject
+  const added : WorkItemObject  = ctx.lastLinkedRes.workItems.items.added[0] as WorkItemObject
 
   // move the workItem to the FACTORY_READY stage,  this will be picked up by the 'factory' processor
   return await next(
@@ -259,15 +259,18 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 type FactoryOrder = z.infer<typeof factoryOrderModel>
 
 const appRouter = router({
+    // basic CRUD on products
     item: modelCRUDRoutes(itemSKUModel, 'item'),
+    // submit workitem to workflow state machine
     order: router({
       add: publicProcedure
       .input(factoryOrderModel)
       .mutation(async ({input} : {input: FactoryOrder}) => {
-        await submitFn(input, null)
+        return  await submitFn(input, null)
       })
 
     }),
+    // subscribe to factory events
     factoryEvents: modelSubRoutes(factoryOrderModel, 'factory_events'),
 })
 

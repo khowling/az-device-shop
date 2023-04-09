@@ -20,7 +20,7 @@ import { rm } from 'node:fs/promises';
 import { Level } from 'level'
 import  type { AbstractSublevel, AbstractBatchOperation, AbstractBatchPutOperation, AbstractBatchDelOperation } from 'abstract-level'
 
-import { StateStoreDefinition, StateStore, StateChanges, StateUpdate, ApplyInfo, UpdatesMethod } from './stateManager.js'
+import { StateStoreDefinition, StateStore, StateChanges, StateUpdate, ApplyInfo, UpdatesMethod, CalculatedValueDef } from './stateManager.js'
 
 
 
@@ -177,6 +177,9 @@ export class LevelStateStore<S> implements StateStore<S> {
         let levelUpdates: AbstractBatchOperation<Level<string, string>, any, any>[]=  []
         let cacheUpdates: {[key: string]: any} = {}
 
+        // record all the required calcuated field rules, this needs to be executed after all the ApplyInfo has been created
+        const recordCalc : Array<{ levelUpdates_idx: number, setCalc: CalculatedValueDef}> = []
+
         // Store the log sequence into the level state for rolling forward
         levelUpdates.push({
             type: 'put',
@@ -301,9 +304,13 @@ export class LevelStateStore<S> implements StateStore<S> {
                         // Add the rest of the existing doc to the new doc
                         const merged = { ...existing_doc, ...new_merge_updates, ...update.doc['$set'] }
 
-                        
+                        if (update.setCalc) {
+                            recordCalc.push({ levelUpdates_idx: levelUpdates.length, setCalc: update.setCalc})
+                        }
 
-                        cacheUpdates = {...cacheUpdates, ...(type === 'LIST' ? {[`${levelkey}:${update.filter?._id}`]: merged} : {[levelkey]: merged})}
+                        cacheUpdates = {...cacheUpdates, ...(type === 'LIST' ? {
+                            [`${levelkey}:${update.filter?._id}`]: merged} : {[levelkey]: merged}
+                        )}
 
                         levelUpdates = levelUpdates.concat( type === 'LIST' ? {
                             type: 'put',
@@ -337,6 +344,19 @@ export class LevelStateStore<S> implements StateStore<S> {
                         break
                     default:
                         assert(false, `apply: Cannot apply update, unknown method=${update.method}`)
+                }
+            }
+        }
+
+        for (let {levelUpdates_idx, setCalc} of recordCalc) {
+            if (setCalc) {
+                // If update has a Calculated field (field dependent on Apply Info, mainly for new ADDED _ids)
+                const {target, applyInfo} = setCalc
+                const {sliceKey, path, operation, find} = applyInfo
+
+                const result = returnInfo?.[sliceKey]?.[path]?.[operation]?.find((i: any) => i[find.key] === find.value)
+                if (result) {
+                    target.split('.').reduce((a,c,idx, all) => { if (idx === all.length-1) { a[c] = result._id; return idx } else return a[c]}, (levelUpdates[levelUpdates_idx] as AbstractBatchPutOperation<Level<string, string>, any, any>).value)
                 }
             }
         }
