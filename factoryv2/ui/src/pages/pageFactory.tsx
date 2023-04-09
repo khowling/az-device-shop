@@ -167,8 +167,14 @@ export function PageFactory() {
                   <div className="group-hover:text-white font-semibold text-slate-900">
                     {o.identifier || "<TBC>"}
                   </div>
-                  <div>{prodQueries?.find((p: any) => p.data.id === o.spec.item_ref.id)?.data?.name}</div>
-                  <div>Factory  {getValue(state, 'factory', 'items', o.status.factory_id)?.identifier}</div>
+                  <div>{prodQueries?.find((p: any) => p.data?.id === o.spec?.item_ref?.id)?.data?.name} {o.spec.quantity}</div>
+                  { [getValue(state, 'factory', 'items', o.status?.factory_id)].map((f: any, i: number) => 
+                    <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center" key={i}>
+                      <div>{f.identifier}  : {f.stage}</div>
+                      <progress className="progress progress-primary w-56" value={f.progress || 0} max="100"></progress>
+                    </dl>
+                  )}
+                   
                   <dl className="mt-2 flex flex-wrap text-sm leading-6 font-medium text-slate-500">
                     <div>
                       <dt className="sr-only">Rating</dt>
@@ -197,10 +203,7 @@ export function PageFactory() {
                       </dd>
                     </div>
                   </dl>
-                  <div>
-                    <dt className="sr-only">Category</dt>
-                    <dd className="group-hover:text-blue-200">{"cat"}</dd>
-                  </div>
+                 
                   
                 </dl>
               </button>

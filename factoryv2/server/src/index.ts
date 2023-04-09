@@ -60,18 +60,18 @@ async function waitforFactoryComplete(ctx : any, next: any) {
 }
 
 async function moveToWarehouse(ctx: any, next: any) {
-  return await next({ type: 'STATUS_UPDATE', _id: ctx.wi_id, spec: ctx.spec, status: { stage: 'MOVE_TO_WAREHOUSE' } }, { sleep_until: Date.now() + 1000 * 4 /* 4 secs */  } as ProcessorOptions)
+  return await next({ type: 'STATUS_UPDATE', _id: ctx.wi_id, spec: ctx.spec, status: { stage: 'MOVE_TO_WAREHOUSE' } }, { sleep_until: Date.now() + 1000 * 10 /* 4 secs */  } as ProcessorOptions)
 }
 
 
 async function publishInventory(ctx: any, next: any) {
 
-  return await next({ type: 'COMPLETE_INVENTORY', _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: { time: Date.now() + 1000 * 5 /* 5 secs */ } })
+  return await next({ type: 'COMPLETE_INVENTORY', _id: ctx.wi_id, spec: ctx.spec }, { sleep_until: Date.now() + 1000 * 10 /* 5 secs */ })
 }
 
 async function completeInventoryAndFinish(ctx: any, next: any) {
-  console.log (`publishInventory: ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes.inventory_complete.inc)}`)
-  const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inc)
+  console.log (`publishInventory: ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes.inventory_complete)}`)
+  const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inventory_sequence.inc[0])
   const result = await ctx.esFactoryEvents.db.collection("inventory_complete").updateOne(
       {sequence: completeInvSeq}, { "$set": {
           sequence: completeInvSeq,
@@ -215,7 +215,7 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
         const onAdd = (data : WsMessage)  => {
           // emit data to client
           //const output = data.fullDocument 
-          console.log (data)
+          //console.log (data)
           emit.next(data);
         };
 
@@ -331,7 +331,7 @@ async function init() {
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
         await factoryState.dispatch({ type: 'FACTORY_PROCESS' })
-    }, 5000)
+    }, 1000)
 
     const port = process.env.PORT || 5000
     console.log(port)

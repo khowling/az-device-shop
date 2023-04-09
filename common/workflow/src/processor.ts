@@ -209,6 +209,8 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
 
             if (complete) {
                 return { state: 'complete', _id: context._id }
+            } else if (newOpts && newOpts.sleep_until) {
+                return { state: 'sleep_until',  _id: context._id  }
             } else if (need_retry) {
                 if (i === context._init_function_idx) {
                     i--
@@ -306,6 +308,7 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
             if (!this._active.has(p._id as number)) {
 
                 if (p.options) {
+                    console.log (`[${Date.now()}] restartProcessors: checking to restart ${p._id} with ${JSON.stringify(p.options)}`)
                     // if options, check if still waiting for sleep_until time, or, if retry_until, check if retry value is true, or if its needs to go back a step
                     if (p.options.sleep_until && p.options.sleep_until < Date.now()) {
                         //
@@ -313,7 +316,7 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
                     } else if (p.options.retry_until && !p.options.retry_until.isTrue) {
                         restartP = {...p, function_idx: p.function_idx as number -1,  options: {...p.options, retry_until: {...p.options.retry_until,  _retry_count: p.options.retry_until._retry_count+1}}}
                     } else {
-                        restartP = p
+                        //restartP = p
                     }
                     
                 } else {

@@ -146,14 +146,24 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
 export interface FactoryItem extends DocStatus {
     _id?: number;
     workItem_id?: number;
-    stage: FactoryStage;
+    stage: FactoryStagetype;
+    timetoprocess?: number;
     acceptedtime?: number;
     starttime?: number;
     waittime?: number;
     allocated_capacity?: number;
     progress?: number;
 }
-export enum FactoryStage { Waiting, Building, Complete }
+
+// replae enum with const type
+const FACTORY_STAGE = {
+    WAITING: 'Waiting',
+    BUILDING: 'Building',
+    COMPLETE: 'Complete',
+} as const
+
+export type FactoryStagetype = keyof typeof FACTORY_STAGE
+
 
 
 export type OrderState = z.infer<typeof factoryOrderModel>
@@ -166,7 +176,7 @@ export type Factory = {
     }
 }
 
-function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryState, FactoryAction> {
+function factoryReducer(timeToProcess = 3 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryState, FactoryAction> {
 
     return {
         sliceKey: 'factory',
@@ -204,16 +214,16 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
 
                     const factoryItems : Array<FactoryItem> = await state.getValue('factory', 'items')
                     // check wi in factory_status status look for for completion to free up capacity
-                    for (let item of factoryItems.filter(o => o.stage === FactoryStage.Building)  as Array<FactoryItem>) {
+                    for (let item of factoryItems.filter(o => o.stage === 'BUILDING')  as Array<FactoryItem>) {
                         // all wi in Picking status
                         //const { id, status } = ord
-                        const timeleft = (timeToProcess /* * qty */) - (now - (item.starttime as number))
+                        const timeleft = item.timetoprocess as number - (now - (item.starttime as number))
 
                         if (timeleft > 0) { // not finished, just update progress
-                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number } , doc: { "$set": {progress: Math.floor(100 - ((timeleft / timeToProcess) * 100.0)) }} })
+                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number } , doc: { "$set": {progress: Math.floor(100 - ((timeleft / (item.timetoprocess as number)) * 100.0)) }} })
                         } else { // finished
                             capacity_allocated_update = capacity_allocated_update - (item.allocated_capacity as number)
-                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: FactoryStage.Complete, progress: 100, allocated_capacity: 0 } }})
+                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: 'COMPLETE', progress: 100, allocated_capacity: 0 } }})
                             const result = await workItemsFn(state, { type: 'STATUS_UPDATE', _id: item.workItem_id, status: { stage: 'FACTORY_COMPLETE' } }) 
                             // example::: [[null, null], [{failed: "false"}, [{a:1}, {b:2}]],[{failed: "true"},[{c:3}, {d:4}]]].map(i => i[1] ? [...i[1]]: []).reduce((acc, i) => [...acc, ...i],[])
                             const all_updates = result.map(i => i[1] ? [...i[1]] : []).reduce((acc, i) => [...acc, ...i],[])
@@ -237,20 +247,20 @@ function factoryReducer(timeToProcess = 10 * 1000 /*3 seconds per item*/, factor
 
                         if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
                             // we have capacity, move to inprogress
-                            factory_updates.push({ method: 'ADD', path: 'items', doc: { workItem_id: wi._id, stage: FactoryStage.Building, acceptedtime: now, starttime: now, allocated_capacity: required_capacity, progress: 0, waittime: 0 } })
+                            factory_updates.push({ method: 'ADD', path: 'items', doc: { workItem_id: wi._id, stage: 'BUILDING', timetoprocess: timeToProcess * wi.spec.quantity,  acceptedtime: now, starttime: now, allocated_capacity: required_capacity, progress: 0, waittime: 0 } as FactoryItem })
                             capacity_allocated_update = capacity_allocated_update + required_capacity
                         } else {
                             // need to wait
-                            factory_updates.push({ method: 'ADD', path: 'items', doc: { workItem_id: wi._id, stage: FactoryStage.Waiting, acceptedtime: now, waittime: 0 } })
+                            factory_updates.push({ method: 'ADD', path: 'items', doc: { workItem_id: wi._id, stage: 'WAITING', acceptedtime: now, waittime: 0 } as FactoryItem })
                         }
                     }
 
                     // check factory in "waiting" status
                     const factoryItems2 : Array<FactoryItem> = await state.getValue('factory', 'items')
-                    for (let item of factoryItems2.filter(o => o.stage === FactoryStage.Waiting) as Array<FactoryItem>) {
+                    for (let item of factoryItems2.filter(o => o.stage === 'WAITING') as Array<FactoryItem>) {
                         if ((factoryCapacity - (capacity_allocated + capacity_allocated_update)) >= required_capacity) {
                             // we have capacity, move to inprogress
-                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: FactoryStage.Building, allocated_capacity: required_capacity, progress: 0, waittime: now - (item.acceptedtime as number) } }})
+                            factory_updates.push({ method: 'UPDATE', path: 'items', filter: { _id: item._id } as { _id: number }, doc: { "$set": {stage: 'BUILDING', allocated_capacity: required_capacity, progress: 0, waittime: now - (item.acceptedtime as number) } }})
                             capacity_allocated_update = capacity_allocated_update + required_capacity
                         } else {
                             // still need to wait
