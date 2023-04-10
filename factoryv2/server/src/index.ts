@@ -71,7 +71,7 @@ async function publishInventory(ctx: any, next: any) {
 
 async function completeInventoryAndFinish(ctx: any, next: any) {
   console.log (`publishInventory: ctx.lastLinkedRes=${JSON.stringify(ctx.lastLinkedRes.inventory_complete)}`)
-  const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inventory_sequence.inc[0])
+  const completeInvSeq = parseInt(ctx.lastLinkedRes.inventory_complete.inventry_sequence.inc[0])
   const result = await ctx.esFactoryEvents.db.collection("inventory_complete").updateOne(
       {sequence: completeInvSeq}, { "$set": {
           sequence: completeInvSeq,
@@ -231,15 +231,17 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
           } as WsMessage)
         })()
 
-        // Need this to capture processor Linked State changes
+        /* Need to capture 'dispatch' changes to the factory state, initiated by the processor (via linked state) */
         factoryProcessor.stateManager.on('changes', (message: ChangeMessage) => 
           message.stores[factoryState.name] && onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name] as StateChangesUpdates<FactoryState> }  )
         )
-        // Need thos to capture direct factory state changes
+        
+
+        /*  Need to capture 'dispatch' changes to the factory state, initiated by the factory state directly (via factoryState.dispatch({ type: 'FACTORY_PROCESS' }))  */
         factoryState.on('changes', (message: ChangeMessage) => 
           onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name] as StateChangesUpdates<FactoryState> }  )
         )
-
+        
   /*
         // trigger `onAdd()` when `add` is triggered in our event emitter
         const em = changeStream.on('change', onAdd);
@@ -326,7 +328,7 @@ async function init() {
 
     //let { submitFn, factoryState, processorState } = await factoryStartup(await esFactoryEvents.initFromDB(client.db(), null ,false)/*, appState*/)
     
-    submitFn = await factoryProcessor.listen()
+    submitFn = await factoryProcessor.listen({ rollforwadStores: true, restartInterval: 1000})
 
     const factInterval = setInterval(async function () {
         //console.log('factoryStartup: checking on progress WorkItems in "FactoryStage.Building"')
@@ -354,30 +356,7 @@ async function init() {
                     return {};
                 }
             }, req, res, path: hurl.pathname.slice(6) });
-        /*} else if (req.method === 'POST' && hurl.pathname === '/submit') {
-          
-            let body = ''
-            req.on('data', (chunk) => {
-                body = body + chunk
-            });
-            req.on('end', async () => {
-                //console.log(`http trigger got: ${body}`)
-                try {
-                    const po = await submitFn({ trigger: { doc: JSON.parse(body) } }, null)
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        status: 'ack',
-                        info: po,
-                        status_url: `/query/${po.added._id}`
-                    }))
-                } catch (err) {
-                    res.writeHead(400, { 'Content-Type': 'application/json' })
-                    return res.end(JSON.stringify({
-                        status: 'nack',
-                        error: `failed to create workflow err=${err}`
-                    }))
-                }
-            }) */
+
         } else {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
             res.end("404 Not Found\n");

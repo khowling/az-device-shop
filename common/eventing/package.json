@@ -3,8 +3,21 @@
   "type": "module",
   "version": "1.0.0",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "typesVersions": {
+    "*": {
+      "jsfunc": [
+        "dist/jsStateStoreFunctions"
+      ]
+    }
+  },
+  "exports": {
+    ".":  {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./jsfunc": "./dist/jsStateStoreFunctions.js"
+  },
   "files": [
     "/dist"
   ],

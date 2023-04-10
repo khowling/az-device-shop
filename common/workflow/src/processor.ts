@@ -11,7 +11,7 @@ export interface ProcessorOptions {
     }
 }
 
-import { EventStoreConnection } from '@az-device-shop/eventing'
+import { ApplyInfo, EventStoreConnection } from '@az-device-shop/eventing'
 import { StateManager, StateStore, StateUpdate, StateManagerInterface, ReducerReturn, ReducerInfo, Reducer, StateStoreDefinition, type Control } from '@az-device-shop/eventing'
 import { EventEmitter } from 'events'
 
@@ -233,6 +233,8 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
     }
   }
 
+export type  ProcessorListenFn = Promise<(input: any, trigger:{ [triggerParams: string]: any}) => Promise<ReducerInfo & ApplyInfo>>
+
 
 export class Processor<LS = {}, LA = {}> extends EventEmitter {
 
@@ -343,27 +345,10 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
     }
     
 
-    async listen (options: {rollforwadStores: boolean} = {rollforwadStores: true}): Promise<(update_ctx: { [ctxParam: string]: any}, trigger:{ [triggerParams: string]: any}) => Promise<ReducerInfo>> {
+    async listen (options :  {rollforwadStores: boolean, restartInterval: number} = {rollforwadStores: true, restartInterval: 1000}) {
         const fn = this._fnMiddleware  = compose<LS, LA>(this._middleware, this._stateManager)
     
         if (!this.listenerCount('error')) this.on('error', (err) => console.error(err.toString()))
-    
-        const handleRequest = async (input: any, trigger:{ [triggerParams: string]: any}): Promise<ReducerInfo> => {
-            //console.log ("processor.listen.handleRequest, new process started")
-            // Add to processList
-            const [sequence,  { processor } ] = await this._stateManager.dispatch({
-                type: ProcessActionType.New,
-                options: { update_ctx: { input } },
-                ...(trigger && { trigger })
-            })
-
-            // Launch the workflow
-            if (!processor.failed) {
-                const processItem = processor?.processList?.added?.[0]
-                this.handleRequest(processItem, fn)
-            }
-            return processor
-        }
 
         if (options.rollforwadStores) {
             // re-hydrate the processor state store
@@ -390,13 +375,30 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
         await this.restartProcessors(/*checkSleepStageFn, true*/)
 
         // restart any processors that have been put into a sleeping state in the processor state store
-        console.log(`Processor: Starting Interval to process 'sleep_until' workflows.`)
-        this._restartInterval = setInterval(async () => {
-            //console.log('factory_startup: check to restart "sleep_until" processes')
-            await this.restartProcessors(/*checkSleepStageFn, false*/)
-        }, 1000 * 1 )
+        if (options.restartInterval > 0) {
+            console.log(`Processor: Starting Interval to process 'sleep_until' workflows.`)
+            this._restartInterval = setInterval(async () => {
+                //console.log('factory_startup: check to restart "sleep_until" processes')
+                await this.restartProcessors(/*checkSleepStageFn, false*/)
+            }, options.restartInterval )
+        }
     
-        return handleRequest
+        return async (input: any, trigger: { [triggerParams: string]: any}) => {
+            //console.log ("processor.listen.handleRequest, new process started")
+            // Add to processList
+            const [sequence,  { processor } ] = await this._stateManager.dispatch({
+                type: ProcessActionType.New,
+                options: { update_ctx: { input } },
+                ...(trigger && { trigger })
+            })
+
+            // Launch the workflow
+            if (!processor.failed) {
+                const processItem = processor?.processList?.added?.[0]
+                this.handleRequest(processItem, fn)
+            }
+            return processor
+        }
       }
 
     createContext(p: ProcessObject) {

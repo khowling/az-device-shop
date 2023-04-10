@@ -1,15 +1,13 @@
 // @flow
-
 import React, { Reducer, useEffect, useState } from 'react';
 import { trpc } from '../trpc';
 
-//import type { inferRouterOutputs, inferProcedureOutput } from '@trpc/server';
-import { AppRouter, type OrderState, type FactoryMetaData, WorkItemObject, type WsMessage, FactoryState } from '../../../server/src/index';
-//import { type FactoryState, Control, WorkItems, Factory, Inventory } from '../../../server/factoryState.js'
+import { type WsMessage } from '../../../server/src/index';
 
 import {SlideOut, DialogInterface} from '../components/slideout'
 import OrderForm from './pageFactoryOrder';
 import { FactoryReducerState, stateReducer } from '../utils/stateStore'
+import { getValue } from '@az-device-shop/eventing/jsfunc';
 
 // --------------------------------------------------------------- FACTORY
 interface ConnectedInfo {
@@ -22,21 +20,6 @@ enum ConnectedStatus {
   Trying,
   Error
 }
-
-function getValue({ state, metadata }: {  state: any,  metadata: FactoryMetaData}, reducerKey: string, path: string, idx?: number) {
-  if (metadata.stateDefinition[reducerKey][path].type == 'LIST') {
-      if (isNaN(idx as number)) {
-          // return all values in array
-          return state[`${reducerKey}:${path}:_all_keys`].map((key: any) => state[`${reducerKey}:${path}:${key}`])
-      } else {
-          return state[`${reducerKey}:${path}:${idx}`]
-      }
-  } else {
-      return state[`${reducerKey}:${path}`]
-  }
-}
-
-
 
 export function PageFactory() {
 
@@ -53,6 +36,7 @@ export function PageFactory() {
       setConnected({status: ConnectedStatus.Connected})
     },
     onData<WsMessage>(data:any) {
+      console.log ('got message')
       dispatch(data)
     },
     onError(err) {
@@ -63,7 +47,7 @@ export function PageFactory() {
   });
 
   const prodQueries = trpc.useQueries((t) =>
-    state.state ? getValue(state, 'workItems', 'items').map((w: any) => t.item.byId({ id: w?.spec?.item_ref?.id })): []
+    state.state ? getValue(state.state, state.metadata.stateDefinition, 'workItems', 'items').map((w: any) => t.item.byId({ id: w?.spec?.item_ref?.id })): []
   )
 
 
@@ -98,25 +82,25 @@ export function PageFactory() {
         
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-            {getValue(state, '_control', 'log_sequence')}
+            {getValue(state.state, state.metadata.stateDefinition, '_control', 'log_sequence')}
             </span>
             Log Sequence
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-            {getValue(state, '_control', 'change_count')}
+            {getValue(state.state, state.metadata.stateDefinition, '_control', 'change_count')}
             </span>
             Change Count
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-              {getValue(state, 'workItems', 'items').length || 0}
+              {getValue(state.state, state.metadata.stateDefinition, 'workItems', 'items').length || 0}
             </span>
             Work Items In Progress
           </div> 
           <div className="flex flex-col p-2 bg-neutral rounded-box text-neutral-content">
             <span className="countdown font-mono text-5xl">
-              {getValue(state, 'factory', 'factoryStatus').capacity_allocated || 0}
+              {getValue(state.state, state.metadata.stateDefinition, 'factory', 'factoryStatus').capacity_allocated || 0}
             </span>
             Capacity Allocated
           </div> 
@@ -160,7 +144,7 @@ export function PageFactory() {
             </button>
             }
             
-            { getValue(state, 'workItems', 'items').filter((i: any) => stages?.includes(i.status.stage as string)).map((o: any, i: number) => 
+            { getValue(state.state, state.metadata.stateDefinition, 'workItems', 'items').filter((i: any) => stages?.includes(i.status.stage as string)).map((o: any, i: number) => 
               
               <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                 <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
@@ -168,7 +152,7 @@ export function PageFactory() {
                     {o.identifier || "<TBC>"}
                   </div>
                   <div>{prodQueries?.find((p: any) => p.data?.id === o.spec?.item_ref?.id)?.data?.name} {o.spec.quantity}</div>
-                  { [getValue(state, 'factory', 'items', o.status?.factory_id)].map((f: any, i: number) => 
+                  { [getValue(state.state, state.metadata.stateDefinition, 'factory', 'items', o.status?.factory_id)].map((f: any, i: number) => 
                     <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center" key={i}>
                       <div>{f.identifier}  : {f.stage}</div>
                       <progress className="progress progress-primary w-56" value={f.progress || 0} max="100"></progress>
