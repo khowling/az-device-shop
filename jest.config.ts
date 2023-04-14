@@ -7,10 +7,9 @@ const config: Config.InitialOptions = {
 
   
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'//,
-    //'^@az-device-shop/(.*)$': '<rootDir>/common/$1'
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^@az-device-shop/(.*)$': '<rootDir>/common/$1'
   },
-
   transform: {
     // '^.+\\.[tj]sx?$' to process js/ts with `ts-jest`
     // '^.+\\.m?[tj]sx?$' to process js/ts/mjs/mts with `ts-jest`

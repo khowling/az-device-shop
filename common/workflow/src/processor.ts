@@ -91,6 +91,10 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
 
                     return [{ failed: false }, [
                         {
+                            setCalc: {
+                                target: 'context_object.lastLinkedRes',
+                                linkedApplyInfo: true
+                            },
                             method: 'UPDATE', path: 'processList', filter: { _id } as { _id: number}, doc: {
                                 "$set": {
                                     function_idx,
@@ -100,13 +104,14 @@ function processorReducer(): Reducer<ProcessorState, ProcessAction> {
                                 ...(update_ctx && { "$merge": { context_object: update_ctx }})
                             }
                         }]]
-
+/*
                 case ProcessActionType.RecordLinkedStateInfo:
 
                     return [{ failed: false }, [
                         {
                             method: 'UPDATE', path: 'processList', filter: { _id } as { _id: number}, doc : {["$set"]: { lastLinkedRes }}
                         }]]
+*/
                 default:
                     assert.fail('Cannot apply processor actions, unknown ActionType')
             }
@@ -168,14 +173,7 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
 
         const need_retry = options?.retry_until && !options.retry_until.isTrue || false
 
-        // apply context updates from "update_ctx" to "context"
-        if (options) {
-            if(options.update_ctx) {
-                for (let k of Object.keys(options.update_ctx)) {
-                    context[k] = options.update_ctx[k]
-                }
-            }
-        }
+        
 
         //console.log (`Processor: i=${i} > context._init_function_idx=${context._init_function_idx}, context._retry_count=${context._retry_count} need_retry=${need_retry}`)
         //To prevent duplicate dispatch when a process is restarted from sleep, or when initially started or worken up
@@ -186,7 +184,7 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
 
             const complete: boolean = (i >= middleware.length || (options && options.complete === true)) as boolean && !need_retry 
 
-            const [sequence, processorInfo, linkedStateInfo] = await processorStateManager.dispatch({
+            const [sequence, processorInfo, linkedInfo] = await processorStateManager.dispatch({
                 type: ProcessActionType.RecordProcessStep,
                 _id: context._id,
                 function_idx: i,
@@ -195,18 +193,27 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
                 options: newOpts
             }, need_retry ? undefined : linkedStateActions/*, event_label*/)
 
+            // apply context updates from "update_ctx" to "context"
+            // Need to re-read to get the latest state, as the state may have been updated by the linked state actions
+            const p: ProcessObject = await processorStateManager.stateStore.getValue('processor', 'processList', context._id) as ProcessObject
+            if (p.context_object) {
+                for (let k of Object.keys(p.context_object)) {
+                    context[k] = p.context_object[k]
+                }
+            }
+            /*
             if (linkedStateActions && !need_retry) {
                 // Store the linked state info in the processor state store! (capture any new id's that have been created)
                 // any processor re-hydration will need to use this info to rehydrate the linked state
                 const [addlinkedInfo, addlinkedInfoChanges] = await processorStateManager.rootReducer(processorStateManager.stateStore, {
                     type: ProcessActionType.RecordLinkedStateInfo,
                     _id: context._id,
-                    lastLinkedRes: linkedStateInfo
+                    lastLinkedRes: linkedInfo
                 })
                 await processorStateManager.stateStore.apply(sequence, addlinkedInfoChanges)
-                context.lastLinkedRes = linkedStateInfo
+                context.lastLinkedRes = linkedInfo
             }
-
+            */
             if (complete) {
                 return { state: 'complete', _id: context._id }
             } else if (newOpts && newOpts.sleep_until) {
@@ -352,21 +359,23 @@ export class Processor<LS = {}, LA = {}> extends EventEmitter {
 
         if (options.rollforwadStores) {
             // re-hydrate the processor state store
-            // TBC - Need to restore "linkedStateInfo" that is NOT stored in the message, its applyed AFTER to the processor state!
-            await this.connection.rollForwardState([this.stateStore, this.linkedStateManager.stateStore], async (sequence, applyInfo) => {
+            // TBC - Need to restore "linkedInfo" that is NOT stored in the message, its applyed AFTER to the processor state!
+            await this.connection.rollForwardState([this.stateStore, this.linkedStateManager.stateStore] /*, async (sequence, applyInfo) => {
                 const processorStateInfo = applyInfo[this.stateStore.name]
-                const linkedStateInfo = applyInfo[this.linkedStateManager.stateStore.name]
-                if (processorStateInfo && linkedStateInfo) {
+                const linkedInfo = applyInfo[this.linkedStateManager.stateStore.name]
+                if (processorStateInfo && linkedInfo) {
                     // Store the linked state info in the processor state store! (capture any new id's that have been created)
                     // any processor re-hydration will need to use this info to rehydrate the linked state
                     const [addlinkedInfo, addlinkedInfoChanges] = await this._stateManager.rootReducer(this._stateManager.stateStore, {
                         type: ProcessActionType.RecordLinkedStateInfo,
                         _id: processorStateInfo['processor']['merged']._id,
-                        lastLinkedRes: linkedStateInfo
+                        lastLinkedRes: linkedInfo
                     })
                     await this._stateManager.stateStore.apply(sequence, addlinkedInfoChanges)
                 }
-            })
+            }
+            */
+           )
             console.log (`Processor: re-hydrated processor state store(s) to sequence=${this.connection.sequence}`)
         }
         this._active = new Set()

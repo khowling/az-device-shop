@@ -168,7 +168,7 @@ export class LevelStateStore<S> implements StateStore<S> {
     // }
 
 
-    async apply(sequence: number, statechanges:StateChanges): Promise<{[slicekey: string]: ApplyInfo}> {
+    async apply(sequence: number, statechanges:StateChanges, linkedApplyInfo?: {[slice: string]: ApplyInfo}): Promise<{[slicekey: string]: ApplyInfo}> {
 
         assert (this._db, 'Store not initialized')
 
@@ -351,12 +351,15 @@ export class LevelStateStore<S> implements StateStore<S> {
         for (let {levelUpdates_idx, setCalc} of recordCalc) {
             if (setCalc) {
                 // If update has a Calculated field (field dependent on Apply Info, mainly for new ADDED _ids)
-                const {target, applyInfo} = setCalc
-                const {sliceKey, path, operation, find} = applyInfo
 
-                const result = returnInfo?.[sliceKey]?.[path]?.[operation]?.find((i: any) => i[find.key] === find.value)
+                let result : any=  setCalc.linkedApplyInfo? linkedApplyInfo : returnInfo
+
+                if (setCalc.applyFilter) {
+                    const {sliceKey, path, operation, find, attribute} = setCalc.applyFilter 
+                    result= result?.[sliceKey]?.[path]?.[operation]?.find((i: any) => i[find.key] === find.value)
+                }
                 if (result) {
-                    target.split('.').reduce((a,c,idx, all) => { if (idx === all.length-1) { a[c] = result._id; return idx } else return a[c]}, (levelUpdates[levelUpdates_idx] as AbstractBatchPutOperation<Level<string, string>, any, any>).value)
+                    setCalc.target.split('.').reduce((a,c,idx, all) => { if (idx === all.length-1) { a[c] = setCalc.applyFilter?.attribute? result[setCalc.applyFilter.attribute] : result; return idx } else return a[c]}, (levelUpdates[levelUpdates_idx] as AbstractBatchPutOperation<Level<string, string>, any, any>).value)
                 }
             }
         }

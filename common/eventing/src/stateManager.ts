@@ -70,13 +70,14 @@ export type StateStore<S> = {
     initStore(ops: {distoryExisting: boolean}): Promise<void>;
     serializeState(): Promise<S>;
     // deserializeState(newstate: {[statekey: string]: any}): void
-    apply(sequence: number, statechanges: StateChanges): Promise<{[reducerKey: string] : ApplyInfo}>
+    apply(sequence: number, statechanges: StateChanges, linkedApplyInfo?: {[slice: string]: ApplyInfo}): Promise<{[reducerKey: string] : ApplyInfo}>
 }
 
 
 export type CalculatedValueDef = { 
     target: string;
-    applyInfo : {
+    linkedApplyInfo?: boolean,
+    applyFilter? : {
         sliceKey: string;
         path: string;
         operation: 'added' | 'merged';
@@ -84,6 +85,7 @@ export type CalculatedValueDef = {
             key: string;
             value: number;
         }
+        attribute?: string;
     }
 }
 export type StateUpdate = {
@@ -122,7 +124,10 @@ export type ChangeMessage = {
     _ts: Timestamp;
     partition_key: ObjectId | undefined;
     stores: {
-        [storeName: string]: StateChanges
+        [storeName: string]: {
+            changes: StateChanges;
+            linkedStoreName?: string;
+        }
     }
 }
 
@@ -298,8 +303,8 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
                 _ts: new Timestamp(0,0), // Emptry timestamp will be replaced by the server to the current server time
                 partition_key: this._connection.tenentKey,
                 stores: {
-                    ...(changes && Object.keys(changes).length > 0 && { [this.name]: changes }),
-                    ...(linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 && { [this._linkedStateManager.name]: linkChanges })
+                    ...(linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 && { [this._linkedStateManager.name]: {changes: linkChanges} }),
+                    ...(changes && Object.keys(changes).length > 0 && { [this.name]: {changes, ...(this._linkedStateManager?.name && {linkedStoreName: this._linkedStateManager.name})} })
                 }
             }
             const res = await this._connection.db.collection(this._connection.collection).insertOne(msg)
@@ -312,7 +317,7 @@ export class StateManager<S, A, LS = {}, LA = {}> extends EventEmitter implement
             // We want to apply this output to the processor state
             applyLinkInfo = linkChanges && this._linkedStateManager && Object.keys(linkChanges).length > 0 ? await this._linkedStateManager.stateStore.apply(this._connection.sequence, linkChanges) : {}
             // apply events to local state
-            applyInfo = changes && Object.keys(changes).length > 0 ? await this.stateStore.apply(this._connection.sequence, changes) : {}
+            applyInfo = changes && Object.keys(changes).length > 0 ? await this.stateStore.apply(this._connection.sequence, changes, applyLinkInfo) : {}
             
         }
 

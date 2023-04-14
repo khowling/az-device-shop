@@ -2,7 +2,7 @@
 import { MongoClient } from 'mongodb'
 import { Processor, ProcessorOptions, NextFunction, WorkFlowStepResult } from "./processor"
 import { EventStoreConnection } from "@az-device-shop/eventing"
-import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from '@az-device-shop/eventing'
+import { StateManager, Reducer, ReducerReturn, StateStoreValueType, UpdatesMethod, Control } from '../../eventing'
 
 
 

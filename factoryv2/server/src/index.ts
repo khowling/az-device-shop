@@ -233,13 +233,13 @@ function modelSubRoutes<T extends z.ZodTypeAny>(schema: T, coll: string) {
 
         /* Need to capture 'dispatch' changes to the factory state, initiated by the processor (via linked state) */
         factoryProcessor.stateManager.on('changes', (message: ChangeMessage) => 
-          message.stores[factoryState.name] && onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name] as StateChangesUpdates<FactoryState> }  )
+          message.stores[factoryState.name] && onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name].changes as StateChangesUpdates<FactoryState> }  )
         )
         
 
         /*  Need to capture 'dispatch' changes to the factory state, initiated by the factory state directly (via factoryState.dispatch({ type: 'FACTORY_PROCESS' }))  */
         factoryState.on('changes', (message: ChangeMessage) => 
-          onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name] as StateChangesUpdates<FactoryState> }  )
+          onAdd({ type: 'EVENTS', sequence: message.sequence, statechanges: message.stores[factoryState.name].changes as StateChangesUpdates<FactoryState> }  )
         )
         
   /*

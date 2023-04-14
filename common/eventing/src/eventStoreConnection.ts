@@ -108,7 +108,7 @@ export class EventStoreConnection extends EventEmitter {
 
     // rollForwardState
     // This function will hydrate the state of the passed in stateStores from the event store
-    async rollForwardState(stateStores: StateStore<any>[], additionalFn?: (sequence: number, changedataResults : any) => Promise<void>): Promise<number> {
+    async rollForwardState(stateStores: StateStore<any>[] /*, additionalFn?: (sequence: number, changedataResults : any) => Promise<void> */): Promise<number> {
 
         assert (this._db, "EventStoreConnection: rollForwardState: db not initialised")
 
@@ -125,7 +125,7 @@ export class EventStoreConnection extends EventEmitter {
     
         while (await cursor?.hasNext()) {
             const { partition_key, sequence, stores } = await cursor?.next() as ChangeMessage
-            let applyReturnInfo: { [slicekey: string]: ApplyInfo} = {}
+            let applyReturnInfo: { [storename: string]: {[slicekey: string]: ApplyInfo}} = {}
             for (let storeName of Object.keys(stores)) {
     
                 if (stateStoreByName.stores.hasOwnProperty(storeName)) {
@@ -134,17 +134,18 @@ export class EventStoreConnection extends EventEmitter {
 
                     console.log (`rollForwardState: applying storeName=${storeName} (sequence=${sequence}, to stateStore log_sequence=${ss_log_seq})?`)
 
+                    const linkedStoreName = stores[storeName].linkedStoreName 
                     if (sequence > ss_log_seq) {
-                        applyReturnInfo[storeName] = await ss.apply(sequence, stores[storeName])
+                        applyReturnInfo[storeName] = await ss.apply(sequence, stores[storeName].changes, linkedStoreName ? applyReturnInfo[linkedStoreName] : undefined)
                     }
                 }
             }
             this.sequence = sequence
-
+/*
             if (additionalFn) {
                 await additionalFn(sequence, applyReturnInfo)
             }
-            
+*/          
         }
         return this.sequence
     
@@ -168,11 +169,14 @@ export class EventStoreConnection extends EventEmitter {
             const eventCompleteDoc = change.fullDocument  as ChangeMessage
             const { partition_key, sequence, stores } = eventCompleteDoc
             
+            let applyReturnInfo: { [storename: string]: {[slicekey: string]: ApplyInfo}} = {}
+
             for (let storeName of Object.keys(stores)) {
     
                 if (stateStoreByName.hasOwnProperty(storeName)) {
                     const ss = stateStoreByName.stores[storeName]
-                    await ss.apply(sequence, stores[storeName])
+                    const linkedStoreName = stores[storeName].linkedStoreName 
+                    applyReturnInfo[storeName] = await ss.apply(sequence, stores[storeName].changes, linkedStoreName ? applyReturnInfo[linkedStoreName] : undefined)
                 }
             }
 

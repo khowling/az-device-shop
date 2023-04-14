@@ -106,11 +106,12 @@ function workItemsReducer(): ReducerWithPassin<FactoryState, FactoryAction> {
                         { 
                             setCalc: {
                                 target: 'status.factory_id',
-                                applyInfo: {
+                                applyFilter: {
                                     sliceKey: 'factory', 
                                     path: 'items', 
                                     operation: 'added', 
-                                    find: { key: 'workItem_id', value:  _id as number } 
+                                    find: { key: 'workItem_id', value:  _id as number },
+                                    attribute: '_id'
                                 }
                             },
                             method: 'UPDATE', path: 'items', filter: { _id  } as { _id: number}, doc: { "$merge": {status: { stage: 'FACTORY_ACCEPTED' }} }

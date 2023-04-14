@@ -28,7 +28,7 @@ export function getValue(state: any, _stateDefinition: {[reducerKey: string]: St
 }
 
 
-export function applyGenerateChanges(assertfn: any, state: any, _stateDefinition: {[reducerKey: string]: StateStoreDefinition}, sequence: number, statechanges:StateChanges): {newstate: {[statekey: string]: any}, returnInfo: {[slicekey: string]: ApplyInfo}} {
+export function applyGenerateChanges(assertfn: any, state: any, _stateDefinition: {[reducerKey: string]: StateStoreDefinition}, sequence: number, statechanges:StateChanges, linkedApplyInfo?: {[slice: string]: ApplyInfo}): {newstate: {[statekey: string]: any}, returnInfo: {[slicekey: string]: ApplyInfo}} {
 
 
     let returnInfo : {[slicekey: string]: ApplyInfo} = {}
@@ -163,12 +163,16 @@ export function applyGenerateChanges(assertfn: any, state: any, _stateDefinition
         if (setCalc) {
             // If update has a Calculated field (field dependent on Apply Info, mainly for new ADDED _ids)
             console.log ('applying calculated fields')
-            const {target, applyInfo} = setCalc
-            const {sliceKey, path, operation, find} = applyInfo
 
-            const result = returnInfo?.[sliceKey]?.[path]?.[operation]?.find((i: any) => i[find.key] === find.value)
+            let result : any=  setCalc.linkedApplyInfo? linkedApplyInfo : returnInfo
+
+            if (setCalc.applyFilter) {
+                const {sliceKey, path, operation, find, attribute} = setCalc.applyFilter 
+                result= result?.[sliceKey]?.[path]?.[operation]?.find((i: any) => i[find.key] === find.value)
+            }
+
             if (result) {
-                target.split('.').reduce((a,c,idx, all) => { if (idx === all.length-1) { a[c] = result._id; return idx } else return a[c]}, newstate[levelUpdates_idx])
+                setCalc.target.split('.').reduce((a,c,idx, all) => { if (idx === all.length-1) { a[c] = setCalc.applyFilter?.attribute? result[setCalc.applyFilter.attribute] : result; return idx } else return a[c]}, newstate[levelUpdates_idx])
             }
         }
     }
