@@ -142,22 +142,33 @@ export function PageFactory() {
               </svg>
               New Factory Order
             </button>
-            }
+          }
             
-            { getValue(state.state, state.metadata.stateDefinition, 'workItems', 'items').filter((i: any) => stages?.includes(i.status.stage as string)).map((o: any, i: number) => 
+          { getValue(state.state, state.metadata.stateDefinition, 'workItems', 'items').filter((i: any) => stages?.includes(i.status.stage as string)).map((o: any, i: number) => 
               
               <button key={i} onClick={() => setDialog({open: true})} className="text-left hover:bg-blue-500 hover:ring-blue-500 hover:shadow-md group rounded-md p-2 bg-white ring-1 ring-slate-200 shadow-sm text-sm leading-6">
                 <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center">
+                  
                   <div className="group-hover:text-white font-semibold text-slate-900">
-                    {o.identifier || "<TBC>"}
+                    Work Item: <b>{o.identifier || "<TBC>"}</b>
                   </div>
+
                   <div>{prodQueries?.find((p: any) => p.data?.id === o.spec?.item_ref?.id)?.data?.name} {o.spec.quantity}</div>
-                  { [getValue(state.state, state.metadata.stateDefinition, 'factory', 'items', o.status?.factory_id)].map((f: any, i: number) => 
-                    <dl className="grid sm:block lg:grid xl:block grid-cols-2 grid-rows-2 items-center" key={i}>
-                      <div>{f.identifier}  : {f.stage}</div>
-                      <progress className="progress progress-primary w-56" value={f.progress || 0} max="100"></progress>
-                    </dl>
+
+                  { !isNaN(o.status?.factory_id) &&  [getValue(state.state, state.metadata.stateDefinition, 'factory', 'items', o.status?.factory_id)].map((f: any, i: number) => 
+                    <div className="rounded-md border-2 px-1">
+                      <div>Factory Order: <a>{f.identifier}</a> </div>
+                      <div>Status: <b>{f.stage}</b></div>
+                      <progress className="progress progress-primary w-50" value={f.progress || 0} max="100"></progress>
+                    </div>
                   )}
+
+                  { idx == 2 && 
+                    <div className="rounded-md border-2 px-1">
+                    <div>Time Needed: {JSON.stringify(o.status)} </div>
+                  
+                  </div>
+                  }
                    
                   <dl className="mt-2 flex flex-wrap text-sm leading-6 font-medium text-slate-500">
                     <div>
@@ -192,7 +203,7 @@ export function PageFactory() {
                 </dl>
               </button>
             
-            )}
+          )}
             
           </div>
         </div>

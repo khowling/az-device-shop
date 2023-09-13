@@ -21,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/ws": "^8.5.5"
   },
   "dependencies": {
     "@trpc/client": "^10.18.0",

@@ -19,6 +19,7 @@ const config: Config.InitialOptions = {
         useESM: true,
       },
     ],
-  }
+  },
+  transformIgnorePatterns: ["node_modules/(?!(@az-device-shop)/)", "node_modules/@az-device-shop/eventing"]
 }
 export default config

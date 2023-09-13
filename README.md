@@ -44,17 +44,21 @@ To keep the example Cloud Agnostic, continers is the deployment model, rarther t
 ### Build and Test individual workspaces
 
 ```
+# Install dependencies for all workspaces
+npm install
+
 ## Build all workspaces
 npm run build --workspaces
 
 ## Build factory server and all dependencies, and run factory server
-npm run build --workspace=common/eventing --workspace=common/workflow --workspace=factoryv2/server
-npm run start -w factoryv2/server
-
+npm run build --workspace=common/eventing --workspace=common/workflow --workspace=factoryv2
+npm run start -w factoryv2/server # (or use .vscode/launch.json)
+npm run dev -w factoryv2/ui
 
 #  Run tests 
-npm run test -- common/workflow
+npm run test -- common/eventing
 
+npm run test -- common/workflow  #  Doesnt work :(
 ```
 
 ### Requirements

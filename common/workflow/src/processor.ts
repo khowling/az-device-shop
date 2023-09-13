@@ -195,8 +195,8 @@ function compose<LS, LA> (middleware: Array<(context:  { [ctxParam: string]: any
 
             // apply context updates from "update_ctx" to "context"
             // Need to re-read to get the latest state, as the state may have been updated by the linked state actions
-            const p: ProcessObject = await processorStateManager.stateStore.getValue('processor', 'processList', context._id) as ProcessObject
-            if (p.context_object) {
+            const p: ProcessObject = processorInfo?.processor?.processList?.merged?.[0]
+            if (p && p.context_object) {
                 for (let k of Object.keys(p.context_object)) {
                     context[k] = p.context_object[k]
                 }

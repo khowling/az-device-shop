@@ -177,6 +177,25 @@ export type Factory = {
     }
 }
 
+function queueReducerHelper() {
+    return {
+        sliceKey: 'quueHelper',
+        passInSlice: 'workItems',
+        initState: {
+            "items" : {
+                type: 'LIST',
+                identifierFormat: {prefix: 'FO', zeroPadding: 5} 
+            },
+            "factoryStatus": {
+                type: 'HASH',
+                values: {
+                    "capacity_allocated": 0
+                }
+            }
+        } as StateStoreDefinition
+    }
+}
+
 function factoryReducer(timeToProcess = 3 * 1000 /*3 seconds per item*/, factoryCapacity = 5): ReducerWithPassin<FactoryState, FactoryAction> {
 
     return {
