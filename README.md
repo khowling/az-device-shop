@@ -80,7 +80,8 @@ docker volume create --name=mongodata
 # a Replica Set single instance
 docker run --restart always --name mongo_dev -v mongodata:/data/db -d -p 27017:27017 mongo --replSet rs0
 ```
-else
+else, follow instructions here https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/
+
 
 ```
 mkdir __mongo_data__
