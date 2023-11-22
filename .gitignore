@@ -10,3 +10,4 @@ __blobstorage__
 __azurite*
 __mongo_data__
 **/_leveldb*
+**/.next

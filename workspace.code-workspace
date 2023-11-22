@@ -13,6 +13,10 @@
 			"path": "factoryv2"
 		},
 		{
+			"name": "Shop v2",
+			"path": "shopv2"
+		},
+		{
 			"name": "_Root",
 			"path": "./"
 		}
